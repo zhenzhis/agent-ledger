@@ -11,10 +11,12 @@ import argparse, json, os, sys
 from collections import defaultdict
 from datetime import datetime, date
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 # ── Pricing: fetched from litellm at runtime ──
 
 LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+MAX_PRICING_RESPONSE_BYTES = 8 * 1024 * 1024
 _pricing_cache = None
 
 # PLACEHOLDER_APPEND_MARKER
@@ -33,20 +35,29 @@ def fetch_pricing():
         age = datetime.now().timestamp() - cache_file.stat().st_mtime
         if age < 86400:
             try:
-                raw = json.loads(cache_file.read_text())
+                raw = json.loads(cache_file.read_text(encoding="utf-8"))
                 _pricing_cache = _parse_pricing(raw)
                 return _pricing_cache
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Warning: could not read pricing cache: {e}", file=sys.stderr)
 
     # Fetch from network
     try:
         import urllib.request
         req = urllib.request.Request(LITELLM_URL, headers={"User-Agent": "agent-usage-skill/1.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = json.loads(resp.read())
+            status = getattr(resp, "status", resp.getcode())
+            if status < 200 or status >= 300:
+                raise RuntimeError(f"HTTP {status}")
+            data = resp.read(MAX_PRICING_RESPONSE_BYTES + 1)
+            if len(data) > MAX_PRICING_RESPONSE_BYTES:
+                raise RuntimeError(f"pricing response exceeds {MAX_PRICING_RESPONSE_BYTES} bytes")
+            raw = json.loads(data)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(json.dumps(raw))
+        with NamedTemporaryFile("w", encoding="utf-8", dir=cache_dir, delete=False) as tmp:
+            json.dump(raw, tmp)
+            tmp_path = Path(tmp.name)
+        os.replace(tmp_path, cache_file)
         _pricing_cache = _parse_pricing(raw)
         return _pricing_cache
     except Exception as e:

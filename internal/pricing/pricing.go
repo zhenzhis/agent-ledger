@@ -2,6 +2,8 @@ package pricing
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -10,26 +12,44 @@ import (
 )
 
 const pricingURL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+const maxPricingResponseBytes = 8 * 1024 * 1024
 
 type modelPricing struct {
-	InputCostPerToken              *float64 `json:"input_cost_per_token"`
-	OutputCostPerToken             *float64 `json:"output_cost_per_token"`
-	CacheReadInputTokenCost        *float64 `json:"cache_read_input_token_cost"`
-	CacheCreationInputTokenCost    *float64 `json:"cache_creation_input_token_cost"`
+	InputCostPerToken           *float64 `json:"input_cost_per_token"`
+	OutputCostPerToken          *float64 `json:"output_cost_per_token"`
+	CacheReadInputTokenCost     *float64 `json:"cache_read_input_token_cost"`
+	CacheCreationInputTokenCost *float64 `json:"cache_creation_input_token_cost"`
 }
 
 // Sync fetches model pricing from the litellm GitHub repository and upserts
 // it into the database. Only models relevant to AI coding agents are stored.
 func Sync(db *storage.DB) error {
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(pricingURL)
+	req, err := http.NewRequest(http.MethodGet, pricingURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "agent-usage/1.0")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("pricing: fetch failed with HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPricingResponseBytes+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(body)) > maxPricingResponseBytes {
+		return fmt.Errorf("pricing: response exceeds %d bytes", maxPricingResponseBytes)
+	}
 
 	var data map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.Unmarshal(body, &data); err != nil {
 		return err
 	}
 

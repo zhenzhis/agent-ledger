@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,8 +47,7 @@ func (c *PiCollector) processFile(path, project string) error {
 	var prompts int
 	var firstTime time.Time
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+	scanner := newJSONLScanner(f)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -118,9 +116,12 @@ func (c *PiCollector) processFile(path, project string) error {
 					CacheCreationInputTokens: msg.Usage.CacheWrite,
 				}
 				records = append(records, rec)
-			// toolResult messages are not counted as prompts
+				// toolResult messages are not counted as prompts
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scan pi jsonl %s: %w", path, err)
 	}
 
 	if sessionID == "" {

@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -326,7 +325,10 @@ func (c *KiroCollector) processSession(jsonPath string) error {
 	}
 
 	jsonlPath := strings.TrimSuffix(jsonPath, ".json") + ".jsonl"
-	promptEvents, totalOutputTokens := c.parseJSONL(jsonlPath, sessionID)
+	promptEvents, totalOutputTokens, err := c.parseJSONL(jsonlPath, sessionID)
+	if err != nil {
+		return err
+	}
 
 	var records []*storage.UsageRecord
 	if meta.SessionState.ConversationMetadata != nil {
@@ -412,17 +414,19 @@ func (c *KiroCollector) processSession(jsonPath string) error {
 	return c.db.SetFileState(jsonPath, info.Size(), info.Size(), nil)
 }
 
-func (c *KiroCollector) parseJSONL(jsonlPath, sessionID string) ([]*storage.PromptEvent, int64) {
+func (c *KiroCollector) parseJSONL(jsonlPath, sessionID string) ([]*storage.PromptEvent, int64, error) {
 	f, err := os.Open(jsonlPath)
 	if err != nil {
-		return nil, 0
+		if os.IsNotExist(err) {
+			return nil, 0, nil
+		}
+		return nil, 0, err
 	}
 	defer f.Close()
 
 	var events []*storage.PromptEvent
 	var totalOutputTokens int64
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+	scanner := newJSONLScanner(f)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -469,5 +473,8 @@ func (c *KiroCollector) parseJSONL(jsonlPath, sessionID string) ([]*storage.Prom
 			}
 		}
 	}
-	return events, totalOutputTokens
+	if err := scanner.Err(); err != nil {
+		return nil, 0, fmt.Errorf("scan kiro jsonl %s: %w", jsonlPath, err)
+	}
+	return events, totalOutputTokens, nil
 }

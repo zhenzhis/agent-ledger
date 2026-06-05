@@ -15,6 +15,14 @@ import (
 //go:embed static
 var staticFS embed.FS
 
+const (
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 30 * time.Second
+	writeTimeout      = 30 * time.Second
+	idleTimeout       = 120 * time.Second
+	maxHeaderBytes    = 1 << 20
+)
+
 // Server serves the web dashboard and REST API.
 type Server struct {
 	db   *storage.DB
@@ -41,7 +49,28 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/session-detail", s.handleSessionDetail)
 
 	log.Printf("server: listening on %s", s.addr)
-	return http.ListenAndServe(s.addr, mux)
+	srv := &http.Server{
+		Addr:              s.addr,
+		Handler:           securityHeaders(mux),
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+	}
+	return srv.ListenAndServe()
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) parseTimeRange(r *http.Request) (time.Time, time.Time, int, error) {

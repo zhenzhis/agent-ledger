@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,8 +46,7 @@ func (c *OpenClawCollector) processFile(path, agentID string) error {
 	var prompts int
 	var firstTime time.Time
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+	scanner := newJSONLScanner(f)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -112,6 +110,9 @@ func (c *OpenClawCollector) processFile(path, agentID string) error {
 				records = append(records, rec)
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scan openclaw jsonl %s: %w", path, err)
 	}
 
 	if sessionID == "" {

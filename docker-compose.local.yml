@@ -4,7 +4,8 @@ services:
     container_name: agent-usage
     restart: unless-stopped
     user: "1000:1000"
-    network_mode: host
+    ports:
+      - "127.0.0.1:9800:9800"
     environment:
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}

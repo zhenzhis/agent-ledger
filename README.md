@@ -3,14 +3,20 @@
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)]()
-[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://ghcr.io/briqt/agent-usage)
+[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://ghcr.io/zhenzhis/agent-usage)
 
-Lightweight, cross-platform AI coding agent usage & cost tracker.  
-Single binary + SQLite — zero infrastructure required.
+Security-hardened local AI coding agent usage & cost tracker for teams that want private token accounting without external infrastructure.  
+Single binary + SQLite — local-first, auditable, and safe to run behind a localhost-only dashboard.
 
 **[中文文档](README_CN.md)**
 
 Collects local session data from Claude Code, Codex, OpenClaw, OpenCode, kiro, and Pi, calculates costs automatically, and presents token usage, cost trends, and session details through a web dashboard.
+
+## Fork Notice
+
+This repository is a second-development fork by **ZhenZhi** based on [briqt/agent-usage](https://github.com/briqt/agent-usage). We keep the core collection and API model aligned with the upstream project, and extend it with security hardening, safer local deployment defaults, pinned CI, vendored frontend assets, and a quant-style operating dashboard.
+
+Thanks to the original author and contributors of [briqt/agent-usage](https://github.com/briqt/agent-usage/) for the clean single-binary foundation.
 
 ![Dashboard](docs/dashboard.png)
 
@@ -24,21 +30,31 @@ Collects local session data from Claude Code, Codex, OpenClaw, OpenCode, kiro, a
 - 📦 **Single binary** — `go:embed` packs the web UI into the executable
 - 🖥️ **Cross-platform** — Linux, macOS, Windows
 
+## ZhenZhi Edition Optimizations
+
+- **Local-only Docker default** — compose publishes `127.0.0.1:9800` and builds the local checkout instead of pulling a mutable upstream image.
+- **HTTP hardening** — explicit server timeouts plus CSP, frame, content-type, referrer, and permissions headers.
+- **Frontend supply-chain reduction** — ECharts is vendored into the embedded static bundle; no CDN scripts or Google Fonts are loaded at runtime.
+- **Scanner integrity** — JSONL collectors check scanner errors before inserting records or advancing file offsets, preventing silent truncation on oversized or unreadable lines.
+- **Bounded pricing sync** — litellm pricing fetch checks HTTP status, uses a User-Agent, and caps response size.
+- **Pinned automation** — release/docker actions are pinned by SHA; CI runs tests, vet, and `govulncheck@v1.3.0`.
+- **Quant-style UI/UX** — dark-first, dense, operation-oriented dashboard with activity matrix, token throughput, model allocation, cost trend, and a sortable session ledger.
+
 ## Quick Start (Docker)
 
 ```bash
 # One command to start
-mkdir -p ./data && docker compose up -d
+mkdir -p ./data && docker compose up --build -d
 
 # Open dashboard
 open http://localhost:9800
 ```
 
-The default `docker-compose.yml` only mounts `~/.claude/projects` read-only. Uncomment additional volume mounts in `docker-compose.yml` for each agent you have installed (Codex, OpenClaw, OpenCode, kiro, Pi). Data persists in `./data/`.
+The default `docker-compose.yml` builds the local checkout and publishes the dashboard only on `127.0.0.1:9800`. Keep that localhost binding unless you add your own reverse proxy or authentication layer. It only mounts `~/.claude/projects` read-only by default; uncomment additional volume mounts in `docker-compose.yml` for each agent you have installed (Codex, OpenClaw, OpenCode, kiro, Pi). Data persists in `./data/`.
 
 > **Note:** Only enable mounts for agents you actually use. Docker creates missing host directories as root, which can interfere with tools like `npx skills add` that detect installed agents by directory existence.
 
-The container uses `config.docker.yaml` by default (binds to `0.0.0.0`, stores data in `/data/`). To override, mount your own config:
+The container uses `config.docker.yaml` by default (binds to `0.0.0.0` inside the container, stores data in `/data/`). Host exposure is controlled by the compose port binding above. To override, mount your own config:
 
 ```yaml
 # In docker-compose.yml, uncomment:
@@ -54,7 +70,7 @@ The skill works standalone — no need to install or run the agent-usage server.
 
 ```bash
 # Installed via vercel-labs/skills, supports Claude Code, Cursor, kiro, and 40+ agents
-npx skills add briqt/agent-usage -y
+npx skills add zhenzhis/agent-usage -y
 ```
 
 Once installed, try: `查下 agent usage`、`agent usage 统计` or `check agent usage`. See [`skills/agent-usage/SKILL.md`](skills/agent-usage/SKILL.md) for details.
@@ -106,7 +122,7 @@ Config search order: `--config` flag > `/etc/agent-usage/config.yaml` > `./confi
 
 ```bash
 # Clone
-git clone https://github.com/briqt/agent-usage.git
+git clone https://github.com/zhenzhis/agent-usage.git
 cd agent-usage
 
 # Build
@@ -147,17 +163,20 @@ See `internal/collector/claude.go` as a reference implementation.
 
 The web dashboard provides:
 
-- **Sticky top bar** — time presets, granularity, source filter (Claude/Codex/OpenClaw/OpenCode/kiro/Pi), auto-refresh
-- **Summary cards** — total tokens, cost, sessions, prompts, API calls
-- **Token usage** — stacked bar chart (input/output/cache read/cache write)
-- **Cost trend** — stacked bar chart by model with consistent color mapping
-- **Cost by model** — doughnut chart with percentage labels
-- **Session list** — sortable, filterable table with expandable per-model detail
-- **Dark/Light theme** — system-aware with manual toggle
+- **Control surface** — time presets, date range, granularity, source/model filters, theme, language, and auto-refresh
+- **KPI strip** — total tokens, cost, sessions, prompts, calls, cache rate, and per-call metrics
+- **Activity matrix** — commit-heatmap inspired token activity by input/output/cache channel
+- **Token throughput** — stacked token bars for input, output, cache read, and cache write
+- **Cost trend** — stacked cost bars by model with stable model colors
+- **Model allocation** — horizontal ranking for top model spend
+- **Session ledger** — sortable, filterable table with expandable per-model detail
+- **Dark/Light theme** — dark-first default with manual toggle
 - **i18n** — English and Chinese
 - **Timezone handling** — all timestamps are stored in UTC; the frontend automatically converts to your browser's local timezone for date pickers, chart X-axis labels, and session timestamps
 
 ## Architecture
+
+The application stays intentionally small: collectors read local agent artifacts, storage normalizes usage into SQLite, pricing enriches records, and the embedded HTTP server serves both REST endpoints and the dashboard.
 
 ```
 agent-usage
@@ -167,6 +186,7 @@ agent-usage
 │   ├── config/                 # YAML config loader
 │   ├── collector/
 │   │   ├── collector.go        # Collector interface
+│   │   ├── jsonl_scanner.go    # Shared bounded JSONL scanner config
 │   │   ├── claude.go           # Claude Code session scanner
 │   │   ├── claude_process.go   # Claude Code JSONL parser
 │   │   ├── codex.go            # Codex CLI JSONL parser
@@ -185,9 +205,16 @@ agent-usage
 │   │   └── costs.go            # Cost recalculation + backfill
 │   └── server/
 │       ├── server.go           # HTTP server + REST API
-│       └── static/             # Embedded web UI (HTML + JS + ECharts)
+│       └── static/             # Embedded dashboard, CSS, JS, vendored ECharts
 └── agent-usage.db              # SQLite database (generated at runtime)
 ```
+
+Security boundaries:
+
+- Session directories are mounted read-only in Docker examples.
+- The dashboard is unauthenticated and therefore binds to localhost by default.
+- Static assets are embedded; runtime UI does not fetch third-party scripts or fonts.
+- Pricing sync is the only expected outbound request during normal operation.
 
 ## Cost Calculation
 
@@ -226,7 +253,7 @@ Invalid date formats or reversed date ranges return a `400` JSON error with a de
 
 ## Docker Details
 
-Pre-built multi-arch images (amd64 + arm64) are published to `ghcr.io/briqt/agent-usage`.
+The default compose file builds from source so local security fixes are included. Release workflows publish multi-arch images (amd64 + arm64) to this repository's GHCR namespace.
 
 The default `docker-compose.yml` runs as UID 1000. If your host user has a different UID, edit the `user:` field:
 
@@ -247,6 +274,12 @@ docker build -t agent-usage:local .
 
 # For China mainland, use GOPROXY:
 docker build --build-arg GOPROXY=https://goproxy.cn,direct -t agent-usage:local .
+```
+
+When using Docker directly, bind only to localhost unless you have added access control:
+
+```bash
+docker run --rm -p 127.0.0.1:9800:9800 agent-usage:local
 ```
 
 ## Community

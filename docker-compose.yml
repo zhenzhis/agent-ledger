@@ -1,13 +1,14 @@
 services:
   agent-usage:
-    image: ghcr.io/briqt/agent-usage:latest
+    build: .
+    image: agent-usage:local
     container_name: agent-usage
     restart: unless-stopped
     # Run as host user so bind-mounted dirs (especially ~/.claude with mode 700) are readable.
     # Change to match your UID/GID: run `id -u` and `id -g` to find yours.
     user: "1000:1000"
     ports:
-      - "9800:9800"
+      - "127.0.0.1:9800:9800"
     environment:
       - TZ=${TZ:-Asia/Shanghai}
       # Pricing sync fetches from GitHub. Uncomment if network access to GitHub is restricted:
