@@ -73,15 +73,16 @@ type TokenTimeSeriesPoint struct {
 
 // SessionInfo represents a session with aggregated cost and token totals.
 type SessionInfo struct {
-	SessionID string  `json:"session_id"`
-	Source    string  `json:"source"`
-	Project   string  `json:"project"`
-	CWD       string  `json:"cwd"`
-	GitBranch string  `json:"git_branch"`
-	StartTime string  `json:"start_time"`
-	Prompts   int     `json:"prompts"`
-	TotalCost float64 `json:"total_cost"`
-	Tokens    int64   `json:"tokens"`
+	SessionID    string  `json:"session_id"`
+	Source       string  `json:"source"`
+	Project      string  `json:"project"`
+	CWD          string  `json:"cwd"`
+	GitBranch    string  `json:"git_branch"`
+	StartTime    string  `json:"start_time"`
+	LastActivity string  `json:"last_activity"`
+	Prompts      int     `json:"prompts"`
+	TotalCost    float64 `json:"total_cost"`
+	Tokens       int64   `json:"tokens"`
 }
 
 // SessionPage represents a paginated session ledger response.
@@ -345,16 +346,18 @@ func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, 
 	countRows.Close()
 	args = append(args, limit, offset)
 	rows, err := d.db.Query(`SELECT s.session_id, s.source, s.project, s.cwd, s.git_branch,
-		COALESCE(s.start_time,''), COALESCE(p.prompts,0),
+		COALESCE(s.start_time,''), COALESCE(u.last_activity,''), COALESCE(p.prompts,0),
 		COALESCE(u.cost,0), COALESCE(u.tokens,0)
 		FROM sessions s
-		JOIN (SELECT source, session_id, SUM(cost_usd) as cost, SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens) as tokens
+		JOIN (SELECT source, session_id, SUM(cost_usd) as cost,
+				SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens) as tokens,
+				MAX(timestamp) as last_activity
 			FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+` GROUP BY source, session_id) u
 		ON s.source = u.source AND s.session_id = u.session_id
 		LEFT JOIN (SELECT source, session_id, COUNT(*) as prompts
 			FROM prompt_events WHERE timestamp >= ? AND timestamp < ?`+promptFilter+` GROUP BY source, session_id) p
 		ON s.source = p.source AND s.session_id = p.session_id
-		ORDER BY s.start_time DESC LIMIT ? OFFSET ?`, args...)
+		ORDER BY u.last_activity DESC, s.start_time DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +365,7 @@ func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, 
 	var result []SessionInfo
 	for rows.Next() {
 		var s SessionInfo
-		if err := rows.Scan(&s.SessionID, &s.Source, &s.Project, &s.CWD, &s.GitBranch, &s.StartTime, &s.Prompts, &s.TotalCost, &s.Tokens); err != nil {
+		if err := rows.Scan(&s.SessionID, &s.Source, &s.Project, &s.CWD, &s.GitBranch, &s.StartTime, &s.LastActivity, &s.Prompts, &s.TotalCost, &s.Tokens); err != nil {
 			return nil, err
 		}
 		result = append(result, s)

@@ -273,7 +273,7 @@ let autoTimer = null;
 let statusTimer = null;
 let allSessions = [];
 let sessionTotal = 0;
-let sessionSort = { key: "start_time", dir: "desc" };
+let sessionSort = { key: "last_activity", dir: "desc" };
 let sessionPage = 1;
 let expandedSessions = new Set();
 let sessionKeyToID = new Map();
@@ -942,8 +942,9 @@ function renderSessionTable() {
       projectCell.title = session.cwd || session.project || "";
       tr.appendChild(projectCell);
       tr.appendChild(createCell(session.git_branch || "-", "muted-cell"));
-      const timeCell = createCell(relTime(session.start_time), "mono");
-      timeCell.title = fmtLocalTime(session.start_time);
+      const displayTime = session.last_activity || session.start_time;
+      const timeCell = createCell(relTime(displayTime), "mono");
+      timeCell.title = `${fmtLocalTime(displayTime)}${session.start_time && session.start_time !== displayTime ? ` · start ${fmtLocalTime(session.start_time)}` : ""}`;
       tr.appendChild(timeCell);
       tr.appendChild(createCell(fmt(session.prompts || 0), "num"));
       tr.appendChild(createCell(fmt(session.tokens || 0), "num"));
@@ -1335,7 +1336,7 @@ document.querySelectorAll(".sort-button").forEach((button) => {
       sessionSort.dir = sessionSort.dir === "asc" ? "desc" : "asc";
     } else {
       sessionSort.key = key;
-      sessionSort.dir = ["start_time", "total_cost", "tokens", "prompts"].includes(key) ? "desc" : "asc";
+      sessionSort.dir = ["start_time", "last_activity", "total_cost", "tokens", "prompts"].includes(key) ? "desc" : "asc";
     }
     renderSessionTable();
   });

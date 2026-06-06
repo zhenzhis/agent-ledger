@@ -682,6 +682,63 @@ func TestGetSessionsPage(t *testing.T) {
 	}
 }
 
+func TestGetSessionsPageSortsByLastActivity(t *testing.T) {
+	db := tempDB(t)
+	base := time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC)
+
+	if err := db.UpsertSession(&SessionRecord{
+		Source:    "codex",
+		SessionID: "codex-long",
+		Project:   "proj",
+		StartTime: base.Add(-24 * time.Hour),
+	}); err != nil {
+		t.Fatalf("UpsertSession codex: %v", err)
+	}
+	if err := db.InsertUsage(&UsageRecord{
+		Source:      "codex",
+		SessionID:   "codex-long",
+		Model:       "m",
+		InputTokens: 1,
+		Timestamp:   base,
+		Project:     "proj",
+	}); err != nil {
+		t.Fatalf("InsertUsage codex: %v", err)
+	}
+
+	if err := db.UpsertSession(&SessionRecord{
+		Source:    "opencode",
+		SessionID: "open-short",
+		Project:   "proj",
+		StartTime: base.Add(-30 * time.Minute),
+	}); err != nil {
+		t.Fatalf("UpsertSession opencode: %v", err)
+	}
+	if err := db.InsertUsage(&UsageRecord{
+		Source:      "opencode",
+		SessionID:   "open-short",
+		Model:       "m",
+		InputTokens: 1,
+		Timestamp:   base.Add(-30 * time.Minute),
+		Project:     "proj",
+	}); err != nil {
+		t.Fatalf("InsertUsage opencode: %v", err)
+	}
+
+	page, err := db.GetSessionsPage(base.Add(-2*time.Hour), base.Add(time.Hour), "", "", "", 10, 0)
+	if err != nil {
+		t.Fatalf("GetSessionsPage: %v", err)
+	}
+	if len(page.Rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(page.Rows))
+	}
+	if page.Rows[0].Source != "codex" || page.Rows[0].SessionID != "codex-long" {
+		t.Fatalf("expected recently active codex session first, got %+v", page.Rows[0])
+	}
+	if page.Rows[0].LastActivity == "" {
+		t.Fatal("expected last activity to be populated")
+	}
+}
+
 func TestProjectAliasesAndFilter(t *testing.T) {
 	db := tempDB(t)
 	db.SetProjectOptions(map[string]string{"/workspace/alpha": "Alpha"}, nil)
