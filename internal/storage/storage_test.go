@@ -739,6 +739,63 @@ func TestGetSessionsPageSortsByLastActivity(t *testing.T) {
 	}
 }
 
+func TestGetSessionsPageSortedAndSearched(t *testing.T) {
+	db := tempDB(t)
+	base := time.Date(2025, 1, 3, 12, 0, 0, 0, time.UTC)
+	records := []struct {
+		source    string
+		sessionID string
+		project   string
+		cwd       string
+		branch    string
+		cost      float64
+		tokens    int64
+	}{
+		{"codex", "s-low", "Alpha", "/workspace/alpha", "main", 1.25, 10},
+		{"opencode", "s-high", "Beta", "/workspace/beta", "feature/risk", 7.50, 20},
+	}
+	for i, rec := range records {
+		ts := base.Add(time.Duration(i) * time.Minute)
+		if err := db.UpsertSession(&SessionRecord{
+			Source:    rec.source,
+			SessionID: rec.sessionID,
+			Project:   rec.project,
+			CWD:       rec.cwd,
+			GitBranch: rec.branch,
+			StartTime: ts,
+		}); err != nil {
+			t.Fatalf("UpsertSession %s: %v", rec.sessionID, err)
+		}
+		if err := db.InsertUsage(&UsageRecord{
+			Source:      rec.source,
+			SessionID:   rec.sessionID,
+			Model:       "m",
+			InputTokens: rec.tokens,
+			CostUSD:     rec.cost,
+			Timestamp:   ts,
+			Project:     rec.project,
+		}); err != nil {
+			t.Fatalf("InsertUsage %s: %v", rec.sessionID, err)
+		}
+	}
+
+	page, err := db.GetSessionsPageSorted(base.Add(-time.Hour), base.Add(time.Hour), "", "", "", "", 10, 0, "total_cost", "desc")
+	if err != nil {
+		t.Fatalf("GetSessionsPageSorted: %v", err)
+	}
+	if len(page.Rows) != 2 || page.Rows[0].SessionID != "s-high" {
+		t.Fatalf("expected highest cost first, got %+v", page.Rows)
+	}
+
+	page, err = db.GetSessionsPageSorted(base.Add(-time.Hour), base.Add(time.Hour), "", "", "", "risk", 10, 0, "last_activity", "desc")
+	if err != nil {
+		t.Fatalf("GetSessionsPageSorted query: %v", err)
+	}
+	if page.Total != 1 || len(page.Rows) != 1 || page.Rows[0].SessionID != "s-high" {
+		t.Fatalf("expected branch query to find s-high, got total=%d rows=%+v", page.Total, page.Rows)
+	}
+}
+
 func TestProjectAliasesAndFilter(t *testing.T) {
 	db := tempDB(t)
 	db.SetProjectOptions(map[string]string{"/workspace/alpha": "Alpha"}, nil)

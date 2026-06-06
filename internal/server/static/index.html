@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='6' fill='%23000000'/><path d='M14 42h36M18 35l8-8 8 6 12-15' fill='none' stroke='%23f5f5f5' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/></svg>">
-<title>agent-usage</title>
+<title>Agent Ledger</title>
 <link rel="stylesheet" href="styles.css">
 <script defer src="vendor/echarts/echarts.min.js"></script>
 <script defer src="app.js"></script>
@@ -17,54 +17,57 @@
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
       <div class="brand-copy">
-        <h1>agent-usage</h1>
+        <h1 id="product-name">Agent Ledger</h1>
+        <span class="product-tagline" data-i18n="appTagline">Local AI agent usage ledger</span>
         <span id="range-caption" class="range-caption"></span>
       </div>
     </div>
 
     <div class="control-surface" aria-label="Dashboard controls">
-      <div id="preset-bar" class="segmented" role="group" aria-label="Time range"></div>
-      <div id="custom-range-wrap" class="date-range is-hidden">
-        <label class="field">
-          <span data-i18n="from">From</span>
-          <input type="date" id="from">
-        </label>
-        <label class="field">
-          <span data-i18n="to">To</span>
-          <input type="date" id="to">
-        </label>
-      </div>
+      <section class="control-group control-time" aria-label="Time window">
+        <div class="control-heading" data-i18n="window">Window</div>
+        <div id="preset-bar" class="segmented" role="group" aria-label="Time range"></div>
+        <div id="custom-range-wrap" class="date-range is-hidden">
+          <label class="field">
+            <span data-i18n="from">From</span>
+            <input type="date" id="from">
+          </label>
+          <label class="field">
+            <span data-i18n="to">To</span>
+            <input type="date" id="to">
+          </label>
+        </div>
+      </section>
 
-      <label class="field compact">
-        <span data-i18n="granularity">Granularity</span>
-        <select id="sel-granularity"></select>
-      </label>
-      <label class="field compact">
-        <span data-i18n="source">Source</span>
-        <select id="filter-source"></select>
-      </label>
-      <label class="field model-field">
-        <span data-i18n="model">Model</span>
-        <select id="filter-model"></select>
-      </label>
-      <label class="field model-field">
-        <span data-i18n="project">Project</span>
-        <input type="text" id="filter-project-global" autocomplete="off" placeholder="Project / workspace">
-      </label>
+      <section class="control-group control-filters" aria-label="Filters">
+        <div class="control-heading" data-i18n="filters">Filters</div>
+        <label class="field compact">
+          <span data-i18n="granularity">Granularity</span>
+          <select id="sel-granularity"></select>
+        </label>
+        <label class="field compact">
+          <span data-i18n="source">Source</span>
+          <select id="filter-source"></select>
+        </label>
+        <label class="field model-field">
+          <span data-i18n="model">Model</span>
+          <select id="filter-model"></select>
+        </label>
+        <label class="field model-field">
+          <span data-i18n="project">Project</span>
+          <input type="text" id="filter-project-global" autocomplete="off" placeholder="Project / workspace">
+        </label>
+      </section>
 
-      <div class="action-cluster">
+      <section class="control-group control-actions" aria-label="Operations">
+        <div class="control-heading" data-i18n="operations">Operations</div>
+        <div class="action-cluster">
         <button class="icon-btn primary" id="btn-refresh" type="button">
           <svg class="spin-target" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.66M20 4v6h-6"/></svg>
           <span data-i18n="refresh">Refresh</span>
         </button>
         <button class="icon-btn" id="btn-scan" type="button" aria-label="Scan now">
-          <span data-i18n="scanNow">Scan</span>
-        </button>
-        <button class="icon-btn" id="btn-recalc" type="button" aria-label="Recalculate costs">
-          <span data-i18n="recalcCosts">Costs</span>
-        </button>
-        <button class="icon-btn danger" id="btn-reset-scan" type="button" aria-label="Reset and rescan current source">
-          <span data-i18n="resetScan">Reset</span>
+          <span data-i18n="scanSource">Scan Source</span>
         </button>
         <button class="icon-btn" id="btn-export" type="button" aria-label="Export CSV">
           <span data-i18n="exportCsv">CSV</span>
@@ -75,13 +78,31 @@
         <button class="icon-btn" id="btn-privacy" type="button" aria-label="Toggle privacy mode">
           <span id="privacy-status" data-i18n="privacyOff">Privacy</span>
         </button>
-        <button class="icon-btn" id="btn-auto-refresh" type="button">
-          <span id="auto-status">Auto</span>
-        </button>
+        <details class="advanced-menu">
+          <summary data-i18n="advanced">Advanced</summary>
+          <div class="advanced-actions">
+            <button class="icon-btn" id="btn-recalc" type="button" aria-label="Recalculate costs">
+              <span data-i18n="recalcCosts">Costs</span>
+            </button>
+            <button class="icon-btn danger" id="btn-reset-scan" type="button" aria-label="Reset and rescan current source">
+              <span data-i18n="resetScan">Reset</span>
+            </button>
+          </div>
+        </details>
+        </div>
+      </section>
+
+      <section class="control-group control-preferences" aria-label="Preferences">
+        <div class="control-heading" data-i18n="preferences">Preferences</div>
+        <div class="action-cluster">
+          <button class="icon-btn" id="btn-auto-refresh" type="button">
+            <span id="auto-status">Auto</span>
+          </button>
         <select id="sel-refresh-interval" aria-label="Refresh interval"></select>
         <select id="sel-theme" aria-label="Theme"></select>
         <select id="sel-lang" aria-label="Language"></select>
-      </div>
+        </div>
+      </section>
     </div>
   </header>
 

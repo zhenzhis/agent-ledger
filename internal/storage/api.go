@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -37,6 +38,48 @@ func buildUsageFilter(source, model, project string) (string, []interface{}) {
 	args = append(args, ma...)
 	args = append(args, pa...)
 	return sf + mf + pf, args
+}
+
+func escapeLike(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `%`, `\%`)
+	value = strings.ReplaceAll(value, `_`, `\_`)
+	return value
+}
+
+func sessionSearchFilter(query string) (string, []interface{}) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", nil
+	}
+	if runes := []rune(query); len(runes) > 200 {
+		query = string(runes[:200])
+	}
+	pattern := "%" + escapeLike(query) + "%"
+	return ` WHERE (s.project LIKE ? ESCAPE '\' OR s.cwd LIKE ? ESCAPE '\' OR s.git_branch LIKE ? ESCAPE '\')`,
+		[]interface{}{pattern, pattern, pattern}
+}
+
+func sessionOrderBy(sortKey, direction string) string {
+	dir := "DESC"
+	if strings.EqualFold(direction, "asc") {
+		dir = "ASC"
+	}
+	columns := map[string]string{
+		"source":        "s.source",
+		"project":       "s.project",
+		"git_branch":    "s.git_branch",
+		"start_time":    "s.start_time",
+		"last_activity": "u.last_activity",
+		"prompts":       "COALESCE(p.prompts,0)",
+		"tokens":        "u.tokens",
+		"total_cost":    "u.cost",
+	}
+	column, ok := columns[sortKey]
+	if !ok {
+		column = "u.last_activity"
+	}
+	return fmt.Sprintf(" ORDER BY %s %s, u.last_activity DESC, s.start_time DESC", column, dir)
 }
 
 // DashboardStats holds aggregate statistics for the dashboard summary cards.
@@ -311,6 +354,11 @@ func (d *DB) GetSessions(from, to time.Time, source, model string) ([]SessionInf
 
 // GetSessionsPage returns sessions with aggregated totals and pagination.
 func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, limit, offset int) (*SessionPage, error) {
+	return d.GetSessionsPageSorted(from, to, source, model, project, "", limit, offset, "last_activity", "desc")
+}
+
+// GetSessionsPageSorted returns sessions with server-side search, sorting, and pagination.
+func (d *DB) GetSessionsPageSorted(from, to time.Time, source, model, project, query string, limit, offset int, sortKey, direction string) (*SessionPage, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -324,15 +372,15 @@ func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, 
 	baseArgs := append([]interface{}{from, to}, fa...)
 	promptFilter, promptFilterArgs := buildUsageFilter(source, "", project)
 	promptArgs := append([]interface{}{from, to}, promptFilterArgs...)
-	args := append([]interface{}{}, baseArgs...)
-	args = append(args, promptArgs...)
+	sessionFilter, sessionArgs := sessionSearchFilter(query)
 	countRows, err := d.db.Query(`SELECT COUNT(*) FROM (
 		SELECT s.source, s.session_id
 		FROM sessions s
 		JOIN (SELECT source, session_id
 			FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+` GROUP BY source, session_id) u
 		ON s.source = u.source AND s.session_id = u.session_id
-	)`, baseArgs...)
+		`+sessionFilter+`
+	)`, append(baseArgs, sessionArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -344,6 +392,9 @@ func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, 
 		}
 	}
 	countRows.Close()
+	args := append([]interface{}{}, baseArgs...)
+	args = append(args, promptArgs...)
+	args = append(args, sessionArgs...)
 	args = append(args, limit, offset)
 	rows, err := d.db.Query(`SELECT s.session_id, s.source, s.project, s.cwd, s.git_branch,
 		COALESCE(s.start_time,''), COALESCE(u.last_activity,''), COALESCE(p.prompts,0),
@@ -357,7 +408,7 @@ func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, 
 		LEFT JOIN (SELECT source, session_id, COUNT(*) as prompts
 			FROM prompt_events WHERE timestamp >= ? AND timestamp < ?`+promptFilter+` GROUP BY source, session_id) p
 		ON s.source = p.source AND s.session_id = p.session_id
-		ORDER BY u.last_activity DESC, s.start_time DESC LIMIT ? OFFSET ?`, args...)
+		`+sessionFilter+sessionOrderBy(sortKey, direction)+` LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, err
 	}

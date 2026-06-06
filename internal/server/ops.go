@@ -113,7 +113,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename := fmt.Sprintf("agent-usage-%s-%s.%s", exportType, time.Now().Format("20060102-150405"), format)
+	filename := fmt.Sprintf("agent-ledger-%s-%s.%s", exportType, time.Now().Format("20060102-150405"), format)
 	switch format {
 	case "json":
 		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
@@ -157,7 +157,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b strings.Builder
-	b.WriteString("# agent-usage report\n\n")
+	b.WriteString("# Agent Ledger report\n\n")
 	b.WriteString(fmt.Sprintf("- Window: `%s` to `%s`\n", from.Format("2006-01-02"), to.Add(-time.Nanosecond).Format("2006-01-02")))
 	b.WriteString(fmt.Sprintf("- Tokens: `%d`\n", stats.TotalTokens))
 	b.WriteString(fmt.Sprintf("- Cost: `$%.4f`\n", stats.TotalCost))

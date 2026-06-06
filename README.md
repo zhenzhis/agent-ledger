@@ -1,11 +1,11 @@
-# agent-usage
+# Agent Ledger
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)]()
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://ghcr.io/zhenzhis/agent-usage)
 
-Private local AI coding agent usage, cost, budget, and health console for Claude Code, Codex, OpenCode, Claude-compatible agents, and related local coding tools.
+Private local AI coding agent usage, cost, budget, and health ledger for Claude Code, Codex, OpenCode, Claude-compatible agents, and related local coding tools.
 
 Single binary, SQLite storage, embedded web UI, localhost-first deployment.
 
@@ -13,7 +13,7 @@ Single binary, SQLite storage, embedded web UI, localhost-first deployment.
 
 ## Fork Notice
 
-This repository is a second-development fork by ZhenZhi based on [briqt/agent-usage](https://github.com/briqt/agent-usage).
+Agent Ledger is the ZhenZhi second-development edition of [briqt/agent-usage](https://github.com/briqt/agent-usage). The repository and binary remain compatible with the current `agent-usage` deployment name until the GitHub repository is renamed.
 
 We keep the upstream collection and pricing model compatible, and add source-scoped accounting, local deployment hardening, ingestion health, local budgets, export/report APIs, privacy mode, server-side pagination, and a monochrome operations dashboard.
 
@@ -33,7 +33,7 @@ Screenshot is captured with privacy mode enabled. Local paths, project names, br
 - Local budgets by day, week, or month for global, source, model, or project scopes.
 - CSV/JSON export and Markdown daily/weekly reports.
 - Privacy mode for screenshots and shared reports.
-- Server-side session pagination for large local databases.
+- Server-side session pagination, search, and sorting for large local databases.
 - Docker compose defaults to `127.0.0.1:9800` and read-only session mounts.
 
 ## Quick Start

@@ -1323,3 +1323,400 @@ td {
     grid-template-columns: 1fr;
   }
 }
+
+/* Agent Ledger final operations layout */
+:root,
+[data-theme="dark"] {
+  --bg: #050505;
+  --surface: #0f0f0f;
+  --surface-2: #181818;
+  --surface-3: #202020;
+  --border: #303030;
+  --border-strong: #686868;
+  --text: #f4f4f4;
+  --muted: #a8a8a8;
+  --muted-2: #777777;
+  --accent: #f4f4f4;
+  --accent-2: #d8d8d8;
+  --green: #d8d8d8;
+  --amber: #9a9a9a;
+  --red: #f4f4f4;
+  --blue: #f4f4f4;
+  --purple: #777777;
+  --shadow: none;
+  --chart-grid: #2f2f2f;
+}
+
+[data-theme="light"] {
+  --bg: #f6f6f6;
+  --surface: #ffffff;
+  --surface-2: #eeeeee;
+  --surface-3: #e6e6e6;
+  --border: #d0d0d0;
+  --border-strong: #707070;
+  --text: #0a0a0a;
+  --muted: #555555;
+  --muted-2: #777777;
+  --accent: #0a0a0a;
+  --accent-2: #262626;
+  --green: #3a3a3a;
+  --amber: #707070;
+  --red: #0a0a0a;
+  --blue: #0a0a0a;
+  --purple: #555555;
+  --shadow: none;
+  --chart-grid: #d0d0d0;
+}
+
+.app-shell {
+  width: min(100%, 1760px);
+  padding: 16px 20px 40px;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px;
+  padding: 10px 0 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  align-items: flex-start;
+  padding-top: 3px;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.brand h1 {
+  font-size: 19px;
+  line-height: 1.05;
+  font-weight: 720;
+}
+
+.product-tagline {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.range-caption {
+  display: block;
+  margin-top: 5px;
+}
+
+.control-surface {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.control-group {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  align-content: start;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.control-time {
+  grid-column: span 5;
+  flex-wrap: wrap;
+}
+
+.control-filters {
+  grid-column: span 7;
+}
+
+.control-actions {
+  grid-column: span 8;
+}
+
+.control-preferences {
+  grid-column: span 4;
+}
+
+.control-heading {
+  flex: 0 0 100%;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.control-time .segmented {
+  flex: 1 1 420px;
+}
+
+.date-range {
+  flex: 0 1 auto;
+}
+
+.control-filters .field {
+  min-width: 112px;
+  flex: 1 1 130px;
+}
+
+.control-filters .model-field {
+  min-width: 160px;
+  flex-basis: 190px;
+}
+
+.action-cluster {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.control-actions .action-cluster,
+.control-preferences .action-cluster {
+  width: 100%;
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+
+.advanced-menu {
+  position: relative;
+}
+
+.advanced-menu summary {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  list-style: none;
+  cursor: pointer;
+}
+
+.advanced-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-menu summary:hover {
+  border-color: var(--border-strong);
+}
+
+.advanced-actions {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 190px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.advanced-actions .icon-btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.segmented,
+input,
+select,
+.icon-btn,
+.page-btn,
+.expand-btn {
+  border-radius: 5px;
+}
+
+.segmented {
+  min-height: 36px;
+  padding: 2px;
+}
+
+.segmented button {
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.icon-btn.primary,
+.page-btn.active {
+  font-weight: 720;
+}
+
+.icon-btn.danger {
+  color: var(--text);
+}
+
+.kpi-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+
+.kpi-card {
+  min-height: 98px;
+  padding: 13px 14px;
+}
+
+.kpi-value {
+  font-size: 27px;
+}
+
+.chart-grid {
+  gap: 10px;
+}
+
+.panel {
+  padding: 12px;
+}
+
+.panel-header,
+.ledger-header {
+  min-height: 28px;
+}
+
+.chart {
+  height: 280px;
+}
+
+.chart-compact {
+  height: 184px;
+}
+
+.search-field {
+  width: min(420px, 48vw);
+}
+
+@media (max-width: 1440px) {
+  .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .control-time,
+  .control-filters,
+  .control-actions,
+  .control-preferences {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 12px 10px 32px;
+  }
+
+  .control-surface {
+    grid-template-columns: 1fr;
+  }
+
+  .control-time,
+  .control-filters,
+  .control-actions,
+  .control-preferences {
+    grid-column: auto;
+  }
+
+  .control-group,
+  .control-filters,
+  .control-actions,
+  .control-preferences {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .control-heading,
+  .control-time .segmented {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .segmented {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .date-range,
+  .action-cluster {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .date-range {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .control-filters .field,
+  .control-filters .model-field,
+  .field,
+  .field.compact,
+  .field.model-field,
+  .icon-btn,
+  .action-cluster select {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .advanced-menu,
+  .advanced-menu summary {
+    width: 100%;
+  }
+
+  .advanced-actions {
+    position: static;
+    margin-top: 6px;
+  }
+}
+
+@media (max-width: 680px) {
+  .topbar {
+    position: static;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart {
+    height: 240px;
+  }
+}
+
+@media (max-width: 440px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .segmented {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .date-range {
+    grid-template-columns: 1fr;
+  }
+}

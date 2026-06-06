@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const PRODUCT_NAME = "Agent Ledger";
 
 const fmt = (value) => {
   const n = Number(value || 0);
@@ -39,6 +40,12 @@ const I18N = {
     prompts: "Prompts",
     budget: "Budget",
     health: "Health",
+    window: "Window",
+    filters: "Filters",
+    operations: "Operations",
+    preferences: "Preferences",
+    advanced: "Advanced",
+    appTagline: "Local AI agent usage ledger",
     activityMatrix: "Activity Matrix",
     tokenThroughput: "Token Throughput",
     costOverTime: "Cost Trend",
@@ -46,12 +53,14 @@ const I18N = {
     budgetStatus: "Budget Status",
     ingestionHealth: "Ingestion Health",
     sessionLedger: "Session Ledger",
-    filterProject: "Filter project, path, or branch...",
+    filterProject: "Project / workspace",
+    ledgerSearch: "Search ledger by project, path, or branch...",
     scanNow: "Scan",
-    recalcCosts: "Costs",
-    resetScan: "Reset",
-    exportCsv: "CSV",
-    reportMd: "Report",
+    scanSource: "Scan Source",
+    recalcCosts: "Rebuild Costs",
+    resetScan: "Clean Rescan",
+    exportCsv: "Export CSV",
+    reportMd: "Markdown Report",
     privacyOn: "Privacy On",
     privacyOff: "Privacy",
     scanStarted: "Scan started",
@@ -108,6 +117,7 @@ const I18N = {
     of: "of",
     updated: "Updated",
     refreshFailed: "Refresh failed",
+    partialRefreshFailed: "Some panels failed",
     actionFailed: "Action failed",
     disabled: "disabled",
     missingPath: "missing path",
@@ -142,6 +152,12 @@ const I18N = {
     prompts: "Prompt 数",
     budget: "预算",
     health: "健康",
+    window: "时间窗口",
+    filters: "过滤条件",
+    operations: "操作",
+    preferences: "偏好",
+    advanced: "高级",
+    appTagline: "本地 AI Agent 用量账本",
     activityMatrix: "活动矩阵",
     tokenThroughput: "Token 吞吐",
     costOverTime: "费用趋势",
@@ -149,12 +165,14 @@ const I18N = {
     budgetStatus: "预算状态",
     ingestionHealth: "采集健康",
     sessionLedger: "会话账本",
-    filterProject: "筛选项目、路径或分支...",
+    filterProject: "项目 / 工作区",
+    ledgerSearch: "按项目、路径或分支搜索账本...",
     scanNow: "扫描",
-    recalcCosts: "费用",
-    resetScan: "重扫",
-    exportCsv: "CSV",
-    reportMd: "报告",
+    scanSource: "扫描来源",
+    recalcCosts: "重建费用",
+    resetScan: "清理重扫",
+    exportCsv: "导出 CSV",
+    reportMd: "Markdown 报告",
     privacyOn: "隐私开启",
     privacyOff: "隐私",
     scanStarted: "开始扫描",
@@ -211,6 +229,7 @@ const I18N = {
     of: "/",
     updated: "已更新",
     refreshFailed: "刷新失败",
+    partialRefreshFailed: "部分面板刷新失败",
     actionFailed: "操作失败",
     disabled: "已禁用",
     missingPath: "路径不存在",
@@ -265,6 +284,7 @@ let state = {
   source: localStorage.getItem("au-source") || "",
   model: localStorage.getItem("au-model") || "",
   project: localStorage.getItem("au-project") || "",
+  ledgerQuery: localStorage.getItem("au-ledgerQuery") || "",
   privacy: privacyParam === null ? localStorage.getItem("au-privacy") === "true" : flagEnabled(privacyParam),
 };
 
@@ -402,9 +422,30 @@ function getTimeRange() {
   }
 }
 
+function dateRangeDays() {
+  const range = getTimeRange();
+  const from = new Date(`${range.from}T00:00:00`);
+  const to = new Date(`${range.to}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 1;
+  return Math.max(1, Math.floor((to.getTime() - from.getTime()) / 86400000) + 1);
+}
+
+function effectiveGranularity() {
+  const days = dateRangeDays();
+  const g = state.granularity;
+  if (days > 90 && ["1m", "30m", "1h", "6h", "12h"].includes(g)) return "1d";
+  if (days > 14 && ["1m", "30m"].includes(g)) return "1h";
+  if (days > 2 && g === "1m") return "30m";
+  return g;
+}
+
 function updateRangeCaption() {
   const range = getTimeRange();
-  setText("range-caption", `${range.from} ${t("to")} ${range.to} · ${t(`gran_${state.granularity}`)}`);
+  const granularity = effectiveGranularity();
+  const granText = granularity === state.granularity
+    ? t(`gran_${granularity}`)
+    : `${t(`gran_${state.granularity}`)} -> ${t(`gran_${granularity}`)}`;
+  setText("range-caption", `${range.from} ${t("to")} ${range.to} · ${granText}`);
   $("custom-range-wrap").classList.toggle("is-hidden", state.preset !== "custom");
   $("from").value = state.customFrom || range.from;
   $("to").value = state.customTo || range.to;
@@ -417,7 +458,7 @@ function buildParams(opts = {}) {
     to: range.to,
     tz_offset: String(new Date().getTimezoneOffset()),
   });
-  if (state.granularity) params.set("granularity", state.granularity);
+  if (state.granularity) params.set("granularity", effectiveGranularity());
   if (state.source) params.set("source", state.source);
   if (state.model && !opts.skipModel) params.set("model", state.model);
   if (state.project) params.set("project", state.project);
@@ -808,31 +849,55 @@ async function refresh(options = {}) {
 
   try {
     const sessionOffset = (sessionPage - 1) * PAGE_SIZE;
-    const [stats, costModel, costTime, tokensTime, sessions, health, budgets] = await Promise.all([
-      api("stats"),
-      api("cost-by-model", { skipModel: true }),
-      api("cost-over-time"),
-      api("tokens-over-time"),
-      api("sessions", { extra: { limit: PAGE_SIZE, offset: sessionOffset } }),
-      api("health/ingestion"),
-      api("budgets/status"),
-    ]);
+    const sessionParams = {
+      limit: PAGE_SIZE,
+      offset: sessionOffset,
+      sort: sessionSort.key,
+      dir: sessionSort.dir,
+    };
+    if (state.ledgerQuery) sessionParams.q = state.ledgerQuery;
+    const requests = {
+      stats: api("stats"),
+      costModel: api("cost-by-model", { skipModel: true }),
+      costTime: api("cost-over-time"),
+      tokensTime: api("tokens-over-time"),
+      sessions: api("sessions", { extra: sessionParams }),
+      health: api("health/ingestion"),
+      budgets: api("budgets/status"),
+    };
+    const settled = await Promise.allSettled(Object.entries(requests).map(async ([key, promise]) => [key, await promise]));
+    const data = {};
+    const errors = [];
+    settled.forEach((result) => {
+      if (result.status === "fulfilled") {
+        data[result.value[0]] = result.value[1];
+      } else {
+        errors.push(result.reason && result.reason.message ? result.reason.message : String(result.reason));
+      }
+    });
 
-    updateModelFilter(costModel || []);
-    renderStats(stats || {});
-    const modelColorMap = buildModelColorMap(costModel || []);
-    renderActivityMatrix(tokensTime || []);
-    renderTokenThroughput(tokensTime || []);
-    renderCostTrend(costTime || [], modelColorMap);
-    renderModelAllocation(costModel || [], modelColorMap);
-
-    renderHealth(health || []);
-    renderBudgets(budgets || {});
-
-    allSessions = (sessions && sessions.rows) || [];
-    sessionTotal = Number((sessions && sessions.total) || allSessions.length);
-    renderSessionTable();
-    if (!options.silent) showStatus(`${t("updated")} ${new Date().toLocaleTimeString()}`);
+    const costModel = data.costModel || [];
+    if (data.costModel) updateModelFilter(costModel);
+    if (data.stats) renderStats(data.stats);
+    const modelColorMap = buildModelColorMap(costModel);
+    if (data.tokensTime) {
+      renderActivityMatrix(data.tokensTime);
+      renderTokenThroughput(data.tokensTime);
+    }
+    if (data.costTime) renderCostTrend(data.costTime, modelColorMap);
+    if (data.costModel) renderModelAllocation(costModel, modelColorMap);
+    if (data.health) renderHealth(data.health);
+    if (data.budgets) renderBudgets(data.budgets);
+    if (data.sessions) {
+      allSessions = data.sessions.rows || [];
+      sessionTotal = Number(data.sessions.total || allSessions.length);
+      renderSessionTable();
+    }
+    if (errors.length > 0) {
+      showStatus(`${t("partialRefreshFailed")}: ${errors.slice(0, 2).join("; ")}`, "error");
+    } else if (!options.silent) {
+      showStatus(`${t("updated")} ${new Date().toLocaleTimeString()}`);
+    }
   } catch (err) {
     showStatus(`${t("refreshFailed")}: ${err.message}`, "error");
   } finally {
@@ -897,26 +962,10 @@ function syncSortHeaders() {
 }
 
 function renderSessionTable() {
-  const term = ($("filter-project").value || "").toLowerCase();
-  const filtered = allSessions.filter((session) => {
-    if (!term) return true;
-    const haystack = `${session.project || ""} ${session.cwd || ""} ${session.git_branch || ""}`.toLowerCase();
-    return haystack.includes(term);
-  });
-
-  const dir = sessionSort.dir === "asc" ? 1 : -1;
-  const sorted = filtered.slice().sort((a, b) => {
-    const key = sessionSort.key;
-    const va = a[key] ?? "";
-    const vb = b[key] ?? "";
-    if (typeof va === "number" || typeof vb === "number") return ((Number(va) || 0) - (Number(vb) || 0)) * dir;
-    return String(va).toLowerCase().localeCompare(String(vb).toLowerCase()) * dir;
-  });
-
   const totalPages = Math.max(1, Math.ceil(sessionTotal / PAGE_SIZE));
   if (sessionPage > totalPages) sessionPage = totalPages;
   const start = (sessionPage - 1) * PAGE_SIZE;
-  const page = sorted;
+  const page = allSessions;
   const tbody = $("session-table");
   const fragment = document.createDocumentFragment();
   sessionKeyToID = new Map();
@@ -1104,10 +1153,11 @@ function updateModelFilter(costModel) {
 
 function buildControls() {
   document.documentElement.lang = state.lang;
-  document.title = "agent-usage";
+  document.title = PRODUCT_NAME;
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.textContent = t(el.dataset.i18n);
   });
+  setText("product-name", PRODUCT_NAME);
 
   fillSelect($("sel-theme"), [
     { value: "system", label: t("system") },
@@ -1139,7 +1189,8 @@ function buildControls() {
     presetFragment.appendChild(button);
   });
   $("preset-bar").replaceChildren(presetFragment);
-  $("filter-project").placeholder = t("filterProject");
+  $("filter-project").placeholder = t("ledgerSearch");
+  $("filter-project").value = state.ledgerQuery;
   $("filter-project-global").placeholder = t("filterProject");
   $("filter-project-global").value = state.project;
   $("privacy-status").textContent = state.privacy ? t("privacyOn") : t("privacyOff");
@@ -1205,8 +1256,10 @@ $("filter-project-global").addEventListener("input", (e) => {
 });
 
 $("filter-project").addEventListener("input", () => {
+  persist("ledgerQuery", $("filter-project").value.trim());
   sessionPage = 1;
-  renderSessionTable();
+  if (projectFilterTimer) clearTimeout(projectFilterTimer);
+  projectFilterTimer = setTimeout(() => refresh({ silent: true }), 300);
 });
 
 $("from").addEventListener("change", (e) => {
@@ -1237,7 +1290,7 @@ $("btn-refresh").addEventListener("click", () => {
 $("btn-scan").addEventListener("click", async () => {
   try {
     showStatus(t("scanStarted"));
-    await postApi("scan");
+    await postApi("scan", { extra: state.source ? { source: state.source } : {} });
     await refresh();
     showStatus(t("scanDone"));
   } catch (err) {
@@ -1326,7 +1379,7 @@ $("pagination").addEventListener("click", (e) => {
   const button = e.target.closest(".page-btn:not(:disabled)");
   if (!button || button.classList.contains("active")) return;
   sessionPage = Number(button.dataset.page);
-  renderSessionTable();
+  refresh({ silent: true });
 });
 
 document.querySelectorAll(".sort-button").forEach((button) => {
@@ -1338,7 +1391,8 @@ document.querySelectorAll(".sort-button").forEach((button) => {
       sessionSort.key = key;
       sessionSort.dir = ["start_time", "last_activity", "total_cost", "tokens", "prompts"].includes(key) ? "desc" : "asc";
     }
-    renderSessionTable();
+    sessionPage = 1;
+    refresh({ silent: true });
   });
 });
 

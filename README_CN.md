@@ -1,21 +1,21 @@
-# agent-usage
+# Agent Ledger
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)]()
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://ghcr.io/zhenzhis/agent-usage)
 
-面向团队/企业/个人的本地 AI 编程工具用量、费用、预算与健康控制台。
+面向团队、企业与个人的本地 AI 编程工具用量、费用、预算与健康账本。
 
 单二进制 + SQLite —— 本地优先、易审计、默认只暴露 localhost 仪表板。
 
 **[English](README.md)**
 
-统一采集 Claude Code、Codex、OpenClaw、OpenCode、kiro、Pi 的本地会话数据，自动计算费用，并通过黑白灰运营仪表板展示采集健康、预算状态、导出报表和会话明细。
+Agent Ledger 统一采集 Claude Code、Codex、OpenClaw、OpenCode、kiro、Pi 的本地会话数据，自动计算费用，并通过黑白灰运营仪表板展示采集健康、预算状态、导出报表和会话明细。当前仓库和二进制仍兼容 `agent-usage` 部署名，直到 GitHub 仓库完成正式改名。
 
 ## 二开说明
 
-本仓库是 **ZhenZhi** 基于 [briqt/agent-usage](https://github.com/briqt/agent-usage) 的二次开发版本。我们保持核心采集模型尽量贴近上游，并在此基础上加入本地部署安全默认值、source-scoped 统计、采集健康、预算告警、导出报表、隐私模式、固定 CI、前端资源本地化，以及黑白灰运营型仪表板。
+本仓库是 **ZhenZhi** 基于 [briqt/agent-usage](https://github.com/briqt/agent-usage) 的二次开发版本。我们保持核心采集模型尽量贴近上游，并在此基础上加入本地部署安全默认值、source-scoped 统计、采集健康、预算告警、导出报表、隐私模式、固定 CI、前端资源本地化、服务端会话搜索/排序，以及黑白灰运营型仪表板。
 
 感谢 [briqt/agent-usage](https://github.com/briqt/agent-usage/) 原作者和贡献者提供清晰、轻量的单二进制基础。
 
@@ -46,7 +46,7 @@
 - **OpenCode 来源费用保留** —— 优先写入 OpenCode 每条 assistant message 自带的 cost，自定义 GLM/DeepSeek 等 provider 不再显示为 `$0`。
 - **Source-scoped 身份** —— usage、session、prompt 去重使用 `(source, session_id)`，避免不同 agent 的 session 冲突。
 - **运营控制** —— 手动扫描、费用重建、单来源清理重扫、采集健康、预算状态、导出、报表和隐私模式。
-- **服务端分页** —— 会话账本只拉取当前页，不再把全量数据库加载到浏览器。
+- **服务端分页/搜索/排序** —— 会话账本只拉取当前页，不再把全量数据库加载到浏览器。
 - **价格同步边界** —— litellm pricing fetch 检查 HTTP 状态、设置 User-Agent，并限制响应体大小。
 - **固定自动化依赖** —— release/docker actions 使用 SHA pin，CI 执行 tests、vet 和 `govulncheck@v1.3.0`。
 - **黑白灰运营 UI/UX** —— 简洁单色、高信息密度，包含活动矩阵、Token 吞吐、模型分布、费用趋势和可展开会话账本。

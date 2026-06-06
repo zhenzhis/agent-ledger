@@ -134,7 +134,10 @@ func migrate(db *sql.DB) error {
 		CREATE INDEX IF NOT EXISTS idx_usage_source ON usage_records(source);
 		CREATE INDEX IF NOT EXISTS idx_usage_source_timestamp ON usage_records(source, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_usage_source_model_timestamp ON usage_records(source, model, timestamp);
+		CREATE INDEX IF NOT EXISTS idx_usage_timestamp_session ON usage_records(timestamp, source, session_id);
+		CREATE INDEX IF NOT EXISTS idx_usage_model_timestamp ON usage_records(model, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_usage_project_timestamp ON usage_records(project, timestamp);
+		CREATE INDEX IF NOT EXISTS idx_usage_project_source_timestamp ON usage_records(project, source, timestamp);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_dedup ON usage_records(source, session_id, model, timestamp, input_tokens, output_tokens);
 
 		CREATE TABLE IF NOT EXISTS sessions (
@@ -150,6 +153,7 @@ func migrate(db *sql.DB) error {
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_source_session ON sessions(source, session_id);
 		CREATE INDEX IF NOT EXISTS idx_sessions_source_start ON sessions(source, start_time);
+		CREATE INDEX IF NOT EXISTS idx_sessions_project_start ON sessions(project, start_time);
 
 		CREATE TABLE IF NOT EXISTS prompt_events (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,6 +165,7 @@ func migrate(db *sql.DB) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_prompt_timestamp ON prompt_events(timestamp);
 		CREATE INDEX IF NOT EXISTS idx_prompt_source_timestamp ON prompt_events(source, timestamp);
+		CREATE INDEX IF NOT EXISTS idx_prompt_timestamp_session ON prompt_events(timestamp, source, session_id);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_dedup ON prompt_events(source, session_id, timestamp);
 
 		CREATE TABLE IF NOT EXISTS file_state (
@@ -302,6 +307,15 @@ func migrate(db *sql.DB) error {
 				CREATE INDEX IF NOT EXISTS idx_usage_project_timestamp ON usage_records(project, timestamp);
 				CREATE INDEX IF NOT EXISTS idx_prompt_source_timestamp ON prompt_events(source, timestamp);
 				CREATE INDEX IF NOT EXISTS idx_sessions_source_start ON sessions(source, start_time);
+			`,
+		},
+		{
+			"008_large_dataset_indexes", `
+				CREATE INDEX IF NOT EXISTS idx_usage_timestamp_session ON usage_records(timestamp, source, session_id);
+				CREATE INDEX IF NOT EXISTS idx_usage_model_timestamp ON usage_records(model, timestamp);
+				CREATE INDEX IF NOT EXISTS idx_usage_project_source_timestamp ON usage_records(project, source, timestamp);
+				CREATE INDEX IF NOT EXISTS idx_prompt_timestamp_session ON prompt_events(timestamp, source, session_id);
+				CREATE INDEX IF NOT EXISTS idx_sessions_project_start ON sessions(project, start_time);
 			`,
 		},
 	}

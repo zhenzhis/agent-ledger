@@ -30,7 +30,7 @@ type collectorEntry struct {
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "version" {
-		fmt.Printf("agent-usage %s (commit: %s, built: %s)\n", version, commit, date)
+		fmt.Printf("Agent Ledger %s (agent-usage binary, commit: %s, built: %s)\n", version, commit, date)
 		os.Exit(0)
 	}
 

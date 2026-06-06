@@ -290,8 +290,11 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	source := r.URL.Query().Get("source")
 	model := r.URL.Query().Get("model")
 	project := r.URL.Query().Get("project")
+	query := r.URL.Query().Get("q")
+	sortKey := r.URL.Query().Get("sort")
+	direction := r.URL.Query().Get("dir")
 	limit, offset := parseLimitOffset(r)
-	data, err := s.db.GetSessionsPage(from, to, source, model, project, limit, offset)
+	data, err := s.db.GetSessionsPageSorted(from, to, source, model, project, query, limit, offset, sortKey, direction)
 	if err != nil {
 		serverError(w, err)
 		return

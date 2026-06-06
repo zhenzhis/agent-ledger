@@ -29,7 +29,7 @@ func Sync(db *storage.DB) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "agent-usage/1.0")
+	req.Header.Set("User-Agent", "Agent-Ledger/1.0 (agent-usage compatible)")
 
 	resp, err := client.Do(req)
 	if err != nil {
