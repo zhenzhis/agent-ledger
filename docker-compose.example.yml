@@ -1,7 +1,9 @@
+name: agent-ledger
+
 services:
-  agent-usage:
-    image: ghcr.io/zhenzhis/agent-usage:latest
-    container_name: agent-usage
+  agent-ledger:
+    image: ghcr.io/zhenzhis/agent-ledger:latest
+    container_name: agent-ledger
     restart: unless-stopped
     user: "1000:1000"
     ports:
@@ -33,4 +35,4 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      - ./config.docker.yaml:/etc/agent-usage/config.yaml:ro
+      - ./config.docker.yaml:/etc/agent-ledger/config.yaml:ro

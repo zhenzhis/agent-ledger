@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/briqt/agent-usage/internal/storage"
+	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 func tempDB(t *testing.T) *storage.DB {

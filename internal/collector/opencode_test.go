@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/briqt/agent-usage/internal/storage"
+	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 func TestOpenCodeCollectorUsesSourceCost(t *testing.T) {
 	dir := t.TempDir()
-	appDB, err := storage.Open(filepath.Join(dir, "agent-usage.db"))
+	appDB, err := storage.Open(filepath.Join(dir, "agent-ledger.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestOpenCodeCollectorUsesSourceCost(t *testing.T) {
 
 func TestOpenCodeCollectorDoesNotDuplicatePromptsOnIncrementalScan(t *testing.T) {
 	dir := t.TempDir()
-	appDB, err := storage.Open(filepath.Join(dir, "agent-usage.db"))
+	appDB, err := storage.Open(filepath.Join(dir, "agent-ledger.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

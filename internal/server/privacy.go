@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"net/http"
 
-	"github.com/briqt/agent-usage/internal/config"
-	"github.com/briqt/agent-usage/internal/storage"
+	"github.com/zhenzhis/agent-ledger/internal/config"
+	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 func (s *Server) privacyFor(r *http.Request) config.PrivacyConfig {

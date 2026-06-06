@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/briqt/agent-usage/internal/storage"
+	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 // OpenCodeCollector scans OpenCode's SQLite database and extracts usage records.

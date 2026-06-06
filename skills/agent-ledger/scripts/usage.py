@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""agent-usage local JSONL parser — query AI coding agent usage without a server.
+"""agent-ledger local JSONL parser — query AI coding Agent Ledger without a server.
 
 Usage:
     python3 usage.py stats [--from DATE] [--to DATE] [--source SOURCE]
@@ -22,12 +22,12 @@ _pricing_cache = None
 # PLACEHOLDER_APPEND_MARKER
 
 def fetch_pricing():
-    """Fetch pricing from litellm GitHub. Cache in memory and on disk (~/.cache/agent-usage/pricing.json)."""
+    """Fetch pricing from litellm GitHub. Cache in memory and on disk (~/.cache/agent-ledger/pricing.json)."""
     global _pricing_cache
     if _pricing_cache is not None:
         return _pricing_cache
 
-    cache_dir = Path.home() / ".cache" / "agent-usage"
+    cache_dir = Path.home() / ".cache" / "agent-ledger"
     cache_file = cache_dir / "pricing.json"
 
     # Try disk cache (< 24h old)
@@ -44,7 +44,7 @@ def fetch_pricing():
     # Fetch from network
     try:
         import urllib.request
-        req = urllib.request.Request(LITELLM_URL, headers={"User-Agent": "agent-usage-skill/1.0"})
+        req = urllib.request.Request(LITELLM_URL, headers={"User-Agent": "agent-ledger-skill/1.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             status = getattr(resp, "status", resp.getcode())
             if status < 200 or status >= 300:
@@ -453,7 +453,7 @@ def cmd_top_models(records, n=5):
 # ── Main ──
 
 def main():
-    parser = argparse.ArgumentParser(description="agent-usage local JSONL parser")
+    parser = argparse.ArgumentParser(description="agent-ledger local JSONL parser")
     parser.add_argument("command", choices=["stats", "cost-by-model", "sessions", "top-models"])
     parser.add_argument("--from", dest="from_date", default=date.today().isoformat())
     parser.add_argument("--to", dest="to_date", default=date.today().isoformat())

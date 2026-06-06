@@ -110,11 +110,12 @@ func (d *DB) InsertUsage(r *UsageRecord) error {
 	r.Project = d.normalizeProject(r.Project, "")
 	r.GitBranch = normalizeBranch(r.GitBranch)
 	_, err := d.db.Exec(`INSERT OR IGNORE INTO usage_records(source,session_id,model,input_tokens,output_tokens,
-		cache_creation_input_tokens,cache_read_input_tokens,reasoning_output_tokens,cost_usd,timestamp,project,git_branch)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		cache_creation_input_tokens,cache_read_input_tokens,reasoning_output_tokens,cost_usd,timestamp,project,git_branch,
+		pricing_source,pricing_model,pricing_confidence,pricing_note)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		r.Source, r.SessionID, r.Model, r.InputTokens, r.OutputTokens,
 		r.CacheCreationInputTokens, r.CacheReadInputTokens, r.ReasoningOutputTokens,
-		r.CostUSD, r.Timestamp, r.Project, r.GitBranch)
+		r.CostUSD, r.Timestamp, r.Project, r.GitBranch, r.PricingSource, r.PricingModel, r.PricingConfidence, r.PricingNote)
 	return err
 }
 
@@ -139,8 +140,9 @@ func (d *DB) InsertUsageBatch(records []*UsageRecord) error {
 	}
 	defer tx.Rollback()
 	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO usage_records(source,session_id,model,input_tokens,output_tokens,
-		cache_creation_input_tokens,cache_read_input_tokens,reasoning_output_tokens,cost_usd,timestamp,project,git_branch)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+		cache_creation_input_tokens,cache_read_input_tokens,reasoning_output_tokens,cost_usd,timestamp,project,git_branch,
+		pricing_source,pricing_model,pricing_confidence,pricing_note)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		return err
 	}
@@ -148,7 +150,7 @@ func (d *DB) InsertUsageBatch(records []*UsageRecord) error {
 	for _, r := range filtered {
 		_, err := stmt.Exec(r.Source, r.SessionID, r.Model, r.InputTokens, r.OutputTokens,
 			r.CacheCreationInputTokens, r.CacheReadInputTokens, r.ReasoningOutputTokens,
-			r.CostUSD, r.Timestamp, r.Project, r.GitBranch)
+			r.CostUSD, r.Timestamp, r.Project, r.GitBranch, r.PricingSource, r.PricingModel, r.PricingConfidence, r.PricingNote)
 		if err != nil {
 			return err
 		}
@@ -210,16 +212,50 @@ func (d *DB) InsertPromptBatch(events []*PromptEvent) error {
 
 // UpsertPricing inserts or updates per-token pricing for a model.
 func (d *DB) UpsertPricing(model string, inputCost, outputCost, cacheReadCost, cacheCreationCost float64) error {
+	return d.UpsertPricingDetailed(PricingAuditRow{
+		Model:                  model,
+		PricingSource:          "unknown",
+		MatchedModel:           model,
+		MatchType:              "direct",
+		Priority:               999,
+		InputCostPerToken:      inputCost,
+		OutputCostPerToken:     outputCost,
+		CacheReadCostPerToken:  cacheReadCost,
+		CacheWriteCostPerToken: cacheCreationCost,
+		Confidence:             "fallback",
+	})
+}
+
+// UpsertPricingDetailed inserts or updates pricing with governance metadata.
+func (d *DB) UpsertPricingDetailed(row PricingAuditRow) error {
+	if row.MatchedModel == "" {
+		row.MatchedModel = row.Model
+	}
+	if row.MatchType == "" {
+		row.MatchType = "direct"
+	}
+	if row.Confidence == "" {
+		row.Confidence = "unknown"
+	}
+	if row.Priority == 0 {
+		row.Priority = 999
+	}
 	_, err := d.db.Exec(`INSERT INTO pricing(model,input_cost_per_token,output_cost_per_token,
-		cache_read_input_token_cost,cache_creation_input_token_cost,updated_at)
-		VALUES(?,?,?,?,?,?)
+		cache_read_input_token_cost,cache_creation_input_token_cost,updated_at,pricing_source,matched_model,match_type,priority,confidence)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(model) DO UPDATE SET
 			input_cost_per_token=excluded.input_cost_per_token,
 			output_cost_per_token=excluded.output_cost_per_token,
 			cache_read_input_token_cost=excluded.cache_read_input_token_cost,
 			cache_creation_input_token_cost=excluded.cache_creation_input_token_cost,
-			updated_at=excluded.updated_at`,
-		model, inputCost, outputCost, cacheReadCost, cacheCreationCost, time.Now())
+			updated_at=excluded.updated_at,
+			pricing_source=excluded.pricing_source,
+			matched_model=excluded.matched_model,
+			match_type=excluded.match_type,
+			priority=excluded.priority,
+			confidence=excluded.confidence`,
+		row.Model, row.InputCostPerToken, row.OutputCostPerToken, row.CacheReadCostPerToken, row.CacheWriteCostPerToken, time.Now(),
+		row.PricingSource, row.MatchedModel, row.MatchType, row.Priority, row.Confidence)
 	return err
 }
 
@@ -254,4 +290,25 @@ func (d *DB) GetAllPricing() (map[string][4]float64, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// GetAllPricingDetailed returns all effective pricing rows with metadata.
+func (d *DB) GetAllPricingDetailed() (map[string]PricingAuditRow, error) {
+	rows, err := d.db.Query(`SELECT model,input_cost_per_token,output_cost_per_token,cache_read_input_token_cost,
+		cache_creation_input_token_cost,COALESCE(pricing_source,''),COALESCE(matched_model,''),COALESCE(match_type,''),
+		COALESCE(priority,999),COALESCE(confidence,''),COALESCE(updated_at,'') FROM pricing`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]PricingAuditRow)
+	for rows.Next() {
+		var r PricingAuditRow
+		if err := rows.Scan(&r.Model, &r.InputCostPerToken, &r.OutputCostPerToken, &r.CacheReadCostPerToken,
+			&r.CacheWriteCostPerToken, &r.PricingSource, &r.MatchedModel, &r.MatchType, &r.Priority, &r.Confidence, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		m[r.Model] = r
+	}
+	return m, rows.Err()
 }

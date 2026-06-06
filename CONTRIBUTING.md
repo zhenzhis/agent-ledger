@@ -1,113 +1,69 @@
-# Contributing
+# Contributing To Agent Ledger
 
-感谢你对 agent-usage 的关注！欢迎提交 Issue 和 Pull Request。
+Agent Ledger is a local-first AI Agent FinOps and audit console. Contributions should preserve privacy, explicit failures, and verifiable cost accounting.
 
-Thanks for your interest in agent-usage! Issues and Pull Requests are welcome.
+## Project Origin
+
+This project is an independent ZhenZhi second-development fork of [briqt/agent-usage](https://github.com/briqt/agent-usage). Keep upstream credit intact when editing docs, release notes, or package metadata.
 
 ## Development Setup
 
 ```bash
-# Clone
-git clone https://github.com/zhenzhis/agent-usage.git
-cd agent-usage
-
-# Requirements
-# Go 1.25+
-
-# Build
-go build -o agent-usage .
-
-# Run
-cp config.yaml config.local.yaml  # edit as needed
-./agent-usage
+git clone https://github.com/zhenzhis/agent-ledger.git
+cd agent-ledger
+go build -o agent-ledger .
+./agent-ledger
 ```
 
-## Project Structure
-
-```
-├── main.go                  # Entry point
-├── internal/
-│   ├── config/              # YAML config loader
-│   ├── collector/           # Data source parsers (Claude Code, Codex, OpenClaw, OpenCode, Kiro, Pi)
-│   ├── pricing/             # litellm price sync + cost calculation
-│   ├── storage/             # SQLite schema, read/write, cost backfill
-│   └── server/              # HTTP server, REST API, embedded web UI
-├── skills/                  # npx skills for AI agent integration
-└── .github/workflows/       # CI/CD
-```
-
-## Adding a New Data Source
-
-1. Create `internal/collector/<source>.go` (directory scanner) and `<source>_process.go` (JSONL parser)
-2. Implement a scanner that:
-   - Walks the session directory for JSONL files
-   - Parses entries and extracts per-API-call token usage
-   - Calls `storage.DB` methods to write records
-3. Register the collector in `main.go`
-4. Add config fields in `internal/config/config.go`
-5. Add ingestion health, source-scoped identity, and fixture tests for first scan, incremental scan, damaged input, and duplicate sessions
-
-See `internal/collector/claude.go` + `claude_process.go` as the primary reference, or `openclaw.go` + `openclaw_process.go` as a second example. For a non-JSONL source (JSON metadata + JSONL prompts), see `kiro.go` + `kiro_process.go`. For a source sharing the same JSONL format as OpenClaw, see `pi.go` + `pi_process.go`.
-
-## Commit Convention
-
-We use [Conventional Commits](https://www.conventionalcommits.org/):
-
-| Prefix | Purpose | Example |
-|--------|---------|---------|
-| `feat:` | New feature | `feat: add Cursor session parser` |
-| `fix:` | Bug fix | `fix: handle empty JSONL files` |
-| `perf:` | Performance | `perf: batch SQLite inserts` |
-| `refactor:` | Code restructure | `refactor: extract common JSONL reader` |
-| `docs:` | Documentation | `docs: add API examples` |
-| `ci:` | CI/CD changes | `ci: add lint workflow` |
-| `chore:` | Maintenance | `chore: update dependencies` |
-| `test:` | Tests | `test: add collector unit tests` |
-
-GoReleaser uses these prefixes to generate changelogs.
-
-## Release Process
-
-Releases are manual. Two options:
+Docker:
 
 ```bash
-# Option 1: Push a tag
-git tag v0.1.0
-git push origin v0.1.0
-
-# Option 2: GitHub Actions UI
-# Go to Actions → Release → Run workflow → Enter version
+docker compose up -d --build
 ```
 
-This triggers GoReleaser to cross-compile binaries for 6 platforms and publish a GitHub Release.
+## Quality Gate
 
-## Versioning
+Run these before submitting changes:
 
-We follow [Semantic Versioning](https://semver.org/):
+```bash
+go test ./...
+go vet ./...
+node --check internal/server/static/app.js
+git diff --check
+```
 
-- `MAJOR` — breaking changes (config format, API response schema, DB migration)
-- `MINOR` — new features (new data source, new dashboard panel, new API endpoint)
-- `PATCH` — bug fixes, performance improvements, dependency updates
+If Go is not installed locally:
 
-## Code Style
+```bash
+docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . && go test ./... && go vet ./..."
+```
 
-- `go fmt` and `go vet` must pass
-- `go test ./...` must pass
-- Keep dependencies minimal — prefer stdlib where reasonable
-- Pure Go only (no CGO) to ensure easy cross-compilation
-- Embed static assets via `go:embed`
+## Engineering Rules
 
-## Pull Request Guidelines
+- Keep collector changes source-scoped and covered by fixtures.
+- Do not read, store, or analyze prompt content for insights.
+- Do not hide pricing failures. Mark records as `unpriced`, `stale`, `fallback`, `fuzzy`, or `source-reported`.
+- Do not add default webhooks, telemetry, or cloud sync.
+- Preserve localhost-first deployment defaults.
+- Dangerous operations must be explicit and auditable.
+- UI changes must remain black/white/gray, responsive, keyboard-accessible, and free of horizontal overflow.
 
-1. One PR per feature/fix
-2. Include a clear description of what and why
-3. Update README if adding user-facing features
-4. Test against real session data if modifying collectors
+## Commit Style
 
-## Reporting Issues
+Use conventional commits:
 
-Please include:
-- OS and architecture
-- Go version
-- Steps to reproduce
-- Relevant log output
+- `feat:`
+- `fix:`
+- `perf:`
+- `refactor:`
+- `docs:`
+- `test:`
+- `chore:`
+
+## Pull Request Checklist
+
+- Tests added or updated for behavior changes.
+- Documentation updated for public APIs, config, or deployment changes.
+- Screenshots use synthetic or privacy-safe data.
+- No secrets, private paths, raw prompts, or durable sensitive logs.
+- Manual verification notes are included when tests cannot cover the change.

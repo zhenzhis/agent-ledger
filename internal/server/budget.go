@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/briqt/agent-usage/internal/config"
-	"github.com/briqt/agent-usage/internal/storage"
+	"github.com/zhenzhis/agent-ledger/internal/config"
+	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 // BudgetStatus describes current consumption against one budget rule.

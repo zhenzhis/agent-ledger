@@ -31,17 +31,22 @@ collectors:
     scan_interval: 60s
 
 storage:
-  path: "/data/agent-usage.db"
+  path: "/data/agent-ledger.db"
 
 pricing:
-  # Prices are fetched from GitHub (litellm). Set HTTPS_PROXY env var if this fails.
+  # Official OpenAI/Anthropic seed prices override LiteLLM fallback.
+  # Add overrides for enterprise contracts or third-party relay prices.
   sync_interval: 1h
+  stale_after: 24h
+  mode: official-plus-litellm
+  overrides: []
 
 privacy:
   redact_paths: false
   hash_session_ids: false
   hide_project_names: false
   screenshot_mode: false
+  default_preset: normal
 
 projects:
   aliases: {}
@@ -56,3 +61,36 @@ budgets:
     #   metric: cost_usd
     #   limit: 25
     #   warn_ratio: 0.8
+
+quota:
+  enabled: false
+  plan: custom
+  monthly_budget: 0
+  token_budget: 0
+  prompt_budget: 0
+  reset_day: 1
+  window_5h: true
+
+watchdog:
+  enabled: true
+  token_spike_multiplier: 4
+  min_calls: 8
+  night_start_hour: 22
+  night_end_hour: 6
+
+rbac:
+  enabled: false
+
+policies:
+  enabled: false
+  require_privacy_export: false
+  rules: []
+
+webhooks:
+  enabled: false
+  url: ""
+
+teams:
+  machine_name: ""
+  git_author: ""
+  groups: {}

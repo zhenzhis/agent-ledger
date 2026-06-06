@@ -1,8 +1,10 @@
+name: agent-ledger
+
 services:
-  agent-usage:
+  agent-ledger:
     build: .
-    image: agent-usage:local
-    container_name: agent-usage
+    image: agent-ledger:local
+    container_name: agent-ledger
     restart: unless-stopped
     # Run as host user so bind-mounted dirs (especially ~/.claude with mode 700) are readable.
     # Change to match your UID/GID: run `id -u` and `id -g` to find yours.
@@ -50,4 +52,4 @@ services:
       # - ~/.kiro/sessions/cli:/sessions/kiro-sessions:ro
       # - ~/.pi/agent/sessions:/sessions/pi:ro
       # Optional: custom config override
-      - ./config.docker.yaml:/etc/agent-usage/config.yaml:ro
+      - ./config.docker.yaml:/etc/agent-ledger/config.yaml:ro

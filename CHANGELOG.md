@@ -1,118 +1,30 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
-
-## [Unreleased]
+## Unreleased
 
 ### Added
-- Kiro collector now supports dual data sources: SQLite database (`~/.local/share/kiro-cli/data.sqlite3`) and JSON/JSONL session files (`~/.kiro/sessions/cli/`). Both are scanned simultaneously with auto-detection based on path type.
-- Ingestion health API and dashboard panel with path status, last scan time, duration, watermark, inserted rows, and last error.
-- Manual scan, source reset/rescan, and cost recalculation API controls.
-- Local budget status for day/week/month thresholds by global/source/model/project.
-- CSV/JSON export endpoints and Markdown usage report endpoint.
-- Privacy mode for redacting paths, hashing session IDs, and hiding project/branch names.
-- Project aliases and exclude patterns in config.
-- `docker-compose.example.yml` for GHCR-based deployments.
+
+- Official Agent Ledger naming across module path, binary, Docker, release metadata, and documentation.
+- Pricing governance with local override, official OpenAI/Anthropic seed rows, LiteLLM fallback, pricing source health, snapshots, audit events, and per-record pricing confidence.
+- Cost Intelligence, Cache Doctor, Data Quality Center, Model Call Analytics, Quota Status, Watchdog events, evidence bundles, reconciliation imports, audit log, policy status, and expanded export types.
+- Hourly and daily usage aggregate tables with dashboard aggregate fallback.
+- CLI commands: `today`, `top`, `doctor`, `battery`, `export`, `pricing sync`, and `wrapped`.
+- Cursor-compatible session pagination via `next_cursor`.
+- Black/white/gray data-dense dashboard panels for pricing, quota, quality, model calls, cache, watchdog, and cost intelligence.
 
 ### Changed
-- Default Kiro config paths now include both data sources.
-- Docker Compose examples include volume mount for `~/.kiro/sessions/cli`.
-- Usage/session/prompt identity is now source-scoped with `(source, session_id)` to avoid cross-agent collisions.
-- Session ledger now uses server-side pagination instead of loading all sessions in the browser.
-- API time windows now use half-open ranges internally to avoid end-boundary double counting.
-- Dashboard controls and layout were expanded into a monochrome operations console.
 
-### Fixed
-- OpenCode incremental scans no longer re-add historical user prompts to session prompt totals.
+- Default database name is `agent-ledger.db`.
+- Default system config path is `/etc/agent-ledger/config.yaml`.
+- Docker runtime binary is `/agent-ledger`.
+- Go module path is `github.com/zhenzhis/agent-ledger`.
 
-## [1.10.1] - 2026-06-05
+### Security
 
-### Changed
-- kiro collection now uses `~/.local/share/kiro-cli/data.sqlite3` / `/sessions/kiro-cli/data.sqlite3` as the default and documented data source.
-- Docker Compose examples now only mount existing agent data directories explicitly, with kiro using the SQLite data directory.
+- Added RBAC configuration fields and role checks for side-effectful governance APIs.
+- Added local audit logging for scan, pricing sync, recalculation, and reconciliation import operations.
+- Exports can be forced into privacy mode by policy.
 
-### Fixed
-- Count kiro API calls from `conversations_v2.history[].request_metadata` so non-interactive kiro usage is included.
-- Preserve concurrent same-millisecond kiro requests by deriving record timestamps from `request_id`.
-- Reset old kiro scan state and usage records once so legacy JSON/JSONL counts do not mix with the new SQLite-only counts.
-- Standardize user-facing source labels to `kiro`.
+### Credits
 
-## [1.0.1] - 2026-04-07
-
-### Changed
-- Color palette: Financial Dashboard scheme (deep navy dark theme, cool white light theme)
-- Chart colors: ECharts default palette with consistent model-to-color mapping
-- Stat card font: Fira Code monospace for data terminal feel
-- All i18n labels refined for clarity (zh: 总耗费→总费用, 提示数→Prompt数, etc.)
-- Session Log title separated from Sessions stat card i18n key
-
-### Fixed
-- Filter input and select elements now properly styled in dark mode
-- Project filter placeholder now follows i18n language setting
-
-## [1.0.0] - 2026-04-07
-
-### Added
-- Global source filter (Claude/Codex/OpenClaw) applied to all API endpoints and charts
-- API Calls stat card with backend COUNT(*) query
-- Sticky top bar merging header and controls into one component
-- Empty state graphics for charts when no data
-- IBM Plex Mono / Fira Code for stat card numbers
-- Project column text truncation with ellipsis
-- Responsive breakpoints: 4-col → 2-col → 1-col stats grid
-- Inter font loaded from Google Fonts
-- Stat card hover lift animation
-- Refresh button continuous spin animation
-- OpenClaw badge styling
-
-### Changed
-- Panel order: Tokens → Cost → Sessions → Prompts (stat cards), Token Usage → Cost Trend → Cost by Model (charts)
-- Charts layout: Token Usage full-width, Cost Trend 3/5, Cost by Model 2/5
-- Cost trend chart: stacked bar by model (was line chart)
-- Pie chart legend: top horizontal with scroll (was right vertical)
-- Model color consistency: same model gets same color across pie and bar charts
-- Header backdrop-filter fixed with proper RGB CSS variables
-
-### Fixed
-- Filter `<synthetic>` model records from Claude Code collector
-- Filter `delivery-mirror` internal records from OpenClaw collector
-- Clean up synthetic/delivery-mirror records from database on startup
-- GetSessions double source filter bug (source param appended twice)
-- API date validation: returns 400 JSON error for invalid dates or reversed ranges
-
-## [0.1.0] - 2026-04-03
-
-### Added
-- Claude Code session JSONL parser
-- Codex CLI session JSONL parser
-- SQLite storage with automatic schema migration
-- litellm pricing sync with cost backfill
-- Web dashboard with ECharts (dark theme)
-  - Summary cards: total cost, tokens, sessions, prompts
-  - Cost by model (pie chart)
-  - Cost over time (line chart)
-  - Token usage over time (line chart)
-  - Daily sessions (bar chart)
-  - Session list table
-  - Date range filter
-- REST API endpoints for all dashboard data
-- Incremental file scanning with deduplication
-- GoReleaser CI/CD for cross-platform releases
-- Bilingual documentation (English + Chinese)
-- Unit tests for collectors, pricing calculation, and storage layer
-- Godoc comments on all exported types and functions
-- GitHub issue templates (bug report, feature request) and PR template
-- Unique index on usage_records for crash-recovery deduplication
-- Docker support: multi-stage Dockerfile with distroless runtime
-- Docker Compose for one-command deployment
-- Docker CI/CD workflow for multi-arch images (amd64 + arm64) on ghcr.io
-- `--config` CLI flag with search order: flag > `/etc/agent-usage/config.yaml` > `./config.yaml`
-- Docker-specific config (`config.docker.yaml`) with 0.0.0.0 bind and container paths
-
-### Changed
-- Server binds to `127.0.0.1` by default instead of `0.0.0.0`
-- Added `bind_address` config option for server
-- Default database filename changed from `devobs.db` to `agent-usage.db`
-- INSERT statements use `INSERT OR IGNORE` for idempotent crash recovery
+- Agent Ledger remains based on the local-first foundation from [briqt/agent-usage](https://github.com/briqt/agent-usage). Thanks to the original author and contributors.

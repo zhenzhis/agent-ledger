@@ -18,6 +18,12 @@ type Config struct {
 	Privacy    PrivacyConfig    `yaml:"privacy"`
 	Projects   ProjectsConfig   `yaml:"projects"`
 	Budgets    BudgetConfig     `yaml:"budgets"`
+	Quota      QuotaConfig      `yaml:"quota"`
+	Watchdog   WatchdogConfig   `yaml:"watchdog"`
+	RBAC       RBACConfig       `yaml:"rbac"`
+	Policies   PolicyConfig     `yaml:"policies"`
+	Webhooks   WebhookConfig    `yaml:"webhooks"`
+	Teams      TeamsConfig      `yaml:"teams"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -25,6 +31,8 @@ type ServerConfig struct {
 	Port        int    `yaml:"port"`
 	BindAddress string `yaml:"bind_address"`
 	AuthToken   string `yaml:"auth_token"`
+	AdminToken  string `yaml:"admin_token"`
+	ViewerToken string `yaml:"viewer_token"`
 }
 
 // CollectorConfigs groups configuration for all data source collectors.
@@ -52,14 +60,29 @@ type StorageConfig struct {
 // PricingConfig holds model pricing sync settings.
 type PricingConfig struct {
 	SyncInterval time.Duration `yaml:"sync_interval"`
+	StaleAfter   time.Duration `yaml:"stale_after"`
+	Mode         string        `yaml:"mode"`
+	Overrides    []PriceRule   `yaml:"overrides"`
+}
+
+// PriceRule defines a local or contract price override for one model.
+type PriceRule struct {
+	Model                  string  `yaml:"model"`
+	InputCostPerToken      float64 `yaml:"input_cost_per_token"`
+	OutputCostPerToken     float64 `yaml:"output_cost_per_token"`
+	CacheReadCostPerToken  float64 `yaml:"cache_read_input_token_cost"`
+	CacheWriteCostPerToken float64 `yaml:"cache_creation_input_token_cost"`
+	Source                 string  `yaml:"source"`
+	EffectiveAt            string  `yaml:"effective_at"`
 }
 
 // PrivacyConfig controls optional output redaction for UI, reports, and exports.
 type PrivacyConfig struct {
-	RedactPaths      bool `yaml:"redact_paths"`
-	HashSessionIDs   bool `yaml:"hash_session_ids"`
-	HideProjectNames bool `yaml:"hide_project_names"`
-	ScreenshotMode   bool `yaml:"screenshot_mode"`
+	RedactPaths      bool   `yaml:"redact_paths"`
+	HashSessionIDs   bool   `yaml:"hash_session_ids"`
+	HideProjectNames bool   `yaml:"hide_project_names"`
+	ScreenshotMode   bool   `yaml:"screenshot_mode"`
+	DefaultPreset    string `yaml:"default_preset"`
 }
 
 // ProjectsConfig controls local project naming and exclusion.
@@ -83,6 +106,70 @@ type BudgetRule struct {
 	Metric    string  `yaml:"metric"`
 	Limit     float64 `yaml:"limit"`
 	WarnRatio float64 `yaml:"warn_ratio"`
+}
+
+// QuotaConfig controls local plan and reset estimates.
+type QuotaConfig struct {
+	Enabled       bool          `yaml:"enabled"`
+	Plan          string        `yaml:"plan"`
+	MonthlyBudget float64       `yaml:"monthly_budget"`
+	TokenBudget   int64         `yaml:"token_budget"`
+	PromptBudget  int64         `yaml:"prompt_budget"`
+	ResetDay      int           `yaml:"reset_day"`
+	Window5H      bool          `yaml:"window_5h"`
+	CustomWindows []QuotaWindow `yaml:"custom_windows"`
+}
+
+// QuotaWindow defines an additional local usage window.
+type QuotaWindow struct {
+	Name        string  `yaml:"name"`
+	Duration    string  `yaml:"duration"`
+	CostLimit   float64 `yaml:"cost_limit"`
+	TokenLimit  int64   `yaml:"token_limit"`
+	PromptLimit int64   `yaml:"prompt_limit"`
+}
+
+// WatchdogConfig controls local anomaly and runaway detection.
+type WatchdogConfig struct {
+	Enabled              bool    `yaml:"enabled"`
+	TokenSpikeMultiplier float64 `yaml:"token_spike_multiplier"`
+	MinCalls             int     `yaml:"min_calls"`
+	NightStartHour       int     `yaml:"night_start_hour"`
+	NightEndHour         int     `yaml:"night_end_hour"`
+}
+
+// RBACConfig enables coarse local roles for API operations.
+type RBACConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+// PolicyConfig groups local policy rules.
+type PolicyConfig struct {
+	Enabled              bool         `yaml:"enabled"`
+	RequirePrivacyExport bool         `yaml:"require_privacy_export"`
+	Rules                []PolicyRule `yaml:"rules"`
+}
+
+// PolicyRule describes a local advisory policy.
+type PolicyRule struct {
+	Name    string `yaml:"name"`
+	Scope   string `yaml:"scope"`
+	Match   string `yaml:"match"`
+	Action  string `yaml:"action"`
+	Message string `yaml:"message"`
+}
+
+// WebhookConfig is disabled by default and only sends redacted summaries.
+type WebhookConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	URL     string `yaml:"url"`
+}
+
+// TeamsConfig maps projects, paths, or authors to showback groups.
+type TeamsConfig struct {
+	MachineName string            `yaml:"machine_name"`
+	GitAuthor   string            `yaml:"git_author"`
+	Groups      map[string]string `yaml:"groups"`
 }
 
 func expandPath(p string) string {
@@ -133,27 +220,33 @@ func DefaultConfig() *Config {
 				ScanInterval: 60 * time.Second,
 			},
 		},
-		Storage: StorageConfig{Path: "./agent-usage.db"},
-		Pricing: PricingConfig{SyncInterval: time.Hour},
-		Privacy: PrivacyConfig{},
+		Storage: StorageConfig{Path: "./agent-ledger.db"},
+		Pricing: PricingConfig{SyncInterval: time.Hour, StaleAfter: 24 * time.Hour, Mode: "official-plus-litellm"},
+		Privacy: PrivacyConfig{DefaultPreset: "normal"},
 		Projects: ProjectsConfig{
 			Aliases: map[string]string{},
 			Exclude: []string{},
 		},
-		Budgets: BudgetConfig{Enabled: false},
+		Budgets:  BudgetConfig{Enabled: false},
+		Quota:    QuotaConfig{Enabled: false, Plan: "custom", ResetDay: 1, Window5H: true},
+		Watchdog: WatchdogConfig{Enabled: true, TokenSpikeMultiplier: 4, MinCalls: 8, NightStartHour: 22, NightEndHour: 6},
+		RBAC:     RBACConfig{Enabled: false},
+		Policies: PolicyConfig{Enabled: false},
+		Webhooks: WebhookConfig{Enabled: false},
+		Teams:    TeamsConfig{Groups: map[string]string{}},
 	}
 }
 
 // ResolveConfigPath returns the config file path to use, checking in order:
 // 1. Explicit path from --config flag (if non-empty)
-// 2. /etc/agent-usage/config.yaml (Docker / system-wide)
+// 2. /etc/agent-ledger/config.yaml (Docker / system-wide)
 // 3. ./config.yaml (local default)
 func ResolveConfigPath(flagPath string) string {
 	if flagPath != "" {
 		return flagPath
 	}
-	if _, err := os.Stat("/etc/agent-usage/config.yaml"); err == nil {
-		return "/etc/agent-usage/config.yaml"
+	if _, err := os.Stat("/etc/agent-ledger/config.yaml"); err == nil {
+		return "/etc/agent-ledger/config.yaml"
 	}
 	return "config.yaml"
 }
@@ -194,6 +287,18 @@ func Load(path string) (*Config, error) {
 	cfg.Storage.Path = expandPath(cfg.Storage.Path)
 	if cfg.Projects.Aliases == nil {
 		cfg.Projects.Aliases = map[string]string{}
+	}
+	if cfg.Teams.Groups == nil {
+		cfg.Teams.Groups = map[string]string{}
+	}
+	if cfg.Pricing.StaleAfter <= 0 {
+		cfg.Pricing.StaleAfter = 24 * time.Hour
+	}
+	if cfg.Watchdog.TokenSpikeMultiplier <= 0 {
+		cfg.Watchdog.TokenSpikeMultiplier = 4
+	}
+	if cfg.Watchdog.MinCalls <= 0 {
+		cfg.Watchdog.MinCalls = 8
 	}
 	return cfg, nil
 }

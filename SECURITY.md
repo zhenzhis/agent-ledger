@@ -1,28 +1,34 @@
 # Security Policy
 
-## Reporting a Vulnerability
+## Reporting
 
-If you discover a security vulnerability, please report it responsibly:
+Report vulnerabilities through GitHub Security Advisories:
 
-1. **Do NOT** open a public GitHub issue
-2. Email the maintainer directly or use [GitHub Security Advisories](https://github.com/zhenzhis/agent-usage/security/advisories/new)
-3. Include steps to reproduce and potential impact
+https://github.com/zhenzhis/agent-ledger/security/advisories/new
 
-We will respond within 72 hours and work on a fix promptly.
+Do not disclose exploitable issues publicly until a fix is available.
 
-## Scope
+## Security Model
 
-agent-usage runs locally and processes local files. Key security considerations:
+Agent Ledger runs locally and reads local agent usage files. The default deployment is intentionally private:
 
-- **Session data** may contain prompts, code snippets, and API usage details
-- **SQLite database** stores aggregated usage data locally
-- **Web dashboard** binds to a configurable port (default: 9800) — restrict access in shared environments
-- **Pricing sync** makes outbound HTTPS requests to GitHub (litellm price data only)
-- **Manual scan/reset APIs** are side-effectful and should stay localhost-only unless `server.auth_token` is configured
+- HTTP bind address is `127.0.0.1`.
+- SQLite storage is local.
+- Pricing sync is the expected outbound request.
+- Manual scan, reset, pricing sync, import, and recalculation are localhost-only unless auth is configured.
+- Webhooks are disabled by default.
+- Usage data, prompts, local paths, and session IDs are not uploaded by default.
 
-## Best Practices
+## Sensitive Data
 
-- The server binds to `127.0.0.1` by default (local-only). Set `bind_address: "0.0.0.0"` only behind a reverse proxy or with `server.auth_token`
-- Enable privacy mode before sharing screenshots or exports from sensitive workspaces
-- Keep the SQLite database file permissions restricted
-- Review `config.yaml` before sharing or committing
+Agent Ledger should not store prompt content, secrets, API keys, webhook URLs, private keys, or raw secret-bearing logs. Audit logs should record operation metadata, not raw prompt or file content.
+
+Use privacy presets before sharing screenshots, reports, evidence bundles, or CSV exports from sensitive workspaces.
+
+## Network Exposure
+
+If binding to `0.0.0.0`, place the service behind a trusted reverse proxy and configure auth tokens or RBAC. Do not expose write endpoints to untrusted networks.
+
+## Supported Versions
+
+Security fixes target the latest `main` branch and the latest released version.

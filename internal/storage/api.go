@@ -130,10 +130,11 @@ type SessionInfo struct {
 
 // SessionPage represents a paginated session ledger response.
 type SessionPage struct {
-	Rows   []SessionInfo `json:"rows"`
-	Total  int           `json:"total"`
-	Limit  int           `json:"limit"`
-	Offset int           `json:"offset"`
+	Rows       []SessionInfo `json:"rows"`
+	Total      int           `json:"total"`
+	Limit      int           `json:"limit"`
+	Offset     int           `json:"offset"`
+	NextCursor string        `json:"next_cursor,omitempty"`
 }
 
 // GetDashboardStats returns aggregate cost, token, session, and prompt counts
@@ -148,13 +149,32 @@ func (d *DB) GetDashboardStatsFiltered(from, to time.Time, source, model, projec
 	filter, fa := buildUsageFilter(source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	var cacheRead, totalInput int64
-	err := d.db.QueryRow(`SELECT COALESCE(SUM(cost_usd),0),
-		COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens),0),
-		COALESCE(SUM(cache_read_input_tokens),0),
-		COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens),0)
-		FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter, args...).Scan(&s.TotalCost, &s.TotalTokens, &cacheRead, &totalInput)
-	if err != nil {
-		return nil, err
+	usedAggregate := false
+	if to.Sub(from) >= 24*time.Hour {
+		aggFilter, aggArgs := buildUsageFilter(source, model, project)
+		aggArgs = append([]interface{}{from.Format("2006-01-02"), to.Format("2006-01-02")}, aggArgs...)
+		var rowsSeen int
+		err := d.db.QueryRow(`SELECT COALESCE(SUM(cost_usd),0),
+			COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens),0),
+			COALESCE(SUM(cache_read_input_tokens),0),
+			COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens),0),
+			COALESCE(SUM(calls),0)
+			FROM daily_usage_aggregate WHERE bucket >= ? AND bucket < ?`+aggFilter, aggArgs...).Scan(&s.TotalCost, &s.TotalTokens, &cacheRead, &totalInput, &s.TotalCalls)
+		if err == nil {
+			_ = d.db.QueryRow(`SELECT COUNT(*) FROM daily_usage_aggregate WHERE bucket >= ? AND bucket < ?`+aggFilter, aggArgs...).Scan(&rowsSeen)
+			usedAggregate = rowsSeen > 0
+		}
+	}
+	if !usedAggregate {
+		err := d.db.QueryRow(`SELECT COALESCE(SUM(cost_usd),0),
+			COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens),0),
+			COALESCE(SUM(cache_read_input_tokens),0),
+			COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens),0)
+			FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter, args...).Scan(&s.TotalCost, &s.TotalTokens, &cacheRead, &totalInput)
+		if err != nil {
+			return nil, err
+		}
+		d.db.QueryRow(`SELECT COUNT(*) FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter, args...).Scan(&s.TotalCalls)
 	}
 	if totalInput > 0 {
 		s.CacheHitRate = float64(cacheRead) / float64(totalInput)
@@ -162,7 +182,6 @@ func (d *DB) GetDashboardStatsFiltered(from, to time.Time, source, model, projec
 	d.db.QueryRow(`SELECT COUNT(*) FROM (SELECT source,session_id FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+` GROUP BY source,session_id)`, args...).Scan(&s.TotalSessions)
 	pf, pa := buildUsageFilter(source, "", project)
 	d.db.QueryRow(`SELECT COUNT(*) FROM prompt_events WHERE timestamp >= ? AND timestamp < ?`+pf, append([]interface{}{from, to}, pa...)...).Scan(&s.TotalPrompts)
-	d.db.QueryRow(`SELECT COUNT(*) FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter, args...).Scan(&s.TotalCalls)
 	return s, nil
 }
 
@@ -424,5 +443,9 @@ func (d *DB) GetSessionsPageSorted(from, to time.Time, source, model, project, q
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return &SessionPage{Rows: result, Total: total, Limit: limit, Offset: offset}, nil
+	next := ""
+	if offset+limit < total {
+		next = fmt.Sprintf("%d", offset+limit)
+	}
+	return &SessionPage{Rows: result, Total: total, Limit: limit, Offset: offset, NextCursor: next}, nil
 }

@@ -5,10 +5,12 @@ This file provides guidance to AI coding agents when working with code in this r
 ## Build & Run
 
 ```bash
-go build -o agent-usage .                # build binary
-./agent-usage                             # run (reads config.yaml by default)
-./agent-usage --config path/to/config.yaml
-./agent-usage version                     # print version info
+go build -o agent-ledger .                 # build binary
+./agent-ledger                             # run server (reads config.yaml by default)
+./agent-ledger --config path/to/config.yaml
+./agent-ledger version                     # print version info
+./agent-ledger doctor                      # local diagnostics
+./agent-ledger today                       # CLI summary
 ```
 
 ## Testing
@@ -25,8 +27,8 @@ No CGO required — the SQLite driver (`modernc.org/sqlite`) is pure Go.
 
 ```bash
 docker compose up -d                      # start with default compose
-docker build -t agent-usage:local .       # local image build
-docker build --build-arg GOPROXY=https://goproxy.cn,direct -t agent-usage:local .  # China proxy
+docker build -t agent-ledger:local .       # local image build
+docker build --build-arg GOPROXY=https://goproxy.cn,direct -t agent-ledger:local .  # China proxy
 ```
 
 Container runs as UID 1000 by default; adjust `user:` in docker-compose.yml if your host UID differs (needed because `~/.claude/projects` is mode 700).
@@ -35,17 +37,17 @@ Container runs as UID 1000 by default; adjust `user:` in docker-compose.yml if y
 
 ## Architecture
 
-Single-binary Go application that collects AI coding agent token usage from local JSONL session files, stores it in SQLite, and serves a web dashboard.
+Single-binary Go application that collects AI coding agent token usage from local session files and local agent databases, stores it in SQLite, and serves a web dashboard plus CLI.
 
-**Data flow:** Collectors scan session dirs → parse JSONL → write to SQLite (with dedup) → pricing synced from litellm → costs calculated → served via REST API + embedded web UI.
+**Data flow:** Collectors scan session dirs → parse usage rows → write to SQLite (with dedup) → pricing governance syncs official seeds + LiteLLM fallback + local overrides → costs calculated → aggregate tables rebuilt → served via REST API + embedded web UI + CLI.
 
 ### Key packages
 
 - `internal/collector` — Source-specific parsers. Each collector implements `Scan()` which walks session directories and calls `processFile()` for incremental parsing. File offsets tracked in `file_state` table to avoid re-reading. `claude.go`/`claude_process.go` is the reference implementation for adding new sources. Collectors must normalize token fields to match the non-overlapping semantics defined below. Collectors also extract individual user prompt events (with timestamps) into the `prompt_events` table for time-accurate prompt counting. The Kiro collector (`kiro.go`/`kiro_process.go`) supports **two data sources** simultaneously: (1) a SQLite database (`~/.local/share/kiro-cli/data.sqlite3`) containing `conversations_v2` with per-request metadata, and (2) JSON session files (`~/.kiro/sessions/cli/*.json` + companion `*.jsonl`) with aggregated turn metadata. `Scan()` auto-detects each path type and routes accordingly. Kiro does not expose actual token counts, so tokens are **estimated**: input from `context_usage_percentage × context_window_tokens`, output from `response_size / 4` (SQLite) or CJK-aware character heuristics on JSONL content (JSON source). Known limitations: (1) subagent sessions (null `session_state` in JSON) cannot be tracked; (2) token counts are estimates, not exact values; (3) the two sources have disjoint session IDs — no overlap or dedup concern. The Pi collector (`pi.go`/`pi_process.go`) shares the same JSONL format as OpenClaw (same underlying framework). It tracks `model_change` entries for mid-session model switching and derives project names from the session CWD (with workspace slug as fallback). Directory structure: `~/.pi/agent/sessions/<workspace-slug>/<file>.jsonl`.
 - `internal/storage` — SQLite layer. `sqlite.go` has schema + versioned migrations (tracked via `meta` table with `migration_{id}` keys, each runs once), `queries.go` handles writes, `api.go` handles reads, `costs.go` does cost recalculation. All DB access serialized through a mutex (`DB.mu`). Key tables: `usage_records` (per-API-call token/cost data), `sessions` (session metadata), `prompt_events` (per-prompt timestamps for time-range queries), `pricing` (model prices), `file_state` (scan offsets and parser context for incremental scanning).
-- `internal/pricing` — Fetches model prices from litellm's GitHub JSON. Cost formula: `input × input_price + cache_creation × cache_creation_price + cache_read × cache_read_price + output × output_price`.
-- `internal/server` — HTTP server with REST API endpoints (`/api/stats`, `/api/cost-by-model`, etc.) and `go:embed` static files (HTML + ECharts dashboard). `/api/stats` returns aggregate metrics including `cache_hit_rate` (ratio of cache read tokens to total input tokens). All endpoints accept `from`, `to`, `source` (optional: `claude`/`codex`/`openclaw`/`opencode`/`kiro`/`pi`) and `model` (optional: filter by model name) to filter results, and time-series endpoints accept `granularity`. Invalid dates or reversed ranges return `400` with a JSON error message.
-- `internal/config` — YAML config loader. Search order: `--config` flag → `/etc/agent-usage/config.yaml` → `./config.yaml`. Supports `~` expansion in paths.
+- `internal/pricing` — Syncs LiteLLM fallback prices and applies official OpenAI/Anthropic seed rows plus local overrides. Cost formula: `input × input_price + cache_creation × cache_creation_price + cache_read × cache_read_price + output × output_price`.
+- `internal/server` — HTTP server with REST API endpoints (`/api/stats`, `/api/cost-intelligence`, `/api/pricing/status`, etc.) and `go:embed` static files (HTML + ECharts dashboard). Endpoints accept `from`, `to`, `source`, `model`, `project`, and privacy filters where applicable. Invalid dates or reversed ranges return `400` with a JSON error message.
+- `internal/config` — YAML config loader. Search order: `--config` flag → `/etc/agent-ledger/config.yaml` → `./config.yaml`. Supports `~` expansion in paths.
 
 ### Token semantics
 

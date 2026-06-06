@@ -1589,6 +1589,20 @@ select,
   padding: 12px;
 }
 
+.dense-list {
+  gap: 4px;
+}
+
+.dense-list .ops-row {
+  min-height: 42px;
+  padding: 8px 9px;
+}
+
+.dense-list .ops-main strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .panel-header,
 .ledger-header {
   min-height: 28px;
@@ -1616,6 +1630,12 @@ select,
   .control-actions,
   .control-preferences {
     grid-column: span 6;
+  }
+}
+
+@media (min-width: 1200px) {
+  .chart-grid .panel-wide {
+    grid-column: span 2;
   }
 }
 
@@ -1718,5 +1738,72 @@ select,
 
   .date-range {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Final Agent Ledger dashboard grid. Keep dense panels readable at desktop sizes. */
+.chart-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.chart-grid > .panel {
+  grid-column: span 4;
+  min-width: 0;
+}
+
+.chart-grid > .panel:nth-child(1),
+.chart-grid > .panel:nth-child(4) {
+  grid-column: 1 / -1;
+}
+
+.chart-grid > .panel:nth-child(2) {
+  grid-column: span 7;
+}
+
+.chart-grid > .panel:nth-child(3) {
+  grid-column: span 5;
+}
+
+.chart-grid > .panel:nth-child(5),
+.chart-grid > .panel:nth-child(6) {
+  grid-column: span 6;
+}
+
+.chart-grid > .panel:nth-child(9),
+.chart-grid > .panel:nth-child(12),
+.chart-grid > .panel:nth-child(13) {
+  grid-column: span 6;
+}
+
+@media (max-width: 1180px) {
+  .chart-grid > .panel,
+  .chart-grid > .panel:nth-child(2),
+  .chart-grid > .panel:nth-child(3),
+  .chart-grid > .panel:nth-child(5),
+  .chart-grid > .panel:nth-child(6),
+  .chart-grid > .panel:nth-child(9),
+  .chart-grid > .panel:nth-child(12),
+  .chart-grid > .panel:nth-child(13) {
+    grid-column: span 6;
+  }
+
+  .chart-grid > .panel:nth-child(1),
+  .chart-grid > .panel:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .chart-grid > .panel,
+  .chart-grid > .panel:nth-child(1),
+  .chart-grid > .panel:nth-child(2),
+  .chart-grid > .panel:nth-child(3),
+  .chart-grid > .panel:nth-child(4),
+  .chart-grid > .panel:nth-child(5),
+  .chart-grid > .panel:nth-child(6),
+  .chart-grid > .panel:nth-child(9),
+  .chart-grid > .panel:nth-child(12),
+  .chart-grid > .panel:nth-child(13) {
+    grid-column: 1 / -1;
   }
 }

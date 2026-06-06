@@ -1,4 +1,4 @@
-module github.com/briqt/agent-usage
+module github.com/zhenzhis/agent-ledger
 
 go 1.25.11
 

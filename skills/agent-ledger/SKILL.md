@@ -1,11 +1,11 @@
 ---
-name: agent-usage
-description: "Query AI coding agent usage, costs, and token consumption. Supports Claude Code, Codex CLI, OpenClaw, OpenCode, kiro, and Pi. Ask about spending, token usage, model costs, session history, API call counts. Actions: check usage, show cost, compare models, list sessions, analyze spending, token breakdown. Time ranges: today, this week, this month, this year, last N days, custom dates."
+name: agent-ledger
+description: "Query AI coding Agent Ledger, costs, and token consumption. Supports Claude Code, Codex CLI, OpenClaw, OpenCode, kiro, and Pi. Ask about spending, token usage, model costs, session history, API call counts. Actions: check usage, show cost, compare models, list sessions, analyze spending, token breakdown. Time ranges: today, this week, this month, this year, last N days, custom dates."
 ---
 
-# agent-usage — AI Coding Agent Usage Query
+# agent-ledger — AI Coding Agent Ledger Query
 
-Query your AI coding agent usage data directly in conversation. Supports Claude Code, Codex CLI, OpenClaw, OpenCode, kiro, and Pi.
+Query your AI coding Agent Ledger data directly in conversation. Supports Claude Code, Codex CLI, OpenClaw, OpenCode, kiro, and Pi.
 
 ## When to Use
 
@@ -24,7 +24,7 @@ This skill has two backends. Always detect which one to use first.
 
 ### Step 1: Detect Backend
 
-Run the detection script to check if the agent-usage server is running:
+Run the detection script to check if the agent-ledger server is running:
 
 ```bash
 bash SKILL_DIR/scripts/detect.sh
@@ -37,7 +37,7 @@ Where `SKILL_DIR` is the directory containing this SKILL.md file.
 
 ### Step 2a: API Mode (preferred)
 
-Use `query-api.sh` to call the agent-usage REST API. This is faster and has accurate pricing data.
+Use `query-api.sh` to call the agent-ledger REST API. This is faster and has accurate pricing data.
 
 ```bash
 bash SKILL_DIR/scripts/query-api.sh <command> [options]
@@ -134,7 +134,7 @@ User: "Token usage trend this week by hour"
 ## Notes
 
 - Local mode pricing is approximate — only common models have built-in prices
-- For accurate pricing, budgets, exports, and ingestion health, deploy the agent-usage server: https://github.com/zhenzhis/agent-usage
+- For accurate pricing, budgets, exports, and ingestion health, deploy the agent-ledger server: https://github.com/zhenzhis/agent-ledger
 - Local mode scans `~/.claude/projects`, `~/.codex/sessions`, `~/.openclaw/agents`, `~/.local/share/opencode/opencode.db`, `~/.pi/agent/sessions` by default
 - Kiro has two data sources: SQLite (`~/.local/share/kiro-cli/data.sqlite3`) and JSON sessions (`~/.kiro/sessions/cli/`). Both are scanned when configured.
 

@@ -28,7 +28,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !s.requireLocalOrAuth(w, r) {
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
 		return
 	}
 	if s.options.Scan == nil {
@@ -53,18 +53,30 @@ func (s *Server) handleRecalculateCosts(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !s.requireLocalOrAuth(w, r) {
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "admin") {
 		return
 	}
-	if s.options.Recalc == nil {
+	if s.options.Recalc == nil && s.options.RecalcMode == nil {
 		http.Error(w, "recalculate costs is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	if err := s.options.Recalc(); err != nil {
-		serverError(w, err)
-		return
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = "zero"
 	}
-	writeJSON(w, map[string]interface{}{"ok": true})
+	if s.options.RecalcMode != nil {
+		if err := s.options.RecalcMode(mode); err != nil {
+			serverError(w, err)
+			return
+		}
+	} else {
+		if err := s.options.Recalc(); err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "costs.recalculate", mode, map[string]string{"mode": mode})
+	writeJSON(w, map[string]interface{}{"ok": true, "mode": mode})
 }
 
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +97,10 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	model := r.URL.Query().Get("model")
 	project := r.URL.Query().Get("project")
 	privacy := s.privacyFor(r)
+	if s.options.Policies.RequirePrivacyExport && !privacy.ScreenshotMode && r.URL.Query().Get("privacy") != "1" && r.URL.Query().Get("privacy") != "true" {
+		badRequest(w, fmt.Errorf("policy requires privacy=1 for exports"))
+		return
+	}
 
 	var payload interface{}
 	switch exportType {
@@ -104,6 +120,30 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		}
 	case "models":
 		payload, err = s.db.GetCostByModelFiltered(from, to, source, project)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+	case "model-calls":
+		payload, err = s.db.GetModelCalls(from, to, source, model, project, 1000)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+	case "chargeback":
+		payload, err = s.db.GetModelCalls(from, to, source, model, project, 1000)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+	case "audit":
+		payload, err = s.db.GetAuditLog(1000)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+	case "quality":
+		payload, err = s.db.GetDataQuality(s.options.Pricing.StaleAfter)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -238,6 +278,50 @@ func csvFor(exportType string, payload interface{}) ([]byte, error) {
 			if err := w.Write([]string{fmt.Sprint(row["model"]), fmt.Sprint(row["cost"])}); err != nil {
 				return nil, err
 			}
+		}
+	case "model-calls", "chargeback":
+		data, _ := json.Marshal(payload)
+		var rows []map[string]interface{}
+		if err := json.Unmarshal(data, &rows); err != nil {
+			return nil, err
+		}
+		if err := w.Write([]string{"source", "model", "project", "calls", "tokens", "cost_usd", "avg_tokens_per_call", "cost_per_call", "unpriced_calls"}); err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if err := w.Write([]string{
+				fmt.Sprint(row["source"]), fmt.Sprint(row["model"]), fmt.Sprint(row["project"]), fmt.Sprint(row["calls"]),
+				fmt.Sprint(row["tokens"]), fmt.Sprint(row["cost_usd"]), fmt.Sprint(row["avg_tokens_per_call"]),
+				fmt.Sprint(row["cost_per_call"]), fmt.Sprint(row["unpriced_calls"]),
+			}); err != nil {
+				return nil, err
+			}
+		}
+	case "audit":
+		data, _ := json.Marshal(payload)
+		var rows []map[string]interface{}
+		if err := json.Unmarshal(data, &rows); err != nil {
+			return nil, err
+		}
+		if err := w.Write([]string{"id", "actor", "role", "action", "target", "created_at"}); err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if err := w.Write([]string{fmt.Sprint(row["id"]), fmt.Sprint(row["actor"]), fmt.Sprint(row["role"]), fmt.Sprint(row["action"]), fmt.Sprint(row["target"]), fmt.Sprint(row["created_at"])}); err != nil {
+				return nil, err
+			}
+		}
+	case "quality":
+		data, _ := json.Marshal(payload)
+		var row map[string]interface{}
+		if err := json.Unmarshal(data, &row); err != nil {
+			return nil, err
+		}
+		if err := w.Write([]string{"generated_at", "pricing_sources", "unpriced_models"}); err != nil {
+			return nil, err
+		}
+		if err := w.Write([]string{fmt.Sprint(row["generated_at"]), fmt.Sprint(row["pricing_sources"]), fmt.Sprint(row["unpriced_models"])}); err != nil {
+			return nil, err
 		}
 	}
 	w.Flush()

@@ -1,4 +1,4 @@
-project_name: agent-usage
+project_name: agent-ledger
 
 before:
   hooks:
@@ -6,7 +6,7 @@ before:
 
 builds:
   - main: .
-    binary: agent-usage
+    binary: agent-ledger
     env:
       - CGO_ENABLED=0
     goos:
@@ -46,13 +46,13 @@ changelog:
       - "^ci:"
       - "^chore:"
   groups:
-    - title: "🚀 Features"
+    - title: "Features"
       regexp: '^feat'
-    - title: "🐛 Bug Fixes"
+    - title: "Bug Fixes"
       regexp: '^fix'
-    - title: "⚡ Performance"
+    - title: "Performance"
       regexp: '^perf'
-    - title: "♻️ Refactor"
+    - title: "Refactor"
       regexp: '^refactor'
     - title: "Others"
       order: 999
@@ -60,11 +60,11 @@ changelog:
 release:
   github:
     owner: zhenzhis
-    name: agent-usage
+    name: agent-ledger
   name_template: "v{{.Version}}"
   header: |
-    ## agent-usage v{{.Version}}
+    ## Agent Ledger v{{.Version}}
     
-    Private local AI coding agent usage, cost, budget, and health console.
+    Private local AI Agent FinOps, audit, quota, pricing, and productivity console.
   footer: |
-    **Full Changelog**: https://github.com/zhenzhis/agent-usage/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/zhenzhis/agent-ledger/compare/{{ .PreviousTag }}...{{ .Tag }}

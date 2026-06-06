@@ -9,10 +9,11 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/briqt/agent-usage/internal/config"
-	"github.com/briqt/agent-usage/internal/storage"
+	"github.com/zhenzhis/agent-ledger/internal/config"
+	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 //go:embed static
@@ -42,12 +43,23 @@ type SourceOption struct {
 
 // Options provides optional operational capabilities for the HTTP server.
 type Options struct {
-	AuthToken string
-	Privacy   config.PrivacyConfig
-	Budgets   config.BudgetConfig
-	Sources   []SourceOption
-	Scan      func(source string, reset bool) error
-	Recalc    func() error
+	AuthToken   string
+	AdminToken  string
+	ViewerToken string
+	RBAC        config.RBACConfig
+	Privacy     config.PrivacyConfig
+	Budgets     config.BudgetConfig
+	Quota       config.QuotaConfig
+	Watchdog    config.WatchdogConfig
+	Policies    config.PolicyConfig
+	Webhooks    config.WebhookConfig
+	Teams       config.TeamsConfig
+	Pricing     config.PricingConfig
+	Sources     []SourceOption
+	Scan        func(source string, reset bool) error
+	Recalc      func() error
+	RecalcMode  func(mode string) error
+	PricingSync func() error
 }
 
 // New creates a Server that will listen on the given address (host:port).
@@ -71,7 +83,23 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/health/ingestion", s.handleIngestionHealth)
 	mux.HandleFunc("/api/scan", s.handleScan)
 	mux.HandleFunc("/api/recalculate-costs", s.handleRecalculateCosts)
+	mux.HandleFunc("/api/pricing/status", s.handlePricingStatus)
+	mux.HandleFunc("/api/pricing/sync", s.handlePricingSync)
+	mux.HandleFunc("/api/pricing/recalculate", s.handlePricingRecalculate)
+	mux.HandleFunc("/api/pricing/audit", s.handlePricingAudit)
 	mux.HandleFunc("/api/budgets/status", s.handleBudgetStatus)
+	mux.HandleFunc("/api/quota/status", s.handleQuotaStatus)
+	mux.HandleFunc("/api/data-quality", s.handleDataQuality)
+	mux.HandleFunc("/api/model-calls", s.handleModelCalls)
+	mux.HandleFunc("/api/cost-intelligence", s.handleCostIntelligence)
+	mux.HandleFunc("/api/cache/doctor", s.handleCacheDoctor)
+	mux.HandleFunc("/api/anomalies", s.handleAnomalies)
+	mux.HandleFunc("/api/watchdog/events", s.handleWatchdogEvents)
+	mux.HandleFunc("/api/audit-log", s.handleAuditLog)
+	mux.HandleFunc("/api/reconciliation/status", s.handleReconciliationStatus)
+	mux.HandleFunc("/api/reconciliation/import", s.handleReconciliationImport)
+	mux.HandleFunc("/api/evidence-bundle", s.handleEvidenceBundle)
+	mux.HandleFunc("/api/policies/status", s.handlePolicyStatus)
 	mux.HandleFunc("/api/export", s.handleExport)
 	mux.HandleFunc("/api/report", s.handleReport)
 
@@ -153,7 +181,7 @@ func (s *Server) parseTimeRange(r *http.Request) (time.Time, time.Time, int, err
 }
 
 func (s *Server) auth(next http.Handler) http.Handler {
-	if s.options.AuthToken == "" {
+	if s.options.AuthToken == "" && s.options.AdminToken == "" && s.options.ViewerToken == "" {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -161,12 +189,52 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if r.Header.Get("Authorization") != "Bearer "+s.options.AuthToken {
+		role := s.roleFor(r)
+		if role == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) roleFor(r *http.Request) string {
+	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if token == "" {
+		if s.options.AuthToken == "" && s.options.AdminToken == "" && s.options.ViewerToken == "" {
+			if s.options.RBAC.Enabled {
+				return ""
+			}
+			return "admin"
+		}
+		return ""
+	}
+	if s.options.AdminToken != "" && token == s.options.AdminToken {
+		return "admin"
+	}
+	if s.options.AuthToken != "" && token == s.options.AuthToken {
+		return "operator"
+	}
+	if s.options.ViewerToken != "" && token == s.options.ViewerToken {
+		return "viewer"
+	}
+	if !s.options.RBAC.Enabled && s.options.AuthToken != "" && token == s.options.AuthToken {
+		return "admin"
+	}
+	return ""
+}
+
+func (s *Server) requireRole(w http.ResponseWriter, r *http.Request, minRole string) bool {
+	if !s.options.RBAC.Enabled {
+		return true
+	}
+	role := s.roleFor(r)
+	rank := map[string]int{"viewer": 1, "operator": 2, "admin": 3}
+	if rank[role] < rank[minRole] {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	return true
 }
 
 func (s *Server) requireLocalOrAuth(w http.ResponseWriter, r *http.Request) bool {
@@ -294,6 +362,14 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	sortKey := r.URL.Query().Get("sort")
 	direction := r.URL.Query().Get("dir")
 	limit, offset := parseLimitOffset(r)
+	if cursor := r.URL.Query().Get("cursor"); cursor != "" {
+		parsed, err := strconv.Atoi(cursor)
+		if err != nil || parsed < 0 {
+			badRequest(w, fmt.Errorf("invalid cursor %q", cursor))
+			return
+		}
+		offset = parsed
+	}
 	data, err := s.db.GetSessionsPageSorted(from, to, source, model, project, query, limit, offset, sortKey, direction)
 	if err != nil {
 		serverError(w, err)

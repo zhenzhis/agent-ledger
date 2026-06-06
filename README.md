@@ -1,65 +1,61 @@
 # Agent Ledger
 
-[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)]()
-[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://ghcr.io/zhenzhis/agent-usage)
-
-Private local AI coding agent usage, cost, budget, and health ledger for Claude Code, Codex, OpenCode, Claude-compatible agents, and related local coding tools.
-
-Single binary, SQLite storage, embedded web UI, localhost-first deployment.
+Private local AI Agent FinOps, quota, pricing, audit, and productivity console for Claude Code, Codex, OpenCode, OpenClaw, kiro, Pi, and related local coding agents.
 
 [中文文档](README_CN.md)
 
-## Fork Notice
+![Agent Ledger dashboard](docs/dashboard.png)
 
-Agent Ledger is the ZhenZhi second-development edition of [briqt/agent-usage](https://github.com/briqt/agent-usage). The repository and binary remain compatible with the current `agent-usage` deployment name until the GitHub repository is renamed.
+## Fork And Credits
 
-We keep the upstream collection and pricing model compatible, and add source-scoped accounting, local deployment hardening, ingestion health, local budgets, export/report APIs, privacy mode, server-side pagination, and a monochrome operations dashboard.
+Agent Ledger is an independent ZhenZhi second-development project based on [briqt/agent-usage](https://github.com/briqt/agent-usage). We keep the local-first collector foundation and thank the original author and contributors for the clean single-binary design.
 
-Thanks to the original author and contributors of [briqt/agent-usage](https://github.com/briqt/agent-usage/) for the clean local-first foundation.
+The project has been renamed from `agent-usage` to `agent-ledger`. Old local databases and configs are not deleted automatically.
 
-![Dashboard](docs/dashboard.png)
+## What It Does
 
-Screenshot is captured with privacy mode enabled. Local paths, project names, branches, and session identifiers are redacted.
-
-## Features
-
-- Local collectors for Claude Code, Codex CLI, OpenCode, OpenClaw, kiro, and Pi.
-- SQLite database with source-scoped session identity: `(source, session_id)`.
-- Incremental scanning with file offsets and parser context recovery.
-- Cost calculation from litellm model pricing with local backfill.
-- Ingestion health for each source: path status, last scan, duration, watermark, inserted rows, and errors.
-- Local budgets by day, week, or month for global, source, model, or project scopes.
-- CSV/JSON export and Markdown daily/weekly reports.
-- Privacy mode for screenshots and shared reports.
-- Server-side session pagination, search, and sorting for large local databases.
-- Docker compose defaults to `127.0.0.1:9800` and read-only session mounts.
+- Collects local usage records from Claude Code, Codex, OpenCode, OpenClaw, kiro, and Pi.
+- Calculates token cost with local pricing governance: local overrides, official OpenAI/Anthropic seeds, and LiteLLM fallback.
+- Explains expensive sessions without reading prompt content.
+- Tracks budgets, burn rate, local quota estimates, cache health, model call counts, anomalies, and source health.
+- Provides local audit logs, privacy presets, exports, reports, evidence bundles, and team showback data.
+- Runs as one Go binary with embedded static UI and SQLite.
 
 ## Quick Start
 
 ```bash
-mkdir -p ./data
-docker compose up --build -d
+git clone https://github.com/zhenzhis/agent-ledger.git
+cd agent-ledger
+go build -o agent-ledger .
+./agent-ledger
 ```
 
-Open:
+Open [http://127.0.0.1:9800](http://127.0.0.1:9800).
+
+Docker:
 
 ```bash
-http://127.0.0.1:9800
+docker compose up -d --build
 ```
 
-Default Docker mounts:
+CLI:
 
-| Source | Host path | Container path |
-| --- | --- | --- |
-| Claude Code | `~/.claude/projects` | `/sessions/claude` |
-| Codex CLI | `~/.codex/sessions` | `/sessions/codex` |
-| OpenCode | `~/.local/share/opencode` | `/sessions/opencode` |
-
-The mounts are read-only. Missing paths fail explicitly instead of being created by Docker.
+```bash
+./agent-ledger today
+./agent-ledger top
+./agent-ledger doctor
+./agent-ledger battery
+./agent-ledger pricing sync
+./agent-ledger wrapped
+```
 
 ## Configuration
+
+Config search order:
+
+1. `--config path/to/config.yaml`
+2. `/etc/agent-ledger/config.yaml`
+3. `./config.yaml`
 
 Minimal example:
 
@@ -67,186 +63,125 @@ Minimal example:
 server:
   port: 9800
   bind_address: "127.0.0.1"
-  # auth_token: "change-me"
-
-collectors:
-  claude:
-    enabled: true
-    paths: ["~/.claude/projects"]
-    scan_interval: 60s
-  codex:
-    enabled: true
-    paths: ["~/.codex/sessions"]
-    scan_interval: 30s
-  opencode:
-    enabled: true
-    paths: ["~/.local/share/opencode/opencode.db"]
-    scan_interval: 30s
 
 storage:
-  path: "./agent-usage.db"
+  path: "./agent-ledger.db"
 
 pricing:
   sync_interval: 1h
+  stale_after: 24h
+  mode: official-plus-litellm
+  overrides: []
 
 privacy:
+  default_preset: normal
   redact_paths: false
   hash_session_ids: false
   hide_project_names: false
   screenshot_mode: false
-
-projects:
-  aliases: {}
-  exclude: []
-
-budgets:
-  enabled: false
-  rules: []
 ```
 
-Config search order:
+Use `pricing.overrides` for enterprise contracts, relay pricing, regional multipliers, or provider-specific discounts.
 
-1. `--config`
-2. `/etc/agent-usage/config.yaml`
-3. `./config.yaml`
+## Pricing Model
 
-## Data Accuracy
-
-The storage model uses non-overlapping token components:
+Agent Ledger stores non-overlapping token components:
 
 ```text
-input_tokens                 non-cached input
-cache_read_input_tokens      cached input read
-cache_creation_input_tokens  cached input written
-output_tokens                output tokens
-reasoning_output_tokens      reasoning output subset, informational only
+total = input_tokens
+      + cache_creation_input_tokens
+      + cache_read_input_tokens
+      + output_tokens
 ```
 
-Total tokens:
-
-```text
-total_tokens = input_tokens
-             + cache_read_input_tokens
-             + cache_creation_input_tokens
-             + output_tokens
-```
-
-Collectors normalize source-specific formats before writing to SQLite. If a source reports input as total input including cache, the collector subtracts cache tokens first so the stored fields remain non-overlapping.
-
-Deduplication is source-scoped:
-
-```text
-usage_records: (source, session_id, model, timestamp, input_tokens, output_tokens)
-sessions:      (source, session_id)
-prompt_events: (source, session_id, timestamp)
-```
-
-Time filters use half-open intervals internally:
-
-```text
-[from, to_next_day)
-```
-
-## Pricing And Cost Calculation
-
-Pricing is fetched from the same source used by the upstream project:
-
-[BerriAI/litellm model_prices_and_context_window.json](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json)
-
-The fetcher stores:
-
-- `input_cost_per_token`
-- `output_cost_per_token`
-- `cache_read_input_token_cost`
-- `cache_creation_input_token_cost`
-
-The runtime cost formula is:
+Cost formula:
 
 ```text
 cost = input_tokens * input_price
-     + cache_creation_input_tokens * cache_creation_price
+     + cache_creation_input_tokens * cache_write_price
      + cache_read_input_tokens * cache_read_price
      + output_tokens * output_price
 ```
 
-This formula matches the upstream implementation. The ZhenZhi fork only hardens the pricing fetch with HTTP status validation, a User-Agent, a 30 second timeout, and an 8 MiB response limit.
+Pricing priority:
 
-Costs are recalculated for zero-cost rows after pricing sync. OpenCode source-reported costs are preserved when present.
+1. Local override.
+2. Official OpenAI/Anthropic seed rows.
+3. LiteLLM fallback from `model_prices_and_context_window.json`.
+4. Source-reported cost, preserved for sources such as OpenCode when present.
 
-## API
+Every priced record can expose pricing source, matched model, match type, and confidence. Unknown or stale prices are surfaced as data quality issues instead of being hidden.
 
-Read endpoints accept `from`, `to`, `source`, `model`, `project`, and `privacy=1`. Time-series endpoints also accept `granularity`.
+References:
 
-| Endpoint | Description |
-| --- | --- |
-| `GET /api/stats` | Summary totals |
-| `GET /api/cost-by-model` | Cost grouped by model |
-| `GET /api/cost-over-time` | Cost time series |
-| `GET /api/tokens-over-time` | Token time series |
-| `GET /api/sessions?limit=100&offset=0` | Paginated sessions |
-| `GET /api/session-detail?source=codex&session_id=ID` | Per-session model breakdown |
-| `GET /api/health/ingestion` | Collector health |
-| `GET /api/budgets/status` | Budget status |
-| `GET /api/export?type=sessions&format=csv` | CSV/JSON export |
-| `GET /api/report?period=daily&format=markdown` | Markdown report |
-| `POST /api/scan?source=codex` | Manual scan |
-| `POST /api/scan?source=codex&reset=true` | Clear one source and rescan |
-| `POST /api/recalculate-costs` | Rebuild zero-cost records |
+- [OpenAI API pricing](https://openai.com/api/pricing/)
+- [Anthropic Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing)
+- [LiteLLM model price data](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json)
 
-Manual scan and reset endpoints require localhost access unless `server.auth_token` is configured.
+## Architecture
 
-## Supported Sources
-
-| Source | Location | Format |
-| --- | --- | --- |
-| Claude Code | `~/.claude/projects/<project>/<session>.jsonl` | JSONL |
-| Codex CLI | `~/.codex/sessions/<year>/<month>/<day>/<session>.jsonl` | JSONL |
-| OpenCode | `~/.local/share/opencode/opencode.db` | SQLite |
-| OpenClaw | `~/.openclaw/agents/<agentId>/sessions/<sessionId>.jsonl` | JSONL |
-| kiro | `~/.local/share/kiro-cli/data.sqlite3` and `~/.kiro/sessions/cli` | SQLite/JSON |
-| Pi | `~/.pi/agent/sessions/<workspace>/<session>.jsonl` | JSONL |
-
-## Build
-
-```bash
-git clone https://github.com/zhenzhis/agent-usage.git
-cd agent-usage
-go build -o agent-usage .
-./agent-usage
+```text
+collectors -> SQLite raw usage -> pricing governance -> cost recalculation
+           -> aggregate tables -> REST API -> embedded dashboard / CLI
 ```
 
-Docker:
+Core tables:
 
-```bash
-docker build -t agent-usage:local .
-docker run --rm -p 127.0.0.1:9800:9800 agent-usage:local
-```
+- `usage_records`: raw API-call token and cost data.
+- `sessions`: source-scoped session metadata.
+- `prompt_events`: prompt timestamps for time-accurate prompt counts.
+- `pricing`, `pricing_sources`, `pricing_snapshots`: effective price rules and source health.
+- `hourly_usage_aggregate`, `daily_usage_aggregate`: dashboard rollups.
+- `ingestion_health`, `insight_events`, `audit_log`: operations and quality evidence.
 
-For GHCR-based deployments, see `docker-compose.example.yml`. SBOM and provenance publication are planned for the release workflow and should not be claimed until enabled.
+## API Surface
 
-## Verification
+Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 
-Recommended checks before release:
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/stats` | Summary stats |
+| `GET /api/sessions` | Server-side paginated session ledger |
+| `GET /api/pricing/status` | Pricing freshness, source state, unpriced models |
+| `POST /api/pricing/sync` | Sync pricing |
+| `POST /api/pricing/recalculate?mode=zero|all` | Recalculate costs |
+| `GET /api/cost-intelligence` | Expensive session explanations |
+| `GET /api/cache/doctor` | Cache hit/write/read diagnostics |
+| `GET /api/data-quality` | Trust and completeness report |
+| `GET /api/model-calls` | Calls by model/source/project |
+| `GET /api/quota/status` | Local quota and burn-rate estimates |
+| `GET /api/anomalies` | Robust-statistics anomaly events |
+| `GET /api/evidence-bundle` | Redacted support/audit bundle |
+| `GET /api/export?type=sessions&format=csv` | CSV/JSON exports |
+| `GET /api/report?format=markdown` | Markdown report |
+
+Manual scan, reset, pricing sync, imports, and recalculation require localhost access unless auth tokens are configured.
+
+## Security Model
+
+- Binds to `127.0.0.1` by default.
+- Reads local agent logs and databases; it does not upload usage data.
+- Pricing sync is the expected outbound request.
+- Manual operations are localhost-only by default.
+- Optional RBAC supports `viewer`, `operator`, and `admin` tokens.
+- Privacy presets can hide paths, project names, branches, machine names, and session IDs.
+- Webhooks are disabled by default and should only send redacted summaries.
+
+## Development
 
 ```bash
 go test ./...
 go vet ./...
-govulncheck ./...
-docker build -t agent-usage:local .
+node --check internal/server/static/app.js
+docker compose up -d --build
 ```
 
-The current CI and local verification cover storage migrations, source-scoped identity, pagination, collector fixtures, OpenCode prompt deduplication, pricing matching, and cost formula behavior.
+On hosts without Go installed:
 
-## Security Model
-
-- Local-first by default.
-- Docker examples bind to localhost.
-- Session mounts are read-only.
-- No usage data is uploaded by the application.
-- Pricing sync is the expected outbound request.
-- Static frontend assets are embedded and do not depend on runtime CDNs.
-- Optional bearer token protects API access when configured.
+```bash
+docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . && go test ./..."
+```
 
 ## License
 
-[Apache 2.0](LICENSE)
+Apache-2.0. See [LICENSE](LICENSE).

@@ -40,6 +40,10 @@ const I18N = {
     prompts: "Prompts",
     budget: "Budget",
     health: "Health",
+    battery: "Battery",
+    pricing: "Pricing",
+    quality: "Quality",
+    modelCalls: "Model Calls",
     window: "Window",
     filters: "Filters",
     operations: "Operations",
@@ -52,11 +56,19 @@ const I18N = {
     modelAllocation: "Model Allocation",
     budgetStatus: "Budget Status",
     ingestionHealth: "Ingestion Health",
+    agentBattery: "Agent Battery",
+    pricingHealth: "Pricing Health",
+    costIntelligence: "Cost Intelligence",
+    cacheDoctor: "Cache Doctor",
+    dataQuality: "Data Quality",
+    watchdog: "Watchdog",
     sessionLedger: "Session Ledger",
     filterProject: "Project / workspace",
     ledgerSearch: "Search ledger by project, path, or branch...",
     scanNow: "Scan",
     scanSource: "Scan Source",
+    pricingSync: "Pricing",
+    doctor: "Doctor",
     recalcCosts: "Rebuild Costs",
     resetScan: "Clean Rescan",
     exportCsv: "Export CSV",
@@ -66,6 +78,7 @@ const I18N = {
     scanStarted: "Scan started",
     scanDone: "Scan completed",
     recalcDone: "Cost rebuild completed",
+    pricingDone: "Pricing sync completed",
     resetConfirm: "Reset scan state and usage for current source, then rescan?",
     resetNeedsSource: "Choose one source before reset",
     today: "Today",
@@ -133,6 +146,10 @@ const I18N = {
     records: "records",
     unitMin: "min",
     unitSec: "sec",
+    noIssues: "No issues detected",
+    unpriced: "unpriced",
+    stale: "stale",
+    localEstimate: "local estimate",
   },
   zh: {
     from: "起始",
@@ -152,6 +169,10 @@ const I18N = {
     prompts: "Prompt 数",
     budget: "预算",
     health: "健康",
+    battery: "电量",
+    pricing: "价格",
+    quality: "质量",
+    modelCalls: "模型调用",
     window: "时间窗口",
     filters: "过滤条件",
     operations: "操作",
@@ -164,11 +185,19 @@ const I18N = {
     modelAllocation: "模型分布",
     budgetStatus: "预算状态",
     ingestionHealth: "采集健康",
+    agentBattery: "Agent 电量",
+    pricingHealth: "价格健康",
+    costIntelligence: "成本解释",
+    cacheDoctor: "Cache Doctor",
+    dataQuality: "数据质量",
+    watchdog: "Watchdog",
     sessionLedger: "会话账本",
     filterProject: "项目 / 工作区",
     ledgerSearch: "按项目、路径或分支搜索账本...",
     scanNow: "扫描",
     scanSource: "扫描来源",
+    pricingSync: "同步价格",
+    doctor: "诊断",
     recalcCosts: "重建费用",
     resetScan: "清理重扫",
     exportCsv: "导出 CSV",
@@ -178,6 +207,7 @@ const I18N = {
     scanStarted: "开始扫描",
     scanDone: "扫描完成",
     recalcDone: "费用重建完成",
+    pricingDone: "价格同步完成",
     resetConfirm: "清理当前来源的扫描状态和用量后重新扫描？",
     resetNeedsSource: "清理重扫前请选择单个来源",
     today: "今天",
@@ -245,6 +275,10 @@ const I18N = {
     records: "条记录",
     unitMin: "分钟",
     unitSec: "秒",
+    noIssues: "未发现问题",
+    unpriced: "未计价",
+    stale: "过期",
+    localEstimate: "本地估算",
   },
 };
 
@@ -627,6 +661,144 @@ function renderHealth(rows) {
   list.replaceChildren(fragment);
 }
 
+function addOpsRow(fragment, title, detail, value = "", severity = "ok") {
+  const row = document.createElement("div");
+  row.className = `ops-row severity-${severity || "ok"}`;
+  const main = document.createElement("div");
+  main.className = "ops-main";
+  const strong = document.createElement("strong");
+  strong.textContent = title || "-";
+  const sub = document.createElement("span");
+  sub.textContent = detail || "";
+  main.append(strong, sub);
+  const val = document.createElement("div");
+  val.className = "ops-value";
+  val.textContent = value;
+  row.append(main, val);
+  fragment.appendChild(row);
+}
+
+function renderQuota(payload) {
+  const list = $("quota-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  const windows = (payload && payload.windows) || [];
+  if (windows.length === 0) {
+    fragment.appendChild(createMessage(t("localEstimate"), "ops-empty"));
+    setText("quota-meta", "-");
+    setText("s-battery", "-");
+    setText("s-battery-sub", t("localEstimate"));
+  } else {
+    windows.forEach((row) => {
+      const ratio = row.cost_limit > 0 ? Number(row.cost_usd || 0) / Number(row.cost_limit || 1) : 0;
+      const severity = ratio >= 1 ? "critical" : ratio >= 0.8 ? "warning" : "ok";
+      addOpsRow(fragment, row.name, `${fmtCost(row.cost_usd)} · ${fmt(row.tokens)} tokens · ${fmtCost(row.burn_rate_per_hour)}/h`, row.cost_limit > 0 ? `${(ratio * 100).toFixed(0)}%` : "-", severity);
+    });
+    const month = windows.find((row) => row.name === "month") || windows[0];
+    const ratio = month.cost_limit > 0 ? Number(month.cost_usd || 0) / Number(month.cost_limit || 1) : 0;
+    setText("s-battery", month.cost_limit > 0 ? `${(Math.max(0, 1 - ratio) * 100).toFixed(0)}%` : "∞");
+    setText("s-battery-sub", `${payload.plan || "custom"} · ${t("localEstimate")}`);
+    setText("quota-meta", `${windows.length} windows`);
+  }
+  list.replaceChildren(fragment);
+}
+
+function renderPricing(payload) {
+  const list = $("pricing-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  const sources = (payload && payload.sources) || [];
+  const stale = sources.filter((s) => s.stale).length;
+  const unpriced = ((payload && payload.unpriced_models) || []).reduce((sum, row) => sum + Number(row.records || 0), 0);
+  if (sources.length === 0) {
+    fragment.appendChild(createMessage(t("noData"), "ops-empty"));
+  } else {
+    sources.forEach((src) => {
+      addOpsRow(fragment, src.name, `${src.kind || "-"} · ${src.status || "-"} · ${src.model_count || 0} models`, src.stale ? t("stale") : "ok", src.stale || src.status === "error" ? "warning" : "ok");
+    });
+  }
+  setText("s-pricing", stale ? `${stale} ${t("stale")}` : "OK");
+  setText("s-pricing-sub", unpriced ? `${fmt(unpriced)} ${t("unpriced")}` : payload ? payload.mode : "-");
+  setText("pricing-meta", `${sources.length} sources`);
+  list.replaceChildren(fragment);
+}
+
+function renderQuality(payload) {
+  const list = $("quality-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  const rows = (payload && payload.source_quality) || [];
+  if (rows.length === 0) {
+    fragment.appendChild(createMessage(t("noData"), "ops-empty"));
+    setText("s-quality", "-");
+    setText("s-quality-sub", "-");
+  } else {
+    let min = 1;
+    rows.forEach((row) => {
+      min = Math.min(min, Number(row.confidence || 0));
+      const sev = row.confidence < 0.7 ? "warning" : "ok";
+      addOpsRow(fragment, row.source, row.message || `${row.records || 0} records`, `${(Number(row.confidence || 0) * 100).toFixed(0)}%`, sev);
+    });
+    setText("s-quality", `${(min * 100).toFixed(0)}%`);
+    setText("s-quality-sub", `${rows.length} sources`);
+  }
+  setText("quality-meta", `${((payload && payload.unpriced_models) || []).length} ${t("unpriced")}`);
+  list.replaceChildren(fragment);
+}
+
+function renderModelCalls(rows) {
+  const list = $("calls-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  const total = (rows || []).reduce((sum, row) => sum + Number(row.calls || 0), 0);
+  (rows || []).slice(0, 8).forEach((row) => {
+    addOpsRow(fragment, row.model || t("unknownModel"), `${row.source} · ${row.project || "-"} · ${fmt(row.avg_tokens_per_call)} tokens/call`, fmt(row.calls || 0), row.unpriced_calls ? "warning" : "ok");
+  });
+  if (!rows || rows.length === 0) fragment.appendChild(createMessage(t("noData"), "ops-empty"));
+  setText("s-model-calls", fmt(total));
+  setText("s-model-calls-sub", `${(rows || []).length} groups`);
+  setText("calls-meta", `${fmt(total)} ${t("calls")}`);
+  list.replaceChildren(fragment);
+}
+
+function renderCostIntelligence(rows) {
+  const list = $("cost-intel-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  (rows || []).slice(0, 8).forEach((row) => {
+    const reason = (row.reasons || [])[0] || "-";
+    addOpsRow(fragment, `${row.source} · ${row.project || "-"}`, `${reason} · score ${(Number(row.quality_score || 0) * 100).toFixed(0)}%`, fmtCost(row.cost_usd || 0), row.quality_score < 0.7 ? "warning" : "ok");
+  });
+  if (!rows || rows.length === 0) fragment.appendChild(createMessage(t("noData"), "ops-empty"));
+  setText("cost-intel-meta", `${(rows || []).length} sessions`);
+  list.replaceChildren(fragment);
+}
+
+function renderCacheDoctor(rows) {
+  const list = $("cache-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  (rows || []).slice(0, 8).forEach((row) => {
+    const hit = Number(row.cache_hit_rate || 0);
+    addOpsRow(fragment, row.model || t("unknownModel"), `${row.source} · ${row.message || ""}`, `${(hit * 100).toFixed(0)}%`, hit < 0.25 ? "warning" : "ok");
+  });
+  if (!rows || rows.length === 0) fragment.appendChild(createMessage(t("noData"), "ops-empty"));
+  setText("cache-meta", `${(rows || []).length} groups`);
+  list.replaceChildren(fragment);
+}
+
+function renderWatchdog(rows) {
+  const list = $("watchdog-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  (rows || []).slice(0, 8).forEach((row) => {
+    addOpsRow(fragment, row.kind || "event", `${row.source || "-"} · ${row.message || ""}`, fmt(row.value || 0), row.severity || "ok");
+  });
+  if (!rows || rows.length === 0) fragment.appendChild(createMessage(t("noIssues"), "ops-empty"));
+  setText("watchdog-meta", `${(rows || []).length} events`);
+  list.replaceChildren(fragment);
+}
+
 function renderActivityMatrix(tokensTime) {
   const data = tokensTime || [];
   const labels = data.map((row) => row.date);
@@ -864,6 +1036,13 @@ async function refresh(options = {}) {
       sessions: api("sessions", { extra: sessionParams }),
       health: api("health/ingestion"),
       budgets: api("budgets/status"),
+      quota: api("quota/status"),
+      pricing: api("pricing/status"),
+      quality: api("data-quality"),
+      modelCalls: api("model-calls", { skipModel: true }),
+      costIntel: api("cost-intelligence"),
+      cacheDoctor: api("cache/doctor"),
+      watchdog: api("watchdog/events", { skipModel: true }),
     };
     const settled = await Promise.allSettled(Object.entries(requests).map(async ([key, promise]) => [key, await promise]));
     const data = {};
@@ -888,6 +1067,13 @@ async function refresh(options = {}) {
     if (data.costModel) renderModelAllocation(costModel, modelColorMap);
     if (data.health) renderHealth(data.health);
     if (data.budgets) renderBudgets(data.budgets);
+    if (data.quota) renderQuota(data.quota);
+    if (data.pricing) renderPricing(data.pricing);
+    if (data.quality) renderQuality(data.quality);
+    if (data.modelCalls) renderModelCalls(data.modelCalls);
+    if (data.costIntel) renderCostIntelligence(data.costIntel);
+    if (data.cacheDoctor) renderCacheDoctor(data.cacheDoctor);
+    if (data.watchdog) renderWatchdog(data.watchdog);
     if (data.sessions) {
       allSessions = data.sessions.rows || [];
       sessionTotal = Number(data.sessions.total || allSessions.length);
@@ -1296,6 +1482,21 @@ $("btn-scan").addEventListener("click", async () => {
   } catch (err) {
     showStatus(`${t("actionFailed")}: ${err.message}`, "error");
   }
+});
+
+$("btn-pricing-sync").addEventListener("click", async () => {
+  try {
+    await postApi("pricing/sync");
+    await postApi("pricing/recalculate", { extra: { mode: "zero" } });
+    await refresh();
+    showStatus(t("pricingDone"));
+  } catch (err) {
+    showStatus(`${t("actionFailed")}: ${err.message}`, "error");
+  }
+});
+
+$("btn-doctor").addEventListener("click", () => {
+  downloadApi("evidence-bundle", { extra: { format: "json", privacy: state.privacy ? "1" : "" } });
 });
 
 $("btn-recalc").addEventListener("click", async () => {

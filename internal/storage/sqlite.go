@@ -32,6 +32,10 @@ type UsageRecord struct {
 	Timestamp                time.Time
 	Project                  string
 	GitBranch                string
+	PricingSource            string
+	PricingModel             string
+	PricingConfidence        string
+	PricingNote              string
 }
 
 // SessionRecord represents metadata for a coding agent session.
@@ -95,6 +99,64 @@ type BudgetEvent struct {
 	CreatedAt time.Time
 }
 
+// PricingSourceStatus records health and freshness for one pricing source.
+type PricingSourceStatus struct {
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Priority    int    `json:"priority"`
+	URL         string `json:"url"`
+	LastFetchAt string `json:"last_fetch_at"`
+	ETag        string `json:"etag"`
+	SHA256      string `json:"sha256"`
+	ModelCount  int    `json:"model_count"`
+	Status      string `json:"status"`
+	LastError   string `json:"last_error"`
+	Stale       bool   `json:"stale"`
+}
+
+// PricingAuditRow describes an effective pricing rule.
+type PricingAuditRow struct {
+	Model                  string  `json:"model"`
+	PricingSource          string  `json:"pricing_source"`
+	MatchedModel           string  `json:"matched_model"`
+	MatchType              string  `json:"match_type"`
+	Priority               int     `json:"priority"`
+	InputCostPerToken      float64 `json:"input_cost_per_token"`
+	OutputCostPerToken     float64 `json:"output_cost_per_token"`
+	CacheReadCostPerToken  float64 `json:"cache_read_input_token_cost"`
+	CacheWriteCostPerToken float64 `json:"cache_creation_input_token_cost"`
+	EffectiveAt            string  `json:"effective_at"`
+	UpdatedAt              string  `json:"updated_at"`
+	Confidence             string  `json:"confidence"`
+}
+
+// AuditEvent is a local immutable operational audit event.
+type AuditEvent struct {
+	ID        int64  `json:"id"`
+	Actor     string `json:"actor"`
+	Role      string `json:"role"`
+	Action    string `json:"action"`
+	Target    string `json:"target"`
+	Params    string `json:"params"`
+	CreatedAt string `json:"created_at"`
+}
+
+// InsightEvent describes a local anomaly, watchdog, or quality signal.
+type InsightEvent struct {
+	ID        int64   `json:"id"`
+	Kind      string  `json:"kind"`
+	Severity  string  `json:"severity"`
+	Source    string  `json:"source"`
+	Model     string  `json:"model"`
+	Project   string  `json:"project"`
+	SessionID string  `json:"session_id"`
+	Metric    string  `json:"metric"`
+	Value     float64 `json:"value"`
+	Baseline  float64 `json:"baseline"`
+	Message   string  `json:"message"`
+	CreatedAt string  `json:"created_at"`
+}
+
 // Open creates or opens a SQLite database at the given path, enables WAL mode,
 // and runs schema migrations.
 func Open(path string) (*DB, error) {
@@ -128,6 +190,10 @@ func migrate(db *sql.DB) error {
 			timestamp DATETIME NOT NULL,
 			project TEXT DEFAULT '',
 			git_branch TEXT DEFAULT ''
+			,pricing_source TEXT DEFAULT ''
+			,pricing_model TEXT DEFAULT ''
+			,pricing_confidence TEXT DEFAULT ''
+			,pricing_note TEXT DEFAULT ''
 		);
 		CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage_records(timestamp);
 		CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_records(source, session_id);
@@ -181,8 +247,46 @@ func migrate(db *sql.DB) error {
 			output_cost_per_token REAL DEFAULT 0,
 			cache_read_input_token_cost REAL DEFAULT 0,
 			cache_creation_input_token_cost REAL DEFAULT 0,
-			updated_at DATETIME
+			updated_at DATETIME,
+			pricing_source TEXT DEFAULT 'unknown',
+			matched_model TEXT DEFAULT '',
+			match_type TEXT DEFAULT 'direct',
+			priority INTEGER DEFAULT 999,
+			confidence TEXT DEFAULT 'unknown'
 		);
+
+		CREATE TABLE IF NOT EXISTS pricing_sources (
+			name TEXT PRIMARY KEY,
+			kind TEXT DEFAULT '',
+			priority INTEGER DEFAULT 999,
+			url TEXT DEFAULT '',
+			last_fetch_at DATETIME,
+			etag TEXT DEFAULT '',
+			sha256 TEXT DEFAULT '',
+			model_count INTEGER DEFAULT 0,
+			status TEXT DEFAULT 'unknown',
+			last_error TEXT DEFAULT ''
+		);
+
+		CREATE TABLE IF NOT EXISTS pricing_snapshots (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			source TEXT NOT NULL,
+			sha256 TEXT NOT NULL,
+			model_count INTEGER DEFAULT 0,
+			raw_metadata TEXT DEFAULT '',
+			fetched_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_pricing_snapshots_source_time ON pricing_snapshots(source, fetched_at);
+
+		CREATE TABLE IF NOT EXISTS pricing_audit_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			event_type TEXT NOT NULL,
+			source TEXT DEFAULT '',
+			model TEXT DEFAULT '',
+			message TEXT DEFAULT '',
+			created_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_pricing_audit_created ON pricing_audit_events(created_at);
 
 		CREATE TABLE IF NOT EXISTS meta (
 			key TEXT PRIMARY KEY,
@@ -218,6 +322,90 @@ func migrate(db *sql.DB) error {
 			created_at DATETIME NOT NULL
 		);
 
+		CREATE TABLE IF NOT EXISTS audit_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			actor TEXT DEFAULT 'local',
+			role TEXT DEFAULT 'admin',
+			action TEXT NOT NULL,
+			target TEXT DEFAULT '',
+			params TEXT DEFAULT '',
+			created_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+
+		CREATE TABLE IF NOT EXISTS insight_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			kind TEXT NOT NULL,
+			severity TEXT NOT NULL,
+			source TEXT DEFAULT '',
+			model TEXT DEFAULT '',
+			project TEXT DEFAULT '',
+			session_id TEXT DEFAULT '',
+			metric TEXT DEFAULT '',
+			value REAL DEFAULT 0,
+			baseline REAL DEFAULT 0,
+			message TEXT DEFAULT '',
+			created_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_insight_kind_created ON insight_events(kind, created_at);
+
+		CREATE TABLE IF NOT EXISTS hourly_usage_aggregate (
+			bucket DATETIME NOT NULL,
+			source TEXT NOT NULL,
+			model TEXT NOT NULL,
+			project TEXT DEFAULT '',
+			git_branch TEXT DEFAULT '',
+			calls INTEGER DEFAULT 0,
+			prompts INTEGER DEFAULT 0,
+			input_tokens INTEGER DEFAULT 0,
+			output_tokens INTEGER DEFAULT 0,
+			cache_read_input_tokens INTEGER DEFAULT 0,
+			cache_creation_input_tokens INTEGER DEFAULT 0,
+			reasoning_output_tokens INTEGER DEFAULT 0,
+			cost_usd REAL DEFAULT 0,
+			PRIMARY KEY(bucket, source, model, project, git_branch)
+		);
+		CREATE INDEX IF NOT EXISTS idx_hourly_usage_bucket_source ON hourly_usage_aggregate(bucket, source);
+
+		CREATE TABLE IF NOT EXISTS daily_usage_aggregate (
+			bucket DATE NOT NULL,
+			source TEXT NOT NULL,
+			model TEXT NOT NULL,
+			project TEXT DEFAULT '',
+			git_branch TEXT DEFAULT '',
+			calls INTEGER DEFAULT 0,
+			prompts INTEGER DEFAULT 0,
+			input_tokens INTEGER DEFAULT 0,
+			output_tokens INTEGER DEFAULT 0,
+			cache_read_input_tokens INTEGER DEFAULT 0,
+			cache_creation_input_tokens INTEGER DEFAULT 0,
+			reasoning_output_tokens INTEGER DEFAULT 0,
+			cost_usd REAL DEFAULT 0,
+			PRIMARY KEY(bucket, source, model, project, git_branch)
+		);
+		CREATE INDEX IF NOT EXISTS idx_daily_usage_bucket_source ON daily_usage_aggregate(bucket, source);
+
+		CREATE TABLE IF NOT EXISTS reconciliation_imports (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			provider TEXT DEFAULT '',
+			format TEXT DEFAULT '',
+			local_cost_usd REAL DEFAULT 0,
+			provider_cost_usd REAL DEFAULT 0,
+			diff_usd REAL DEFAULT 0,
+			rows_seen INTEGER DEFAULT 0,
+			status TEXT DEFAULT '',
+			notes TEXT DEFAULT '',
+			imported_at DATETIME NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS offline_bundles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			bundle_id TEXT NOT NULL,
+			sha256 TEXT NOT NULL,
+			format TEXT DEFAULT 'json',
+			created_at DATETIME NOT NULL
+		);
+
 		DELETE FROM usage_records WHERE model = '<synthetic>';
 		DELETE FROM usage_records WHERE model = 'delivery-mirror';
 	`)
@@ -229,6 +417,15 @@ func migrate(db *sql.DB) error {
 	db.Exec("ALTER TABLE file_state ADD COLUMN scan_context TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE prompt_events ADD COLUMN model TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE prompt_events ADD COLUMN project TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE usage_records ADD COLUMN pricing_source TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE usage_records ADD COLUMN pricing_model TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE usage_records ADD COLUMN pricing_confidence TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE usage_records ADD COLUMN pricing_note TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE pricing ADD COLUMN pricing_source TEXT DEFAULT 'unknown'")
+	db.Exec("ALTER TABLE pricing ADD COLUMN matched_model TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE pricing ADD COLUMN match_type TEXT DEFAULT 'direct'")
+	db.Exec("ALTER TABLE pricing ADD COLUMN priority INTEGER DEFAULT 999")
+	db.Exec("ALTER TABLE pricing ADD COLUMN confidence TEXT DEFAULT 'unknown'")
 
 	// Versioned migrations: each runs once, tracked via meta table.
 	migrations := []struct {
@@ -316,6 +513,13 @@ func migrate(db *sql.DB) error {
 				CREATE INDEX IF NOT EXISTS idx_usage_project_source_timestamp ON usage_records(project, source, timestamp);
 				CREATE INDEX IF NOT EXISTS idx_prompt_timestamp_session ON prompt_events(timestamp, source, session_id);
 				CREATE INDEX IF NOT EXISTS idx_sessions_project_start ON sessions(project, start_time);
+			`,
+		},
+		{
+			"009_agent_ledger_governance", `
+				CREATE INDEX IF NOT EXISTS idx_usage_pricing_confidence ON usage_records(pricing_confidence);
+				CREATE INDEX IF NOT EXISTS idx_usage_branch_timestamp ON usage_records(git_branch, timestamp);
+				CREATE INDEX IF NOT EXISTS idx_usage_source_project_branch_time ON usage_records(source, project, git_branch, timestamp);
 			`,
 		},
 	}
