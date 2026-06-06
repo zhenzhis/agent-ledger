@@ -158,8 +158,8 @@ func (c *OpenCodeCollector) processDB(dbPath string) error {
 	if len(sessions) > 0 {
 		promptRows, err := srcDB.Query(`
 			SELECT session_id, time_created FROM message
-			WHERE data LIKE '%"role":"user"%'
-			ORDER BY time_created`)
+			WHERE data LIKE '%"role":"user"%' AND time_created > ?
+			ORDER BY time_created`, lastWatermark)
 		if err == nil {
 			defer promptRows.Close()
 			for promptRows.Next() {
@@ -168,12 +168,13 @@ func (c *OpenCodeCollector) processDB(dbPath string) error {
 				if promptRows.Scan(&sid, &timeCreated) == nil {
 					if s, ok := sessions[sid]; ok {
 						s.Prompts++
+						promptEvents = append(promptEvents, &storage.PromptEvent{
+							Source:    "opencode",
+							SessionID: sid,
+							Project:   s.Project,
+							Timestamp: time.UnixMilli(timeCreated),
+						})
 					}
-					promptEvents = append(promptEvents, &storage.PromptEvent{
-						Source:    "opencode",
-						SessionID: sid,
-						Timestamp: time.UnixMilli(timeCreated),
-					})
 				}
 			}
 		}

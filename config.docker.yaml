@@ -36,3 +36,23 @@ storage:
 pricing:
   # Prices are fetched from GitHub (litellm). Set HTTPS_PROXY env var if this fails.
   sync_interval: 1h
+
+privacy:
+  redact_paths: false
+  hash_session_ids: false
+  hide_project_names: false
+  screenshot_mode: false
+
+projects:
+  aliases: {}
+  exclude: []
+
+budgets:
+  enabled: false
+  rules:
+    # - name: daily-global-cost
+    #   period: day
+    #   scope: global
+    #   metric: cost_usd
+    #   limit: 25
+    #   warn_ratio: 0.8

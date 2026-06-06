@@ -31,8 +31,8 @@ type claudeEntry struct {
 }
 
 type claudeMessage struct {
-	Role  string      `json:"role"`
-	Model string      `json:"model"`
+	Role  string       `json:"role"`
+	Model string       `json:"model"`
 	Usage *claudeUsage `json:"usage"`
 }
 

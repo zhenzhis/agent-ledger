@@ -91,7 +91,7 @@ func (c *PiCollector) processFile(path, project string) error {
 			case "user":
 				prompts++
 				promptEvents = append(promptEvents, &storage.PromptEvent{
-					Source: "pi", SessionID: sessionID, Timestamp: ts,
+					Source: "pi", SessionID: sessionID, Model: currentModel, Project: project, Timestamp: ts,
 				})
 			case "assistant":
 				if msg.Usage == nil {

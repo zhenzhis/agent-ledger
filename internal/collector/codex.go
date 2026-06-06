@@ -164,7 +164,7 @@ func (c *CodexCollector) processFile(path string) error {
 			if ri.Role == "user" && ri.Type != "function_call_output" {
 				prompts++
 				promptEvents = append(promptEvents, &storage.PromptEvent{
-					Source: "codex", SessionID: sessionID, Timestamp: ts,
+					Source: "codex", SessionID: sessionID, Model: model, Project: filepath.Base(cwd), Timestamp: ts,
 				})
 			}
 
@@ -184,6 +184,7 @@ func (c *CodexCollector) processFile(path string) error {
 					CacheReadInputTokens:  u.CachedInputTokens,
 					ReasoningOutputTokens: u.ReasoningOutputTokens,
 					Timestamp:             ts,
+					Project:               filepath.Base(cwd),
 				}
 				records = append(records, rec)
 			}

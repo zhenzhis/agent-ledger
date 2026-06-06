@@ -37,12 +37,28 @@ const I18N = {
     totalCost: "Total Cost",
     sessions: "Sessions",
     prompts: "Prompts",
+    budget: "Budget",
+    health: "Health",
     activityMatrix: "Activity Matrix",
     tokenThroughput: "Token Throughput",
     costOverTime: "Cost Trend",
     modelAllocation: "Model Allocation",
+    budgetStatus: "Budget Status",
+    ingestionHealth: "Ingestion Health",
     sessionLedger: "Session Ledger",
     filterProject: "Filter project, path, or branch...",
+    scanNow: "Scan",
+    recalcCosts: "Costs",
+    resetScan: "Reset",
+    exportCsv: "CSV",
+    reportMd: "Report",
+    privacyOn: "Privacy On",
+    privacyOff: "Privacy",
+    scanStarted: "Scan started",
+    scanDone: "Scan completed",
+    recalcDone: "Cost rebuild completed",
+    resetConfirm: "Reset scan state and usage for current source, then rescan?",
+    resetNeedsSource: "Choose one source before reset",
     today: "Today",
     thisWeek: "This Week",
     thisMonth: "This Month",
@@ -92,6 +108,16 @@ const I18N = {
     of: "of",
     updated: "Updated",
     refreshFailed: "Refresh failed",
+    actionFailed: "Action failed",
+    disabled: "disabled",
+    missingPath: "missing path",
+    unreadablePath: "unreadable path",
+    lastError: "last error",
+    noBudgets: "No budget rules configured",
+    noHealth: "No scan health yet",
+    warning: "warning",
+    critical: "critical",
+    ok: "ok",
     unknownModel: "Unknown model",
     rows: "rows",
     unitMin: "min",
@@ -113,12 +139,28 @@ const I18N = {
     totalCost: "总费用",
     sessions: "会话数",
     prompts: "Prompt 数",
+    budget: "预算",
+    health: "健康",
     activityMatrix: "活动矩阵",
     tokenThroughput: "Token 吞吐",
     costOverTime: "费用趋势",
     modelAllocation: "模型分布",
+    budgetStatus: "预算状态",
+    ingestionHealth: "采集健康",
     sessionLedger: "会话账本",
     filterProject: "筛选项目、路径或分支...",
+    scanNow: "扫描",
+    recalcCosts: "费用",
+    resetScan: "重扫",
+    exportCsv: "CSV",
+    reportMd: "报告",
+    privacyOn: "隐私开启",
+    privacyOff: "隐私",
+    scanStarted: "开始扫描",
+    scanDone: "扫描完成",
+    recalcDone: "费用重建完成",
+    resetConfirm: "清理当前来源的扫描状态和用量后重新扫描？",
+    resetNeedsSource: "清理重扫前请选择单个来源",
     today: "今天",
     thisWeek: "本周",
     thisMonth: "本月",
@@ -168,6 +210,16 @@ const I18N = {
     of: "/",
     updated: "已更新",
     refreshFailed: "刷新失败",
+    actionFailed: "操作失败",
+    disabled: "已禁用",
+    missingPath: "路径不存在",
+    unreadablePath: "路径不可读",
+    lastError: "最近错误",
+    noBudgets: "未配置预算规则",
+    noHealth: "暂无采集健康状态",
+    warning: "警告",
+    critical: "严重",
+    ok: "正常",
     unknownModel: "未知模型",
     rows: "行",
     unitMin: "分钟",
@@ -189,9 +241,15 @@ const SOURCES = [
   ["pi", "pi"],
 ];
 const KNOWN_SOURCES = new Set(SOURCES.map(([value]) => value).filter(Boolean));
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const urlOptions = new URLSearchParams(window.location.search);
+const privacyParam = urlOptions.get("privacy");
+
+function flagEnabled(value) {
+  return value === "1" || value === "true" || value === "yes";
+}
 
 let state = {
   lang: localStorage.getItem("au-lang") || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en"),
@@ -204,17 +262,21 @@ let state = {
   customTo: localStorage.getItem("au-customTo") || "",
   source: localStorage.getItem("au-source") || "",
   model: localStorage.getItem("au-model") || "",
+  project: localStorage.getItem("au-project") || "",
+  privacy: privacyParam === null ? localStorage.getItem("au-privacy") === "true" : flagEnabled(privacyParam),
 };
 
 let charts = {};
 let autoTimer = null;
 let statusTimer = null;
 let allSessions = [];
+let sessionTotal = 0;
 let sessionSort = { key: "start_time", dir: "desc" };
 let sessionPage = 1;
 let expandedSessions = new Set();
 let sessionKeyToID = new Map();
 let isFetching = false;
+let projectFilterTimer = null;
 
 function t(key) {
   return (I18N[state.lang] || I18N.en)[key] || key;
@@ -346,7 +408,7 @@ function updateRangeCaption() {
   $("to").value = state.customTo || range.to;
 }
 
-async function api(path, opts = {}) {
+function buildParams(opts = {}) {
   const range = getTimeRange();
   const params = new URLSearchParams({
     from: range.from,
@@ -356,7 +418,16 @@ async function api(path, opts = {}) {
   if (state.granularity) params.set("granularity", state.granularity);
   if (state.source) params.set("source", state.source);
   if (state.model && !opts.skipModel) params.set("model", state.model);
+  if (state.project) params.set("project", state.project);
+  if (state.privacy) params.set("privacy", "1");
+  Object.entries(opts.extra || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  });
+  return params;
+}
 
+async function api(path, opts = {}) {
+  const params = buildParams(opts);
   const res = await fetch(`/api/${path}?${params.toString()}`);
   let body = null;
   try {
@@ -368,6 +439,24 @@ async function api(path, opts = {}) {
     throw new Error((body && body.error) || `${path}: HTTP ${res.status}`);
   }
   return body;
+}
+
+async function postApi(path, opts = {}) {
+  const params = buildParams(opts);
+  const res = await fetch(`/api/${path}?${params.toString()}`, { method: "POST" });
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (err) {
+    if (res.ok) return {};
+  }
+  if (!res.ok) throw new Error((body && body.error) || `${path}: HTTP ${res.status}`);
+  return body || {};
+}
+
+function downloadApi(path, opts = {}) {
+  const params = buildParams(opts);
+  window.location.href = `/api/${path}?${params.toString()}`;
 }
 
 function showStatus(message, kind = "info") {
@@ -410,6 +499,86 @@ function renderStats(stats) {
   setText("s-cost-per-call", `${fmtCost(calls ? totalCost / calls : 0)} ${t("perCall")}`);
   setText("s-calls", `${fmt(calls)} ${t("calls")}`);
   setText("s-cache-hit", `${(cacheHit * 100).toFixed(1)}% ${t("cache")}`);
+}
+
+function renderBudgets(payload) {
+  const rules = (payload && payload.rules) || [];
+  const list = $("budget-list");
+  const fragment = document.createDocumentFragment();
+  let worst = "ok";
+  if (rules.length === 0) {
+    fragment.appendChild(createMessage(t("noBudgets"), "ops-empty"));
+    setText("s-budget", t("ok").toUpperCase());
+    setText("s-budget-sub", t("noBudgets"));
+    setText("budget-meta", payload && payload.enabled ? "0" : t("disabled"));
+  } else {
+    rules.forEach((rule) => {
+      if (rule.severity === "critical") worst = "critical";
+      else if (rule.severity === "warning" && worst !== "critical") worst = "warning";
+      const row = document.createElement("div");
+      row.className = `ops-row severity-${rule.severity || "ok"}`;
+      const main = document.createElement("div");
+      main.className = "ops-main";
+      const title = document.createElement("strong");
+      title.textContent = rule.name || "-";
+      const sub = document.createElement("span");
+      sub.textContent = `${rule.scope || "global"}${rule.match ? `:${rule.match}` : ""} · ${rule.metric || "cost_usd"}`;
+      main.append(title, sub);
+      const value = document.createElement("div");
+      value.className = "ops-value";
+      const pct = Number(rule.ratio || 0) * 100;
+      value.textContent = `${pct.toFixed(0)}%`;
+      row.append(main, value);
+      fragment.appendChild(row);
+    });
+    const maxRule = rules.reduce((best, row) => Number(row.ratio || 0) > Number((best && best.ratio) || 0) ? row : best, null);
+    setText("s-budget", t(worst).toUpperCase());
+    setText("s-budget-sub", maxRule ? `${maxRule.name}: ${(Number(maxRule.ratio || 0) * 100).toFixed(0)}%` : "-");
+    setText("budget-meta", `${rules.length} rules`);
+  }
+  list.replaceChildren(fragment);
+}
+
+function renderHealth(rows) {
+  const health = rows || [];
+  const list = $("health-list");
+  const fragment = document.createDocumentFragment();
+  let problemCount = 0;
+  if (health.length === 0) {
+    fragment.appendChild(createMessage(t("noHealth"), "ops-empty"));
+    setText("s-health", t("ok").toUpperCase());
+    setText("s-health-sub", t("noHealth"));
+    setText("health-meta", "0");
+  } else {
+    health.forEach((row) => {
+      const pathIssues = (row.path_status || []).filter((p) => !p.exists || !p.readable);
+      const hasError = Boolean(row.last_error && row.enabled);
+      const disabled = !row.enabled;
+      if ((pathIssues.length > 0 || hasError) && !disabled) problemCount += 1;
+      const status = disabled ? "disabled" : hasError || pathIssues.length ? "warning" : "ok";
+      const item = document.createElement("div");
+      item.className = `ops-row severity-${status}`;
+      const main = document.createElement("div");
+      main.className = "ops-main";
+      const title = document.createElement("strong");
+      title.textContent = row.source || "-";
+      const detail = document.createElement("span");
+      if (disabled) detail.textContent = t("disabled");
+      else if (hasError) detail.textContent = `${t("lastError")}: ${row.last_error}`;
+      else if (pathIssues.length) detail.textContent = pathIssues.map((p) => p.exists ? t("unreadablePath") : t("missingPath")).join(", ");
+      else detail.textContent = `${fmt(row.records_inserted || 0)} records · ${fmt(row.duration_ms || 0)} ms`;
+      main.append(title, detail);
+      const value = document.createElement("div");
+      value.className = "ops-value";
+      value.textContent = disabled ? "-" : fmt(row.files_seen || 0);
+      item.append(main, value);
+      fragment.appendChild(item);
+    });
+    setText("s-health", problemCount ? String(problemCount) : t("ok").toUpperCase());
+    setText("s-health-sub", `${health.length} sources`);
+    setText("health-meta", `${problemCount} issues`);
+  }
+  list.replaceChildren(fragment);
 }
 
 function renderActivityMatrix(tokensTime) {
@@ -633,12 +802,15 @@ async function refresh(options = {}) {
   updateRangeCaption();
 
   try {
-    const [stats, costModel, costTime, tokensTime, sessions] = await Promise.all([
+    const sessionOffset = (sessionPage - 1) * PAGE_SIZE;
+    const [stats, costModel, costTime, tokensTime, sessions, health, budgets] = await Promise.all([
       api("stats"),
       api("cost-by-model", { skipModel: true }),
       api("cost-over-time"),
       api("tokens-over-time"),
-      api("sessions"),
+      api("sessions", { extra: { limit: PAGE_SIZE, offset: sessionOffset } }),
+      api("health/ingestion"),
+      api("budgets/status"),
     ]);
 
     updateModelFilter(costModel || []);
@@ -649,7 +821,11 @@ async function refresh(options = {}) {
     renderCostTrend(costTime || [], modelColorMap);
     renderModelAllocation(costModel || [], modelColorMap);
 
-    allSessions = sessions || [];
+    renderHealth(health || []);
+    renderBudgets(budgets || {});
+
+    allSessions = (sessions && sessions.rows) || [];
+    sessionTotal = Number((sessions && sessions.total) || allSessions.length);
     renderSessionTable();
     if (!options.silent) showStatus(`${t("updated")} ${new Date().toLocaleTimeString()}`);
   } catch (err) {
@@ -732,10 +908,10 @@ function renderSessionTable() {
     return String(va).toLowerCase().localeCompare(String(vb).toLowerCase()) * dir;
   });
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(sessionTotal / PAGE_SIZE));
   if (sessionPage > totalPages) sessionPage = totalPages;
   const start = (sessionPage - 1) * PAGE_SIZE;
-  const page = sorted.slice(start, start + PAGE_SIZE);
+  const page = sorted;
   const tbody = $("session-table");
   const fragment = document.createDocumentFragment();
   sessionKeyToID = new Map();
@@ -750,8 +926,9 @@ function renderSessionTable() {
     page.forEach((session, index) => {
       const sid = session.session_id || "";
       const key = `s${start + index}`;
-      sessionKeyToID.set(key, sid);
-      const isExpanded = expandedSessions.has(sid);
+      const expandKey = `${session.source || ""}\u0000${sid}`;
+      sessionKeyToID.set(key, { sid, source: session.source || "" });
+      const isExpanded = expandedSessions.has(expandKey);
       const tr = document.createElement("tr");
       tr.className = `session-row${isExpanded ? " expanded" : ""}`;
 
@@ -774,6 +951,7 @@ function renderSessionTable() {
       button.dataset.sessionKey = key;
       button.setAttribute("aria-expanded", isExpanded ? "true" : "false");
       button.setAttribute("aria-label", `${t("model")} ${sid}`);
+      button.disabled = state.privacy;
       const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       icon.setAttribute("viewBox", "0 0 24 24");
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -787,14 +965,14 @@ function renderSessionTable() {
       if (isExpanded) {
         const detail = buildDetailShell();
         fragment.appendChild(detail.row);
-        fetchAndFillDetail(detail.content, sid);
+        fetchAndFillDetail(detail.content, sid, session.source || "");
       }
     });
   }
 
   tbody.replaceChildren(fragment);
-  setText("ledger-meta", `${filtered.length} ${t("rows")}`);
-  renderPagination(sorted.length, start, totalPages);
+  setText("ledger-meta", `${sessionTotal} ${t("rows")}`);
+  renderPagination(sessionTotal, start, totalPages);
   syncSortHeaders();
 }
 
@@ -843,13 +1021,14 @@ function buildDetailTable(data) {
   return table;
 }
 
-async function fetchAndFillDetail(content, sid) {
+async function fetchAndFillDetail(content, sid, source) {
   if (!sid) {
     content.replaceChildren(createMessage(t("noDetails"), "empty-state"));
     return;
   }
   try {
     const params = new URLSearchParams({ session_id: sid });
+    if (source) params.set("source", source);
     const res = await fetch(`/api/session-detail?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -955,6 +1134,11 @@ function buildControls() {
   });
   $("preset-bar").replaceChildren(presetFragment);
   $("filter-project").placeholder = t("filterProject");
+  $("filter-project-global").placeholder = t("filterProject");
+  $("filter-project-global").value = state.project;
+  $("privacy-status").textContent = state.privacy ? t("privacyOn") : t("privacyOff");
+  $("btn-privacy").classList.toggle("active", state.privacy);
+  $("btn-reset-scan").disabled = !state.source;
   updateRangeCaption();
   applyAutoRefresh();
   syncSortHeaders();
@@ -997,6 +1181,7 @@ $("filter-source").addEventListener("change", (e) => {
   persist("source", e.target.value);
   persist("model", "");
   sessionPage = 1;
+  $("btn-reset-scan").disabled = !state.source;
   refresh();
 });
 
@@ -1004,6 +1189,13 @@ $("filter-model").addEventListener("change", (e) => {
   persist("model", e.target.value);
   sessionPage = 1;
   refresh();
+});
+
+$("filter-project-global").addEventListener("input", (e) => {
+  persist("project", e.target.value.trim());
+  sessionPage = 1;
+  if (projectFilterTimer) clearTimeout(projectFilterTimer);
+  projectFilterTimer = setTimeout(() => refresh(), 400);
 });
 
 $("filter-project").addEventListener("input", () => {
@@ -1036,6 +1228,60 @@ $("btn-refresh").addEventListener("click", () => {
   applyAutoRefresh();
 });
 
+$("btn-scan").addEventListener("click", async () => {
+  try {
+    showStatus(t("scanStarted"));
+    await postApi("scan");
+    await refresh();
+    showStatus(t("scanDone"));
+  } catch (err) {
+    showStatus(`${t("actionFailed")}: ${err.message}`, "error");
+  }
+});
+
+$("btn-recalc").addEventListener("click", async () => {
+  try {
+    await postApi("recalculate-costs");
+    await refresh();
+    showStatus(t("recalcDone"));
+  } catch (err) {
+    showStatus(`${t("actionFailed")}: ${err.message}`, "error");
+  }
+});
+
+$("btn-reset-scan").addEventListener("click", async () => {
+  if (!state.source) {
+    showStatus(t("resetNeedsSource"), "error");
+    return;
+  }
+  if (!window.confirm(t("resetConfirm"))) return;
+  try {
+    showStatus(t("scanStarted"));
+    await postApi("scan", { extra: { source: state.source, reset: "true" } });
+    sessionPage = 1;
+    expandedSessions.clear();
+    await refresh();
+    showStatus(t("scanDone"));
+  } catch (err) {
+    showStatus(`${t("actionFailed")}: ${err.message}`, "error");
+  }
+});
+
+$("btn-export").addEventListener("click", () => {
+  downloadApi("export", { extra: { type: "sessions", format: "csv", limit: 10000 } });
+});
+
+$("btn-report").addEventListener("click", () => {
+  downloadApi("report", { extra: { format: "markdown" } });
+});
+
+$("btn-privacy").addEventListener("click", () => {
+  persist("privacy", !state.privacy);
+  expandedSessions.clear();
+  buildControls();
+  refresh();
+});
+
 $("btn-auto-refresh").addEventListener("click", () => {
   persist("autoRefresh", !state.autoRefresh);
   applyAutoRefresh();
@@ -1044,11 +1290,14 @@ $("btn-auto-refresh").addEventListener("click", () => {
 $("session-table").addEventListener("click", (e) => {
   const button = e.target.closest(".expand-btn");
   if (!button) return;
-  const sid = sessionKeyToID.get(button.dataset.sessionKey) || "";
+  const ref = sessionKeyToID.get(button.dataset.sessionKey) || {};
+  const sid = ref.sid || "";
+  const source = ref.source || "";
+  const expandKey = `${source}\u0000${sid}`;
   const row = button.closest(".session-row");
   const next = row ? row.nextElementSibling : null;
-  if (expandedSessions.has(sid)) {
-    expandedSessions.delete(sid);
+  if (expandedSessions.has(expandKey)) {
+    expandedSessions.delete(expandKey);
     button.classList.remove("open");
     button.setAttribute("aria-expanded", "false");
     if (row) row.classList.remove("expanded");
@@ -1056,14 +1305,14 @@ $("session-table").addEventListener("click", (e) => {
     return;
   }
 
-  expandedSessions.add(sid);
+  expandedSessions.add(expandKey);
   button.classList.add("open");
   button.setAttribute("aria-expanded", "true");
   if (row) {
     row.classList.add("expanded");
     const detail = buildDetailShell();
     row.after(detail.row);
-    fetchAndFillDetail(detail.content, sid);
+    fetchAndFillDetail(detail.content, sid, source);
   }
 });
 

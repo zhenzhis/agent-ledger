@@ -15,12 +15,16 @@ type Config struct {
 	Collectors CollectorConfigs `yaml:"collectors"`
 	Storage    StorageConfig    `yaml:"storage"`
 	Pricing    PricingConfig    `yaml:"pricing"`
+	Privacy    PrivacyConfig    `yaml:"privacy"`
+	Projects   ProjectsConfig   `yaml:"projects"`
+	Budgets    BudgetConfig     `yaml:"budgets"`
 }
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
 	Port        int    `yaml:"port"`
 	BindAddress string `yaml:"bind_address"`
+	AuthToken   string `yaml:"auth_token"`
 }
 
 // CollectorConfigs groups configuration for all data source collectors.
@@ -48,6 +52,37 @@ type StorageConfig struct {
 // PricingConfig holds model pricing sync settings.
 type PricingConfig struct {
 	SyncInterval time.Duration `yaml:"sync_interval"`
+}
+
+// PrivacyConfig controls optional output redaction for UI, reports, and exports.
+type PrivacyConfig struct {
+	RedactPaths      bool `yaml:"redact_paths"`
+	HashSessionIDs   bool `yaml:"hash_session_ids"`
+	HideProjectNames bool `yaml:"hide_project_names"`
+	ScreenshotMode   bool `yaml:"screenshot_mode"`
+}
+
+// ProjectsConfig controls local project naming and exclusion.
+type ProjectsConfig struct {
+	Aliases map[string]string `yaml:"aliases"`
+	Exclude []string          `yaml:"exclude"`
+}
+
+// BudgetConfig groups local budget and alert rules.
+type BudgetConfig struct {
+	Enabled bool         `yaml:"enabled"`
+	Rules   []BudgetRule `yaml:"rules"`
+}
+
+// BudgetRule defines a local token, cost, or prompt budget threshold.
+type BudgetRule struct {
+	Name      string  `yaml:"name"`
+	Period    string  `yaml:"period"`
+	Scope     string  `yaml:"scope"`
+	Match     string  `yaml:"match"`
+	Metric    string  `yaml:"metric"`
+	Limit     float64 `yaml:"limit"`
+	WarnRatio float64 `yaml:"warn_ratio"`
 }
 
 func expandPath(p string) string {
@@ -100,6 +135,12 @@ func DefaultConfig() *Config {
 		},
 		Storage: StorageConfig{Path: "./agent-usage.db"},
 		Pricing: PricingConfig{SyncInterval: time.Hour},
+		Privacy: PrivacyConfig{},
+		Projects: ProjectsConfig{
+			Aliases: map[string]string{},
+			Exclude: []string{},
+		},
+		Budgets: BudgetConfig{Enabled: false},
 	}
 }
 
@@ -151,5 +192,8 @@ func Load(path string) (*Config, error) {
 		cfg.Collectors.Pi.Paths[i] = expandPath(p)
 	}
 	cfg.Storage.Path = expandPath(cfg.Storage.Path)
+	if cfg.Projects.Aliases == nil {
+		cfg.Projects.Aliases = map[string]string{}
+	}
 	return cfg, nil
 }

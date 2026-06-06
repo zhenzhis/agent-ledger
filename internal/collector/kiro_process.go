@@ -180,6 +180,8 @@ func (c *KiroCollector) processSQLite(dbPath string) error {
 			prompts = append(prompts, &storage.PromptEvent{
 				Source:    "kiro",
 				SessionID: conversationID,
+				Model:     recordModel,
+				Project:   project,
 				Timestamp: ts,
 			})
 			sessionPrompts[conversationID]++
@@ -325,7 +327,7 @@ func (c *KiroCollector) processSession(jsonPath string) error {
 	}
 
 	jsonlPath := strings.TrimSuffix(jsonPath, ".json") + ".jsonl"
-	promptEvents, totalOutputTokens, err := c.parseJSONL(jsonlPath, sessionID)
+	promptEvents, totalOutputTokens, err := c.parseJSONL(jsonlPath, sessionID, model, project)
 	if err != nil {
 		return err
 	}
@@ -414,7 +416,7 @@ func (c *KiroCollector) processSession(jsonPath string) error {
 	return c.db.SetFileState(jsonPath, info.Size(), info.Size(), nil)
 }
 
-func (c *KiroCollector) parseJSONL(jsonlPath, sessionID string) ([]*storage.PromptEvent, int64, error) {
+func (c *KiroCollector) parseJSONL(jsonlPath, sessionID, model, project string) ([]*storage.PromptEvent, int64, error) {
 	f, err := os.Open(jsonlPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -450,6 +452,8 @@ func (c *KiroCollector) parseJSONL(jsonlPath, sessionID string) ([]*storage.Prom
 			events = append(events, &storage.PromptEvent{
 				Source:    "kiro",
 				SessionID: sessionID,
+				Model:     model,
+				Project:   project,
 				Timestamp: ts.UTC(),
 			})
 		case "AssistantMessage":

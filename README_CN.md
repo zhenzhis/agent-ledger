@@ -1,24 +1,27 @@
 # agent-usage
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![License: MIT](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)]()
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://ghcr.io/zhenzhis/agent-usage)
 
-面向团队本地 Tokens 统计的安全加固版 AI 编程工具用量与费用追踪器。  
+面向团队/企业/个人的本地 AI 编程工具用量、费用、预算与健康控制台。
+
 单二进制 + SQLite —— 本地优先、易审计、默认只暴露 localhost 仪表板。
 
 **[English](README.md)**
 
-统一采集 Claude Code、Codex、OpenClaw、OpenCode、kiro、Pi 的本地会话数据，自动计算费用，通过 Web 仪表板展示 token 用量、费用趋势和会话明细。
+统一采集 Claude Code、Codex、OpenClaw、OpenCode、kiro、Pi 的本地会话数据，自动计算费用，并通过黑白灰运营仪表板展示采集健康、预算状态、导出报表和会话明细。
 
 ## 二开说明
 
-本仓库是 **ZhenZhi** 基于 [briqt/agent-usage](https://github.com/briqt/agent-usage) 的二次开发版本。我们保持核心采集逻辑和 API 模型与上游一致，并在此基础上加入安全加固、本地部署默认边界、固定 CI、前端资源本地化，以及更适合量化/研发团队使用的运营型仪表板。
+本仓库是 **ZhenZhi** 基于 [briqt/agent-usage](https://github.com/briqt/agent-usage) 的二次开发版本。我们保持核心采集模型尽量贴近上游，并在此基础上加入本地部署安全默认值、source-scoped 统计、采集健康、预算告警、导出报表、隐私模式、固定 CI、前端资源本地化，以及黑白灰运营型仪表板。
 
 感谢 [briqt/agent-usage](https://github.com/briqt/agent-usage/) 原作者和贡献者提供清晰、轻量的单二进制基础。
 
 ![仪表板](docs/dashboard.png)
+
+截图已开启隐私模式，本地路径、项目名、分支和 session 标识均会隐藏或脱敏。
 
 ## 特性
 
@@ -27,6 +30,10 @@
 - 🗄️ **SQLite 存储** —— 单文件、零运维、数据可修正
 - 📊 **Web 仪表板** —— 暗色主题 UI，ECharts 图表：费用分布、token 趋势、会话列表
 - 🔄 **增量扫描** —— 监听新会话，自动去重
+- 🧭 **采集健康** —— 来源路径检查、最近扫描时间、耗时、watermark、写入行数和最近错误
+- 🚦 **本地预算** —— 按日/周/月，基于 global/source/model/project 设置费用、tokens 或 prompts 阈值
+- 📤 **导出与报表** —— 基于当前筛选导出 CSV/JSON，生成 Markdown 日报/周报
+- 🔒 **隐私模式** —— 截图或共享时隐藏路径、hash session id、隐藏项目名和分支
 - 📦 **单二进制** —— `go:embed` 将 Web UI 打包进可执行文件
 - 🖥️ **跨平台** —— Linux、macOS、Windows
 
@@ -37,6 +44,9 @@
 - **前端供应链收敛** —— ECharts vendored 到内嵌静态资源中，运行时不加载 CDN 脚本或 Google Fonts。
 - **扫描完整性** —— JSONL collector 在写入和推进 offset 前检查 scanner 错误，避免超长行或 I/O 错误导致静默漏算。
 - **OpenCode 来源费用保留** —— 优先写入 OpenCode 每条 assistant message 自带的 cost，自定义 GLM/DeepSeek 等 provider 不再显示为 `$0`。
+- **Source-scoped 身份** —— usage、session、prompt 去重使用 `(source, session_id)`，避免不同 agent 的 session 冲突。
+- **运营控制** —— 手动扫描、费用重建、单来源清理重扫、采集健康、预算状态、导出、报表和隐私模式。
+- **服务端分页** —— 会话账本只拉取当前页，不再把全量数据库加载到浏览器。
 - **价格同步边界** —— litellm pricing fetch 检查 HTTP 状态、设置 User-Agent，并限制响应体大小。
 - **固定自动化依赖** —— release/docker actions 使用 SHA pin，CI 执行 tests、vet 和 `govulncheck@v1.3.0`。
 - **黑白灰运营 UI/UX** —— 简洁单色、高信息密度，包含活动矩阵、Token 吞吐、模型分布、费用趋势和可展开会话账本。
@@ -88,6 +98,7 @@ npx skills add zhenzhis/agent-usage -y
 server:
   port: 9800
   bind_address: "127.0.0.1"  # 远程访问请改为 "0.0.0.0"
+  # auth_token: "change-me"  # 可选：API Bearer Token
 
 collectors:
   claude:
@@ -121,6 +132,28 @@ storage:
 
 pricing:
   sync_interval: 1h  # 从 GitHub 获取价格；如失败请设置 HTTPS_PROXY 环境变量
+
+privacy:
+  redact_paths: false
+  hash_session_ids: false
+  hide_project_names: false
+  screenshot_mode: false
+
+projects:
+  aliases:
+    # "/Users/me/work/agent-usage": "agent-usage"
+  exclude:
+    # - "/tmp"
+
+budgets:
+  enabled: false
+  rules:
+    # - name: daily-global-cost
+    #   period: day       # day | week | month
+    #   scope: global     # global | source | model | project
+    #   metric: cost_usd  # cost_usd | tokens | prompts
+    #   limit: 25
+    #   warn_ratio: 0.8
 ```
 
 配置文件搜索顺序：`--config` 参数 > `/etc/agent-usage/config.yaml` > `./config.yaml`。
@@ -170,8 +203,11 @@ open http://localhost:9800
 
 Web 仪表板提供：
 
-- **控制面板** —— 时间预设、日期范围、粒度、来源/模型筛选、主题、语言和自动刷新
-- **KPI 条** —— 总 Tokens、总费用、会话数、Prompt 数、调用数、缓存命中率和单次调用指标
+- **控制面板** —— 时间预设、日期范围、粒度、来源/模型/项目筛选、主题、语言和自动刷新
+- **操作按钮** —— 刷新、立即扫描、费用重建、当前来源清理重扫、CSV 导出、Markdown 报告和隐私模式
+- **KPI 条** —— 总 Tokens、总费用、会话数、Prompt 数、预算状态、采集健康、调用数、缓存命中率和单次调用指标
+- **采集健康** —— 路径可读性、最近扫描、耗时、watermark、写入行数和错误
+- **预算状态** —— 本地 day/week/month 阈值，显示 warning/critical 状态
 - **活动矩阵** —— 类 GitHub commit heatmap 的 Token 活动分布，按输入/输出/缓存通道拆分
 - **Token 吞吐** —— 输入、输出、缓存读取、缓存写入的堆叠柱状图
 - **费用趋势** —— 按模型堆叠，使用稳定灰阶序列
@@ -209,9 +245,13 @@ agent-usage
 │   │   ├── sqlite.go           # 数据库初始化 + 迁移
 │   │   ├── api.go              # 查询类型 + 读取操作
 │   │   ├── queries.go          # 写入操作
+│   │   ├── ops.go              # 采集健康、重置、预算事件
 │   │   └── costs.go            # 费用重算 + 回填
 │   └── server/
 │       ├── server.go           # HTTP 服务 + REST API
+│       ├── budget.go           # 本地预算评估
+│       ├── ops.go              # 扫描/导出/报表接口
+│       ├── privacy.go          # 隐私脱敏辅助
 │       └── static/             # 内嵌 dashboard、CSS、JS、vendored ECharts
 └── agent-usage.db              # SQLite 数据库（运行时生成）
 ```
@@ -219,8 +259,10 @@ agent-usage
 安全边界：
 
 - Docker 示例中的会话目录均以只读方式挂载。
-- Dashboard 无认证，因此默认只绑定 localhost。
+- Dashboard 默认只绑定 localhost。配置 `server.auth_token` 后，API 需要 `Authorization: Bearer <token>`。
+- 无 auth token 时，手动扫描/清理重扫接口只允许本机请求。
 - 静态资源内嵌到二进制，运行时 UI 不请求第三方脚本或字体。
+- 隐私模式可在 API、导出和截图中 hash session id 并隐藏路径/项目/分支。
 - pricing sync 是正常运行时唯一预期的出站请求。
 
 ## 费用计算
@@ -238,7 +280,7 @@ agent-usage
 
 ## API 接口
 
-所有接口支持 `from` 和 `to`（YYYY-MM-DD）查询参数。可选：`source`（`claude`、`codex`、`openclaw`、`opencode`、`kiro`、`pi`）按来源筛选，`model` 按模型名筛选，`granularity`（`1m`、`30m`、`1h`、`6h`、`12h`、`1d`、`1w`、`1M`）用于时序接口。
+所有读取接口支持 `from` 和 `to`（YYYY-MM-DD）查询参数。可选：`source`、`model`、`project`、`privacy=1`。时序接口额外支持 `granularity`（`1m`、`30m`、`1h`、`6h`、`12h`、`1d`、`1w`、`1M`）。内部时间范围使用半开区间：`[from, to_next_day)`。
 
 | 接口 | 说明 |
 |------|------|
@@ -246,8 +288,15 @@ agent-usage
 | `GET /api/cost-by-model` | 按模型分组的费用 |
 | `GET /api/cost-over-time` | 费用时序（支持 `granularity`） |
 | `GET /api/tokens-over-time` | Token 用量时序（支持 `granularity`） |
-| `GET /api/sessions` | 会话列表及费用/token 汇总 |
-| `GET /api/session-detail?session_id=ID` | 单个会话的模型明细 |
+| `GET /api/sessions?limit=100&offset=0` | 分页会话列表及费用/token 汇总 |
+| `GET /api/session-detail?source=codex&session_id=ID` | 单个来源/会话的模型明细 |
+| `GET /api/health/ingestion` | 每个来源的采集健康 |
+| `GET /api/budgets/status` | 本地预算状态 |
+| `GET /api/export?type=sessions&format=csv` | sessions、daily、models 的 CSV/JSON 导出 |
+| `GET /api/report?format=markdown` | Markdown 用量报告 |
+| `POST /api/scan?source=codex` | 手动扫描；不传 source 表示扫描全部启用来源 |
+| `POST /api/scan?source=codex&reset=true` | 清理单个来源的扫描状态/用量并重扫 |
+| `POST /api/recalculate-costs` | 基于本地 pricing 重建零费用记录 |
 
 日期格式错误或日期范围倒置时返回 `400` JSON 错误，包含具体原因。
 
@@ -261,6 +310,8 @@ agent-usage
 ## Docker 详情
 
 默认 compose 文件会从源码构建镜像，确保本地安全修复被打包。发布工作流会把多架构镜像（amd64 + arm64）发布到当前仓库的 GHCR 命名空间。
+
+如需基于 GHCR 镜像部署，可参考 `docker-compose.example.yml`。SBOM/provenance 发布仍是计划项；在工作流正式启用前，release notes 不应声称已提供签名 provenance。
 
 默认 `docker-compose.yml` 以 UID 1000 运行。如果你的用户 UID 不同，请修改 `user:` 字段：
 

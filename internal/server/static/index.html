@@ -47,11 +47,33 @@
         <span data-i18n="model">Model</span>
         <select id="filter-model"></select>
       </label>
+      <label class="field model-field">
+        <span data-i18n="project">Project</span>
+        <input type="text" id="filter-project-global" autocomplete="off" placeholder="Project / workspace">
+      </label>
 
       <div class="action-cluster">
         <button class="icon-btn primary" id="btn-refresh" type="button">
           <svg class="spin-target" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.66M20 4v6h-6"/></svg>
           <span data-i18n="refresh">Refresh</span>
+        </button>
+        <button class="icon-btn" id="btn-scan" type="button" aria-label="Scan now">
+          <span data-i18n="scanNow">Scan</span>
+        </button>
+        <button class="icon-btn" id="btn-recalc" type="button" aria-label="Recalculate costs">
+          <span data-i18n="recalcCosts">Costs</span>
+        </button>
+        <button class="icon-btn danger" id="btn-reset-scan" type="button" aria-label="Reset and rescan current source">
+          <span data-i18n="resetScan">Reset</span>
+        </button>
+        <button class="icon-btn" id="btn-export" type="button" aria-label="Export CSV">
+          <span data-i18n="exportCsv">CSV</span>
+        </button>
+        <button class="icon-btn" id="btn-report" type="button" aria-label="Download Markdown report">
+          <span data-i18n="reportMd">Report</span>
+        </button>
+        <button class="icon-btn" id="btn-privacy" type="button" aria-label="Toggle privacy mode">
+          <span id="privacy-status" data-i18n="privacyOff">Privacy</span>
         </button>
         <button class="icon-btn" id="btn-auto-refresh" type="button">
           <span id="auto-status">Auto</span>
@@ -85,6 +107,16 @@
         <strong class="kpi-value" id="s-prompts">0</strong>
         <span class="kpi-sub" id="s-cache-hit">0% cache</span>
       </article>
+      <article class="kpi-card">
+        <span class="kpi-label" data-i18n="budget">Budget</span>
+        <strong class="kpi-value" id="s-budget">OK</strong>
+        <span class="kpi-sub" id="s-budget-sub">-</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label" data-i18n="health">Health</span>
+        <strong class="kpi-value" id="s-health">OK</strong>
+        <span class="kpi-sub" id="s-health-sub">-</span>
+      </article>
     </section>
 
     <section class="chart-grid" aria-label="Usage charts">
@@ -113,6 +145,20 @@
           <h2 data-i18n="modelAllocation">Model Allocation</h2>
         </div>
         <div class="chart" id="chart-models"></div>
+      </article>
+      <article class="panel">
+        <div class="panel-header">
+          <h2 data-i18n="budgetStatus">Budget Status</h2>
+          <span class="panel-meta" id="budget-meta"></span>
+        </div>
+        <div class="ops-list" id="budget-list"></div>
+      </article>
+      <article class="panel">
+        <div class="panel-header">
+          <h2 data-i18n="ingestionHealth">Ingestion Health</h2>
+          <span class="panel-meta" id="health-meta"></span>
+        </div>
+        <div class="ops-list" id="health-list"></div>
       </article>
     </section>
 

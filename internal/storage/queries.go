@@ -82,15 +82,20 @@ func (d *DB) SetFileState(path string, size, offset int64, ctx *FileScanContext)
 
 // UpsertSession inserts or updates a session record, merging non-empty fields.
 func (d *DB) UpsertSession(s *SessionRecord) error {
+	if d.isExcluded(s.Project, s.CWD) {
+		return nil
+	}
+	s.Project = d.normalizeProject(s.Project, s.CWD)
+	s.GitBranch = normalizeBranch(s.GitBranch)
 	_, err := d.db.Exec(`INSERT INTO sessions(source,session_id,project,cwd,version,git_branch,start_time,prompts)
 		VALUES(?,?,?,?,?,?,?,?)
-		ON CONFLICT(session_id) DO UPDATE SET
+		ON CONFLICT(source,session_id) DO UPDATE SET
 			project=CASE WHEN excluded.project!='' THEN excluded.project ELSE sessions.project END,
 			cwd=CASE WHEN excluded.cwd!='' THEN excluded.cwd ELSE sessions.cwd END,
 			version=CASE WHEN excluded.version!='' THEN excluded.version ELSE sessions.version END,
 			git_branch=CASE WHEN excluded.git_branch!='' THEN excluded.git_branch ELSE sessions.git_branch END,
 			start_time=CASE WHEN excluded.start_time < sessions.start_time THEN excluded.start_time ELSE sessions.start_time END,
-			prompts=prompts+excluded.prompts`,
+			prompts=CASE WHEN excluded.prompts > sessions.prompts THEN excluded.prompts ELSE sessions.prompts END`,
 		s.Source, s.SessionID, s.Project, s.CWD, s.Version, s.GitBranch, s.StartTime, s.Prompts)
 	return err
 }
@@ -99,6 +104,11 @@ func (d *DB) UpsertSession(s *SessionRecord) error {
 
 // InsertUsage inserts a single usage record, ignoring duplicates.
 func (d *DB) InsertUsage(r *UsageRecord) error {
+	if d.isExcluded(r.Project, "") {
+		return nil
+	}
+	r.Project = d.normalizeProject(r.Project, "")
+	r.GitBranch = normalizeBranch(r.GitBranch)
 	_, err := d.db.Exec(`INSERT OR IGNORE INTO usage_records(source,session_id,model,input_tokens,output_tokens,
 		cache_creation_input_tokens,cache_read_input_tokens,reasoning_output_tokens,cost_usd,timestamp,project,git_branch)
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -111,6 +121,18 @@ func (d *DB) InsertUsage(r *UsageRecord) error {
 // InsertUsageBatch inserts multiple usage records in a single transaction,
 // ignoring duplicates.
 func (d *DB) InsertUsageBatch(records []*UsageRecord) error {
+	filtered := records[:0]
+	for _, r := range records {
+		if d.isExcluded(r.Project, "") {
+			continue
+		}
+		r.Project = d.normalizeProject(r.Project, "")
+		r.GitBranch = normalizeBranch(r.GitBranch)
+		filtered = append(filtered, r)
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
 	tx, err := d.db.Begin()
 	if err != nil {
 		return err
@@ -123,7 +145,7 @@ func (d *DB) InsertUsageBatch(records []*UsageRecord) error {
 		return err
 	}
 	defer stmt.Close()
-	for _, r := range records {
+	for _, r := range filtered {
 		_, err := stmt.Exec(r.Source, r.SessionID, r.Model, r.InputTokens, r.OutputTokens,
 			r.CacheCreationInputTokens, r.CacheReadInputTokens, r.ReasoningOutputTokens,
 			r.CostUSD, r.Timestamp, r.Project, r.GitBranch)
@@ -149,13 +171,35 @@ func (d *DB) InsertPromptBatch(events []*PromptEvent) error {
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO prompt_events(source, session_id, timestamp) VALUES(?,?,?)`)
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO prompt_events(source, session_id, model, project, timestamp) VALUES(?,?,?,?,?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
+	type sessionKey struct {
+		source string
+		id     string
+	}
+	touched := map[sessionKey]struct{}{}
 	for _, e := range events {
-		if _, err := stmt.Exec(e.Source, e.SessionID, e.Timestamp); err != nil {
+		if d.isExcluded(e.Project, "") {
+			continue
+		}
+		e.Project = d.normalizeProject(e.Project, "")
+		if _, err := stmt.Exec(e.Source, e.SessionID, e.Model, e.Project, e.Timestamp); err != nil {
+			return err
+		}
+		touched[sessionKey{source: e.Source, id: e.SessionID}] = struct{}{}
+	}
+	updateStmt, err := tx.Prepare(`UPDATE sessions SET prompts=(
+		SELECT COUNT(*) FROM prompt_events WHERE source=? AND session_id=?
+	) WHERE source=? AND session_id=?`)
+	if err != nil {
+		return err
+	}
+	defer updateStmt.Close()
+	for key := range touched {
+		if _, err := updateStmt.Exec(key.source, key.id, key.source, key.id); err != nil {
 			return err
 		}
 	}

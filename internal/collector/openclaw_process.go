@@ -86,7 +86,7 @@ func (c *OpenClawCollector) processFile(path, agentID string) error {
 				if !hasToolResultBlock(msg.Content) {
 					prompts++
 					promptEvents = append(promptEvents, &storage.PromptEvent{
-						Source: "openclaw", SessionID: sessionID, Timestamp: ts,
+						Source: "openclaw", SessionID: sessionID, Project: agentID, Timestamp: ts,
 					})
 				}
 			case "assistant":

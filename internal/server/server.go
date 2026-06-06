@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/briqt/agent-usage/internal/config"
 	"github.com/briqt/agent-usage/internal/storage"
 )
 
@@ -25,13 +28,31 @@ const (
 
 // Server serves the web dashboard and REST API.
 type Server struct {
-	db   *storage.DB
-	addr string
+	db      *storage.DB
+	addr    string
+	options Options
+}
+
+// SourceOption describes one collector source for health and manual scans.
+type SourceOption struct {
+	Source  string
+	Enabled bool
+	Paths   []string
+}
+
+// Options provides optional operational capabilities for the HTTP server.
+type Options struct {
+	AuthToken string
+	Privacy   config.PrivacyConfig
+	Budgets   config.BudgetConfig
+	Sources   []SourceOption
+	Scan      func(source string, reset bool) error
+	Recalc    func() error
 }
 
 // New creates a Server that will listen on the given address (host:port).
-func New(db *storage.DB, addr string) *Server {
-	return &Server{db: db, addr: addr}
+func New(db *storage.DB, addr string, options Options) *Server {
+	return &Server{db: db, addr: addr, options: options}
 }
 
 // Start registers HTTP handlers and begins listening. It blocks until the server stops.
@@ -47,11 +68,17 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/tokens-over-time", s.handleTokensOverTime)
 	mux.HandleFunc("/api/sessions", s.handleSessions)
 	mux.HandleFunc("/api/session-detail", s.handleSessionDetail)
+	mux.HandleFunc("/api/health/ingestion", s.handleIngestionHealth)
+	mux.HandleFunc("/api/scan", s.handleScan)
+	mux.HandleFunc("/api/recalculate-costs", s.handleRecalculateCosts)
+	mux.HandleFunc("/api/budgets/status", s.handleBudgetStatus)
+	mux.HandleFunc("/api/export", s.handleExport)
+	mux.HandleFunc("/api/report", s.handleReport)
 
 	log.Printf("server: listening on %s", s.addr)
 	srv := &http.Server{
 		Addr:              s.addr,
-		Handler:           securityHeaders(mux),
+		Handler:           securityHeaders(s.auth(mux)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,
@@ -80,7 +107,14 @@ func (s *Server) parseTimeRange(r *http.Request) (time.Time, time.Time, int, err
 	// Parse tz_offset (minutes, JS getTimezoneOffset convention: UTC+8 = -480)
 	tzOffset := 0
 	if tzStr := r.URL.Query().Get("tz_offset"); tzStr != "" {
-		fmt.Sscanf(tzStr, "%d", &tzOffset)
+		parsed, err := strconv.Atoi(tzStr)
+		if err != nil {
+			return time.Time{}, time.Time{}, 0, fmt.Errorf("invalid 'tz_offset' %q: expected minutes", tzStr)
+		}
+		if parsed < -14*60 || parsed > 14*60 {
+			return time.Time{}, time.Time{}, 0, fmt.Errorf("invalid 'tz_offset' %q: outside supported timezone range", tzStr)
+		}
+		tzOffset = parsed
 	}
 
 	var fromTime, toTime time.Time
@@ -96,7 +130,7 @@ func (s *Server) parseTimeRange(r *http.Request) (time.Time, time.Time, int, err
 		if err != nil {
 			return time.Time{}, time.Time{}, 0, fmt.Errorf("invalid 'to' date %q: expected YYYY-MM-DD", to)
 		}
-		toTime = toTime.Add(24*time.Hour - time.Second)
+		toTime = toTime.Add(24 * time.Hour)
 	}
 	if fromTime.IsZero() {
 		fromTime = time.Now().AddDate(0, -1, 0)
@@ -112,10 +146,54 @@ func (s *Server) parseTimeRange(r *http.Request) (time.Time, time.Time, int, err
 		toTime = toTime.Add(offset)
 	}
 
-	if fromTime.After(toTime) {
+	if !fromTime.Before(toTime) {
 		return time.Time{}, time.Time{}, 0, fmt.Errorf("'from' date (%s) is after 'to' date (%s): swap them or correct the range", from, to)
 	}
 	return fromTime, toTime, tzOffset, nil
+}
+
+func (s *Server) auth(next http.Handler) http.Handler {
+	if s.options.AuthToken == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/styles.css" || r.URL.Path == "/app.js" || r.URL.Path == "/vendor/echarts/echarts.min.js" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+s.options.AuthToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireLocalOrAuth(w http.ResponseWriter, r *http.Request) bool {
+	if s.options.AuthToken != "" {
+		return true
+	}
+	hostHeader, _, _ := net.SplitHostPort(r.Host)
+	if hostHeader == "" {
+		hostHeader = r.Host
+	}
+	if hostHeader == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(hostHeader); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		http.Error(w, "manual operations require localhost or auth_token", http.StatusForbidden)
+		return false
+	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
@@ -142,7 +220,8 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	source := r.URL.Query().Get("source")
 	model := r.URL.Query().Get("model")
-	stats, err := s.db.GetDashboardStats(from, to, source, model)
+	project := r.URL.Query().Get("project")
+	stats, err := s.db.GetDashboardStatsFiltered(from, to, source, model, project)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -157,7 +236,8 @@ func (s *Server) handleCostByModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	source := r.URL.Query().Get("source")
-	data, err := s.db.GetCostByModel(from, to, source)
+	project := r.URL.Query().Get("project")
+	data, err := s.db.GetCostByModelFiltered(from, to, source, project)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -174,7 +254,8 @@ func (s *Server) handleCostOverTime(w http.ResponseWriter, r *http.Request) {
 	granularity := r.URL.Query().Get("granularity")
 	source := r.URL.Query().Get("source")
 	model := r.URL.Query().Get("model")
-	data, err := s.db.GetCostOverTime(from, to, granularity, source, model, tzOffset)
+	project := r.URL.Query().Get("project")
+	data, err := s.db.GetCostOverTimeFiltered(from, to, granularity, source, model, project, tzOffset)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -191,7 +272,8 @@ func (s *Server) handleTokensOverTime(w http.ResponseWriter, r *http.Request) {
 	granularity := r.URL.Query().Get("granularity")
 	source := r.URL.Query().Get("source")
 	model := r.URL.Query().Get("model")
-	data, err := s.db.GetTokensOverTime(from, to, granularity, source, model, tzOffset)
+	project := r.URL.Query().Get("project")
+	data, err := s.db.GetTokensOverTimeFiltered(from, to, granularity, source, model, project, tzOffset)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -207,11 +289,14 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	source := r.URL.Query().Get("source")
 	model := r.URL.Query().Get("model")
-	data, err := s.db.GetSessions(from, to, source, model)
+	project := r.URL.Query().Get("project")
+	limit, offset := parseLimitOffset(r)
+	data, err := s.db.GetSessionsPage(from, to, source, model, project, limit, offset)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
+	applySessionPagePrivacy(data, s.privacyFor(r))
 	writeJSON(w, data)
 }
 
@@ -221,10 +306,26 @@ func (s *Server) handleSessionDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session_id required", 400)
 		return
 	}
-	data, err := s.db.GetSessionDetail(sid)
+	source := r.URL.Query().Get("source")
+	data, err := s.db.GetSessionDetailScoped(source, sid)
 	if err != nil {
-		serverError(w, err)
+		badRequest(w, err)
 		return
 	}
 	writeJSON(w, data)
+}
+
+func parseLimitOffset(r *http.Request) (int, int) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }

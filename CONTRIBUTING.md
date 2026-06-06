@@ -8,7 +8,7 @@ Thanks for your interest in agent-usage! Issues and Pull Requests are welcome.
 
 ```bash
 # Clone
-git clone https://github.com/briqt/agent-usage.git
+git clone https://github.com/zhenzhis/agent-usage.git
 cd agent-usage
 
 # Requirements
@@ -45,6 +45,7 @@ cp config.yaml config.local.yaml  # edit as needed
    - Calls `storage.DB` methods to write records
 3. Register the collector in `main.go`
 4. Add config fields in `internal/config/config.go`
+5. Add ingestion health, source-scoped identity, and fixture tests for first scan, incremental scan, damaged input, and duplicate sessions
 
 See `internal/collector/claude.go` + `claude_process.go` as the primary reference, or `openclaw.go` + `openclaw_process.go` as a second example. For a non-JSONL source (JSON metadata + JSONL prompts), see `kiro.go` + `kiro_process.go`. For a source sharing the same JSONL format as OpenClaw, see `pi.go` + `pi_process.go`.
 

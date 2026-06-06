@@ -21,6 +21,24 @@ func modelFilter(model string) (string, []interface{}) {
 	return " AND model=?", []interface{}{model}
 }
 
+// projectFilter returns a SQL clause and args for optional project filtering.
+func projectFilter(project string) (string, []interface{}) {
+	if project == "" {
+		return "", nil
+	}
+	return " AND project=?", []interface{}{project}
+}
+
+func buildUsageFilter(source, model, project string) (string, []interface{}) {
+	sf, sa := sourceFilter(source)
+	mf, ma := modelFilter(model)
+	pf, pa := projectFilter(project)
+	args := append([]interface{}{}, sa...)
+	args = append(args, ma...)
+	args = append(args, pa...)
+	return sf + mf + pf, args
+}
+
 // DashboardStats holds aggregate statistics for the dashboard summary cards.
 type DashboardStats struct {
 	TotalCost     float64 `json:"total_cost"`
@@ -39,9 +57,9 @@ type CostByModel struct {
 
 // TimeSeriesPoint represents a single data point in a daily cost time series.
 type TimeSeriesPoint struct {
-	Date   string  `json:"date"`
-	Value  float64 `json:"value"`
-	Model  string  `json:"model,omitempty"`
+	Date  string  `json:"date"`
+	Value float64 `json:"value"`
+	Model string  `json:"model,omitempty"`
 }
 
 // TokenTimeSeriesPoint represents daily token usage broken down by category.
@@ -66,39 +84,55 @@ type SessionInfo struct {
 	Tokens    int64   `json:"tokens"`
 }
 
+// SessionPage represents a paginated session ledger response.
+type SessionPage struct {
+	Rows   []SessionInfo `json:"rows"`
+	Total  int           `json:"total"`
+	Limit  int           `json:"limit"`
+	Offset int           `json:"offset"`
+}
+
 // GetDashboardStats returns aggregate cost, token, session, and prompt counts
 // for usage records within the given time range.
 func (d *DB) GetDashboardStats(from, to time.Time, source, model string) (*DashboardStats, error) {
+	return d.GetDashboardStatsFiltered(from, to, source, model, "")
+}
+
+// GetDashboardStatsFiltered returns aggregate stats with optional project filtering.
+func (d *DB) GetDashboardStatsFiltered(from, to time.Time, source, model, project string) (*DashboardStats, error) {
 	s := &DashboardStats{}
-	sf, sa := sourceFilter(source)
-	mf, ma := modelFilter(model)
-	args := append([]interface{}{from, to}, sa...)
-	args = append(args, ma...)
-	filter := sf + mf
+	filter, fa := buildUsageFilter(source, model, project)
+	args := append([]interface{}{from, to}, fa...)
 	var cacheRead, totalInput int64
 	err := d.db.QueryRow(`SELECT COALESCE(SUM(cost_usd),0),
 		COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens),0),
 		COALESCE(SUM(cache_read_input_tokens),0),
 		COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens),0)
-		FROM usage_records WHERE timestamp BETWEEN ? AND ?`+filter, args...).Scan(&s.TotalCost, &s.TotalTokens, &cacheRead, &totalInput)
+		FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter, args...).Scan(&s.TotalCost, &s.TotalTokens, &cacheRead, &totalInput)
 	if err != nil {
 		return nil, err
 	}
 	if totalInput > 0 {
 		s.CacheHitRate = float64(cacheRead) / float64(totalInput)
 	}
-	d.db.QueryRow(`SELECT COUNT(DISTINCT session_id) FROM usage_records WHERE timestamp BETWEEN ? AND ?`+filter, args...).Scan(&s.TotalSessions)
-	d.db.QueryRow(`SELECT COUNT(*) FROM prompt_events WHERE timestamp BETWEEN ? AND ?`+sf, append([]interface{}{from, to}, sa...)...).Scan(&s.TotalPrompts)
-	d.db.QueryRow(`SELECT COUNT(*) FROM usage_records WHERE timestamp BETWEEN ? AND ?`+filter, args...).Scan(&s.TotalCalls)
+	d.db.QueryRow(`SELECT COUNT(*) FROM (SELECT source,session_id FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+` GROUP BY source,session_id)`, args...).Scan(&s.TotalSessions)
+	pf, pa := buildUsageFilter(source, "", project)
+	d.db.QueryRow(`SELECT COUNT(*) FROM prompt_events WHERE timestamp >= ? AND timestamp < ?`+pf, append([]interface{}{from, to}, pa...)...).Scan(&s.TotalPrompts)
+	d.db.QueryRow(`SELECT COUNT(*) FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter, args...).Scan(&s.TotalCalls)
 	return s, nil
 }
 
 // GetCostByModel returns total cost grouped by model within the given time range.
 func (d *DB) GetCostByModel(from, to time.Time, source string) ([]CostByModel, error) {
-	sf, sa := sourceFilter(source)
+	return d.GetCostByModelFiltered(from, to, source, "")
+}
+
+// GetCostByModelFiltered returns total cost grouped by model with optional project filtering.
+func (d *DB) GetCostByModelFiltered(from, to time.Time, source, project string) ([]CostByModel, error) {
+	sf, sa := buildUsageFilter(source, "", project)
 	args := append([]interface{}{from, to}, sa...)
 	rows, err := d.db.Query(`SELECT model, SUM(cost_usd) as cost FROM usage_records
-		WHERE timestamp BETWEEN ? AND ?`+sf+` GROUP BY model ORDER BY cost DESC`, args...)
+		WHERE timestamp >= ? AND timestamp < ?`+sf+` GROUP BY model ORDER BY cost DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -153,14 +187,16 @@ func granularityExpr(g string, tzOffset int) string {
 
 // GetCostOverTime returns cost per model grouped by the given granularity within the time range.
 func (d *DB) GetCostOverTime(from, to time.Time, granularity, source, model string, tzOffset int) ([]TimeSeriesPoint, error) {
+	return d.GetCostOverTimeFiltered(from, to, granularity, source, model, "", tzOffset)
+}
+
+// GetCostOverTimeFiltered returns cost grouped by time with optional project filtering.
+func (d *DB) GetCostOverTimeFiltered(from, to time.Time, granularity, source, model, project string, tzOffset int) ([]TimeSeriesPoint, error) {
 	expr := granularityExpr(granularity, tzOffset)
-	sf, sa := sourceFilter(source)
-	mf, ma := modelFilter(model)
-	args := append([]interface{}{from, to}, sa...)
-	args = append(args, ma...)
-	filter := sf + mf
+	filter, fa := buildUsageFilter(source, model, project)
+	args := append([]interface{}{from, to}, fa...)
 	rows, err := d.db.Query(`SELECT `+expr+` as d, model, SUM(cost_usd) as cost
-		FROM usage_records WHERE timestamp BETWEEN ? AND ?`+filter+`
+		FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+`
 		GROUP BY d, model ORDER BY d`, args...)
 	if err != nil {
 		return nil, err
@@ -182,16 +218,18 @@ func (d *DB) GetCostOverTime(from, to time.Time, granularity, source, model stri
 
 // GetTokensOverTime returns token usage breakdown grouped by the given granularity within the time range.
 func (d *DB) GetTokensOverTime(from, to time.Time, granularity, source, model string, tzOffset int) ([]TokenTimeSeriesPoint, error) {
+	return d.GetTokensOverTimeFiltered(from, to, granularity, source, model, "", tzOffset)
+}
+
+// GetTokensOverTimeFiltered returns token usage grouped by time with optional project filtering.
+func (d *DB) GetTokensOverTimeFiltered(from, to time.Time, granularity, source, model, project string, tzOffset int) ([]TokenTimeSeriesPoint, error) {
 	expr := granularityExpr(granularity, tzOffset)
-	sf, sa := sourceFilter(source)
-	mf, ma := modelFilter(model)
-	args := append([]interface{}{from, to}, sa...)
-	args = append(args, ma...)
-	filter := sf + mf
+	filter, fa := buildUsageFilter(source, model, project)
+	args := append([]interface{}{from, to}, fa...)
 	rows, err := d.db.Query(`SELECT `+expr+` as d,
 		SUM(input_tokens) as inp, SUM(output_tokens) as outp,
 		SUM(cache_read_input_tokens) as cr, SUM(cache_creation_input_tokens) as cc
-		FROM usage_records WHERE timestamp BETWEEN ? AND ?`+filter+`
+		FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+`
 		GROUP BY d ORDER BY d`, args...)
 	if err != nil {
 		return nil, err
@@ -224,12 +262,28 @@ type SessionDetail struct {
 
 // GetSessionDetail returns per-model usage breakdown for a specific session.
 func (d *DB) GetSessionDetail(sessionID string) ([]SessionDetail, error) {
+	return d.GetSessionDetailScoped("", sessionID)
+}
+
+// GetSessionDetailScoped returns per-model usage breakdown for a specific source/session pair.
+func (d *DB) GetSessionDetailScoped(source, sessionID string) ([]SessionDetail, error) {
+	if source == "" {
+		var sources int
+		if err := d.db.QueryRow("SELECT COUNT(DISTINCT source) FROM usage_records WHERE session_id=?", sessionID).Scan(&sources); err != nil {
+			return nil, err
+		}
+		if sources > 1 {
+			return nil, fmt.Errorf("session_id %q exists in multiple sources; include source", sessionID)
+		}
+	}
+	sf, sa := sourceFilter(source)
+	args := append([]interface{}{sessionID}, sa...)
 	rows, err := d.db.Query(`SELECT model, COUNT(*) as calls,
 		SUM(input_tokens) as inp, SUM(output_tokens) as outp,
 		SUM(cache_read_input_tokens) as cr, SUM(cache_creation_input_tokens) as cc,
 		SUM(cost_usd) as cost
-		FROM usage_records WHERE session_id=?
-		GROUP BY model ORDER BY cost DESC`, sessionID)
+		FROM usage_records WHERE session_id=?`+sf+`
+		GROUP BY model ORDER BY cost DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -247,27 +301,60 @@ func (d *DB) GetSessionDetail(sessionID string) ([]SessionDetail, error) {
 
 // GetSessions returns sessions with aggregated cost and token totals within the given time range.
 func (d *DB) GetSessions(from, to time.Time, source, model string) ([]SessionInfo, error) {
-	sf, sa := sourceFilter(source)
-	mf, ma := modelFilter(model)
-	filter := sf + mf
-	baseArgs := append([]interface{}{from, to}, sa...)
-	baseArgs = append(baseArgs, ma...)
-	// prompt_events doesn't have model column, so only apply source filter there
-	promptArgs := append([]interface{}{from, to}, sa...)
+	page, err := d.GetSessionsPage(from, to, source, model, "", 10000, 0)
+	if err != nil {
+		return nil, err
+	}
+	return page.Rows, nil
+}
+
+// GetSessionsPage returns sessions with aggregated totals and pagination.
+func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, limit, offset int) (*SessionPage, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	filter, fa := buildUsageFilter(source, model, project)
+	baseArgs := append([]interface{}{from, to}, fa...)
+	promptFilter, promptFilterArgs := buildUsageFilter(source, "", project)
+	promptArgs := append([]interface{}{from, to}, promptFilterArgs...)
 	args := append([]interface{}{}, baseArgs...)
 	args = append(args, promptArgs...)
+	countRows, err := d.db.Query(`SELECT COUNT(*) FROM (
+		SELECT s.source, s.session_id
+		FROM sessions s
+		JOIN (SELECT source, session_id
+			FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+` GROUP BY source, session_id) u
+		ON s.source = u.source AND s.session_id = u.session_id
+	)`, baseArgs...)
+	if err != nil {
+		return nil, err
+	}
+	total := 0
+	if countRows.Next() {
+		if err := countRows.Scan(&total); err != nil {
+			countRows.Close()
+			return nil, err
+		}
+	}
+	countRows.Close()
+	args = append(args, limit, offset)
 	rows, err := d.db.Query(`SELECT s.session_id, s.source, s.project, s.cwd, s.git_branch,
 		COALESCE(s.start_time,''), COALESCE(p.prompts,0),
 		COALESCE(u.cost,0), COALESCE(u.tokens,0)
 		FROM sessions s
-		LEFT JOIN (SELECT session_id, SUM(cost_usd) as cost, SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens) as tokens
-			FROM usage_records WHERE timestamp BETWEEN ? AND ?`+filter+` GROUP BY session_id) u
-		ON s.session_id = u.session_id
-		LEFT JOIN (SELECT session_id, COUNT(*) as prompts
-			FROM prompt_events WHERE timestamp BETWEEN ? AND ?`+sf+` GROUP BY session_id) p
-		ON s.session_id = p.session_id
-		WHERE u.session_id IS NOT NULL
-		ORDER BY s.start_time DESC`, args...)
+		JOIN (SELECT source, session_id, SUM(cost_usd) as cost, SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens) as tokens
+			FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter+` GROUP BY source, session_id) u
+		ON s.source = u.source AND s.session_id = u.session_id
+		LEFT JOIN (SELECT source, session_id, COUNT(*) as prompts
+			FROM prompt_events WHERE timestamp >= ? AND timestamp < ?`+promptFilter+` GROUP BY source, session_id) p
+		ON s.source = p.source AND s.session_id = p.session_id
+		ORDER BY s.start_time DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -283,5 +370,5 @@ func (d *DB) GetSessions(from, to time.Time, source, model string) ([]SessionInf
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return result, nil
+	return &SessionPage{Rows: result, Total: total, Limit: limit, Offset: offset}, nil
 }

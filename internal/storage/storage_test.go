@@ -609,3 +609,94 @@ func TestGetDashboardStatsPromptsTimeRange(t *testing.T) {
 		t.Errorf("expected 1 prompt for day2, got %d", stats2.TotalPrompts)
 	}
 }
+
+func TestSourceScopedSessionIdentity(t *testing.T) {
+	db := tempDB(t)
+	ts := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	for _, source := range []string{"codex", "opencode"} {
+		if err := db.UpsertSession(&SessionRecord{Source: source, SessionID: "same-session", Project: source, StartTime: ts}); err != nil {
+			t.Fatalf("UpsertSession %s: %v", source, err)
+		}
+		if err := db.InsertUsage(&UsageRecord{
+			Source:       source,
+			SessionID:    "same-session",
+			Model:        "model-a",
+			InputTokens:  10,
+			OutputTokens: 5,
+			Timestamp:    ts,
+			Project:      source,
+		}); err != nil {
+			t.Fatalf("InsertUsage %s: %v", source, err)
+		}
+	}
+
+	from := ts.Add(-time.Hour)
+	to := ts.Add(time.Hour)
+	stats, err := db.GetDashboardStats(from, to, "", "")
+	if err != nil {
+		t.Fatalf("GetDashboardStats: %v", err)
+	}
+	if stats.TotalCalls != 2 || stats.TotalSessions != 2 {
+		t.Fatalf("expected 2 calls and sessions, got calls=%d sessions=%d", stats.TotalCalls, stats.TotalSessions)
+	}
+
+	if _, err := db.GetSessionDetail("same-session"); err == nil {
+		t.Fatal("expected ambiguous session detail error without source")
+	}
+	details, err := db.GetSessionDetailScoped("codex", "same-session")
+	if err != nil {
+		t.Fatalf("GetSessionDetailScoped: %v", err)
+	}
+	if len(details) != 1 || details[0].Calls != 1 {
+		t.Fatalf("unexpected scoped details: %+v", details)
+	}
+}
+
+func TestGetSessionsPage(t *testing.T) {
+	db := tempDB(t)
+	base := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 3; i++ {
+		ts := base.Add(time.Duration(i) * time.Hour)
+		id := string(rune('a' + i))
+		if err := db.UpsertSession(&SessionRecord{Source: "codex", SessionID: id, Project: "proj", StartTime: ts}); err != nil {
+			t.Fatalf("UpsertSession: %v", err)
+		}
+		if err := db.InsertUsage(&UsageRecord{Source: "codex", SessionID: id, Model: "m", InputTokens: 1, Timestamp: ts, Project: "proj"}); err != nil {
+			t.Fatalf("InsertUsage: %v", err)
+		}
+	}
+	page, err := db.GetSessionsPage(base.Add(-time.Hour), base.Add(4*time.Hour), "codex", "", "", 2, 0)
+	if err != nil {
+		t.Fatalf("GetSessionsPage: %v", err)
+	}
+	if page.Total != 3 || len(page.Rows) != 2 {
+		t.Fatalf("expected total=3 rows=2, got total=%d rows=%d", page.Total, len(page.Rows))
+	}
+	page, err = db.GetSessionsPage(base.Add(-time.Hour), base.Add(4*time.Hour), "codex", "", "", 2, 2)
+	if err != nil {
+		t.Fatalf("GetSessionsPage offset: %v", err)
+	}
+	if page.Total != 3 || len(page.Rows) != 1 {
+		t.Fatalf("expected total=3 rows=1, got total=%d rows=%d", page.Total, len(page.Rows))
+	}
+}
+
+func TestProjectAliasesAndFilter(t *testing.T) {
+	db := tempDB(t)
+	db.SetProjectOptions(map[string]string{"/workspace/alpha": "Alpha"}, nil)
+	ts := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	if err := db.UpsertSession(&SessionRecord{Source: "codex", SessionID: "s1", CWD: "/workspace/alpha", StartTime: ts}); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+	if err := db.InsertUsage(&UsageRecord{Source: "codex", SessionID: "s1", Model: "m", InputTokens: 1, Timestamp: ts, Project: "/workspace/alpha"}); err != nil {
+		t.Fatalf("InsertUsage: %v", err)
+	}
+	stats, err := db.GetDashboardStatsFiltered(ts.Add(-time.Hour), ts.Add(time.Hour), "codex", "", "Alpha")
+	if err != nil {
+		t.Fatalf("GetDashboardStatsFiltered: %v", err)
+	}
+	if stats.TotalCalls != 1 {
+		t.Fatalf("expected project alias filter to find 1 call, got %d", stats.TotalCalls)
+	}
+}

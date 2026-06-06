@@ -37,10 +37,14 @@ build_qs() {
 }
 
 case "$CMD" in
-  stats|cost-by-model|cost-over-time|tokens-over-time|sessions)
+  stats|cost-by-model|cost-over-time|tokens-over-time)
     curl -sf "${BASE}/${CMD}?$(build_qs)" ;;
+  sessions)
+    curl -sf "${BASE}/${CMD}?$(build_qs)&limit=100&offset=0" ;;
   session-detail)
     [[ -z "$SID" ]] && echo '{"error":"--session-id required"}' && exit 1
-    curl -sf "${BASE}/session-detail?session_id=${SID}" ;;
+    qs="session_id=${SID}"
+    [[ -n "$SOURCE" ]] && qs="${qs}&source=${SOURCE}"
+    curl -sf "${BASE}/session-detail?${qs}" ;;
   *) echo "{\"error\":\"unknown command: ${CMD}\"}" && exit 1 ;;
 esac

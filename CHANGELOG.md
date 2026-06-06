@@ -8,10 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 - Kiro collector now supports dual data sources: SQLite database (`~/.local/share/kiro-cli/data.sqlite3`) and JSON/JSONL session files (`~/.kiro/sessions/cli/`). Both are scanned simultaneously with auto-detection based on path type.
+- Ingestion health API and dashboard panel with path status, last scan time, duration, watermark, inserted rows, and last error.
+- Manual scan, source reset/rescan, and cost recalculation API controls.
+- Local budget status for day/week/month thresholds by global/source/model/project.
+- CSV/JSON export endpoints and Markdown usage report endpoint.
+- Privacy mode for redacting paths, hashing session IDs, and hiding project/branch names.
+- Project aliases and exclude patterns in config.
+- `docker-compose.example.yml` for GHCR-based deployments.
 
 ### Changed
 - Default Kiro config paths now include both data sources.
 - Docker Compose examples include volume mount for `~/.kiro/sessions/cli`.
+- Usage/session/prompt identity is now source-scoped with `(source, session_id)` to avoid cross-agent collisions.
+- Session ledger now uses server-side pagination instead of loading all sessions in the browser.
+- API time windows now use half-open ranges internally to avoid end-boundary double counting.
+- Dashboard controls and layout were expanded into a monochrome operations console.
+
+### Fixed
+- OpenCode incremental scans no longer re-add historical user prompts to session prompt totals.
 
 ## [1.10.1] - 2026-06-05
 

@@ -30,7 +30,7 @@ func TestMatchPricingProviderPrefix(t *testing.T) {
 
 func TestMatchPricingShortestKeyWins(t *testing.T) {
 	prices := map[string][4]float64{
-		"deepseek/deepseek-r1":                              {0.001, 0.002, 0, 0},
+		"deepseek/deepseek-r1":                               {0.001, 0.002, 0, 0},
 		"fireworks_ai/accounts/fireworks/models/deepseek-r1": {0.009, 0.009, 0, 0},
 	}
 	// Direct provider prefix match should win
@@ -46,7 +46,7 @@ func TestMatchPricingShortestKeyWins(t *testing.T) {
 func TestMatchPricingFuzzyShortestKey(t *testing.T) {
 	// When no direct or provider-prefix match exists, fuzzy match should prefer shortest key
 	prices := map[string][4]float64{
-		"deepseek-r1":                                        {0.001, 0.002, 0, 0},
+		"deepseek-r1": {0.001, 0.002, 0, 0},
 		"fireworks_ai/accounts/fireworks/models/deepseek-r1": {0.009, 0.009, 0, 0},
 	}
 	p, ok := matchPricing("some-deepseek-r1-variant", prices)

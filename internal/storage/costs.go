@@ -18,9 +18,9 @@ func (d *DB) RecalcCosts(allPrices map[string][4]float64, calcFn CostCalcFunc) e
 	defer rows.Close()
 
 	type rec struct {
-		id                       int64
-		model                    string
-		input, output, cc, cr    int64
+		id                    int64
+		model                 string
+		input, output, cc, cr int64
 	}
 	var recs []rec
 	for rows.Next() {

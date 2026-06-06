@@ -74,11 +74,12 @@ Tag message 格式：`Release v<VERSION>: <one-line summary>`
 
 ### Step 3: Verify
 
-1. 前往 [GitHub Actions](https://github.com/briqt/agent-usage/actions) 确认 Release workflow 成功
-2. 检查 [Releases](https://github.com/briqt/agent-usage/releases) 页面：
+1. 前往 [GitHub Actions](https://github.com/zhenzhis/agent-usage/actions) 确认 Release workflow 成功
+2. 检查 [Releases](https://github.com/zhenzhis/agent-usage/releases) 页面：
    - Changelog 自动生成且正确
    - 6 个平台二进制已上传（linux/darwin/windows × amd64/arm64）
    - checksums.txt 存在
+   - SBOM/provenance 仅在工作流已启用时声明；未启用前不得在 release notes 中声称已签名
 
 ### Alternative: GitHub UI
 

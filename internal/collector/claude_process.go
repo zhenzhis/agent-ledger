@@ -76,7 +76,7 @@ func (c *ClaudeCollector) processFile(path, project string) error {
 			if isRealUserPrompt(entry.Message) {
 				prompts++
 				promptEvents = append(promptEvents, &storage.PromptEvent{
-					Source: "claude", SessionID: sessionID, Timestamp: ts,
+					Source: "claude", SessionID: sessionID, Project: project, Timestamp: ts,
 				})
 			}
 		case "assistant":

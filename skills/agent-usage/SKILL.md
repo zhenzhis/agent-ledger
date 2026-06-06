@@ -50,8 +50,8 @@ Commands:
 | `cost-by-model` | Cost breakdown per model | `--from`, `--to`, `--source` |
 | `cost-over-time` | Cost trend over time | `--from`, `--to`, `--granularity`, `--source`, `--model` |
 | `tokens-over-time` | Token usage trend | `--from`, `--to`, `--granularity`, `--source`, `--model` |
-| `sessions` | List all sessions with cost/tokens | `--from`, `--to`, `--source`, `--model` |
-| `session-detail` | Per-model breakdown for one session | `--session-id` |
+| `sessions` | List paginated sessions with cost/tokens | `--from`, `--to`, `--source`, `--model` |
+| `session-detail` | Per-model breakdown for one source/session | `--session-id`, `--source` |
 
 Options:
 - `--from YYYY-MM-DD` — Start date (default: today)
@@ -134,7 +134,7 @@ User: "Token usage trend this week by hour"
 ## Notes
 
 - Local mode pricing is approximate — only common models have built-in prices
-- For accurate pricing, deploy the agent-usage server: https://github.com/briqt/agent-usage
+- For accurate pricing, budgets, exports, and ingestion health, deploy the agent-usage server: https://github.com/zhenzhis/agent-usage
 - Local mode scans `~/.claude/projects`, `~/.codex/sessions`, `~/.openclaw/agents`, `~/.local/share/opencode/opencode.db`, `~/.pi/agent/sessions` by default
 - Kiro has two data sources: SQLite (`~/.local/share/kiro-cli/data.sqlite3`) and JSON sessions (`~/.kiro/sessions/cli/`). Both are scanned when configured.
 
