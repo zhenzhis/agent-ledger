@@ -85,7 +85,7 @@ func TestWebhookNotificationEndpointDryRunIncludesApprovals(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateApprovalRequest: %v", err)
 	}
-	srv := New(db, "", Options{Webhooks: config.WebhookConfig{Enabled: false, MaxEvents: 10}})
+	srv := New(db, "", Options{RBAC: config.RBACConfig{ReadOnly: true}, Webhooks: config.WebhookConfig{Enabled: false, MaxEvents: 10}})
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/notifications/webhook?dry_run=1&from="+now.AddDate(0, 0, -1).Format("2006-01-02")+"&to="+now.Format("2006-01-02"), nil)
 	rr := httptest.NewRecorder()
 	srv.handleWebhookNotification(rr, req)
@@ -109,6 +109,19 @@ func TestWebhookNotificationEndpointDryRunIncludesApprovals(t *testing.T) {
 	raw, _ := json.Marshal(body)
 	if strings.Contains(string(raw), "private-project") || strings.Contains(string(raw), "C:/private/workspace") || strings.Contains(string(raw), "do-not-send") {
 		t.Fatalf("approval notification leaked sensitive data: %s", string(raw))
+	}
+	audit, err := db.GetAuditLog(10)
+	if err != nil {
+		t.Fatalf("audit: %v", err)
+	}
+	if len(audit) != 0 {
+		t.Fatalf("read-only dry-run should not append audit log: %+v", audit)
+	}
+	sendReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/notifications/webhook?from="+now.AddDate(0, 0, -1).Format("2006-01-02")+"&to="+now.Format("2006-01-02"), nil)
+	sendRR := httptest.NewRecorder()
+	srv.handleWebhookNotification(sendRR, sendReq)
+	if sendRR.Code != http.StatusForbidden || !strings.Contains(sendRR.Body.String(), "read-only mode") {
+		t.Fatalf("read-only send should be forbidden, status=%d body=%s", sendRR.Code, sendRR.Body.String())
 	}
 }
 

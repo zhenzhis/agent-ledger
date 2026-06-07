@@ -55,11 +55,11 @@ func (s *Server) handleWebhookNotification(w http.ResponseWriter, r *http.Reques
 	dryRun := r.URL.Query().Get("dry_run") == "1" || r.URL.Query().Get("dry_run") == "true"
 	result, err := notifications.SendWebhookWithApprovals(r.Context(), s.options.Webhooks, feed, approvals, dryRun)
 	if err != nil {
-		_ = s.db.AppendAuditLog("local", s.roleFor(r), "notification.webhook.failed", "webhook", map[string]string{"error": err.Error(), "dry_run": fmt.Sprint(dryRun)})
+		s.appendAuditLog("local", s.roleFor(r), "notification.webhook.failed", "webhook", map[string]string{"error": err.Error(), "dry_run": fmt.Sprint(dryRun)})
 		badRequest(w, err)
 		return
 	}
-	_ = s.db.AppendAuditLog("local", s.roleFor(r), "notification.webhook", "webhook", map[string]string{"dry_run": fmt.Sprint(dryRun), "events": fmt.Sprint(result.EventCount), "approvals": fmt.Sprint(result.ApprovalCount)})
+	s.appendAuditLog("local", s.roleFor(r), "notification.webhook", "webhook", map[string]string{"dry_run": fmt.Sprint(dryRun), "events": fmt.Sprint(result.EventCount), "approvals": fmt.Sprint(result.ApprovalCount)})
 	if dryRun {
 		writeJSON(w, map[string]interface{}{
 			"result":  result,

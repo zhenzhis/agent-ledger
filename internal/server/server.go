@@ -275,7 +275,7 @@ func (s *Server) roleFor(r *http.Request) string {
 }
 
 func (s *Server) requireRole(w http.ResponseWriter, r *http.Request, minRole string) bool {
-	if s.options.RBAC.ReadOnly && !isSafeMethod(r.Method) {
+	if s.options.RBAC.ReadOnly && !isSafeMethod(r.Method) && !isReadOnlyAllowedRequest(r) {
 		http.Error(w, "read-only mode: write operations are disabled", http.StatusForbidden)
 		return false
 	}
@@ -330,6 +330,20 @@ func RuntimeStatusFromRBAC(rbac config.RBACConfig) *storage.RuntimeStatus {
 
 func isSafeMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+}
+
+func isReadOnlyAllowedRequest(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/events/validate", "/api/integrations/conformance":
+		return true
+	case "/api/notifications/webhook":
+		return r.URL.Query().Get("dry_run") == "1" || r.URL.Query().Get("dry_run") == "true"
+	default:
+		return false
+	}
 }
 
 func (s *Server) requireLocalOrAuth(w http.ResponseWriter, r *http.Request) bool {
