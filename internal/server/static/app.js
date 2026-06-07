@@ -204,6 +204,14 @@ const I18N = {
     lastActive: "last active",
     progress: "progress",
     localEstimate: "local estimate",
+    terminalState: "Terminal State",
+    phase: "Phase",
+    readiness: "Readiness",
+    nextAction: "Next Action",
+    reasons: "Reasons",
+    risks: "Risks",
+    noRisks: "No risks",
+    terminal: "terminal",
   },
   zh: {
     from: "起始",
@@ -380,6 +388,14 @@ const I18N = {
     lastActive: "最近活动",
     progress: "进度",
     localEstimate: "本地估算",
+    terminalState: "终态快照",
+    phase: "阶段",
+    readiness: "就绪度",
+    nextAction: "下一步",
+    reasons: "依据",
+    risks: "风险",
+    noRisks: "无风险",
+    terminal: "终态",
   },
 };
 
@@ -1482,10 +1498,75 @@ function renderWorkloadTable() {
   setText("workload-meta", `${workloadTotal} ${t("rows")}`);
 }
 
-function buildWorkloadDetail(data, timelineRows = []) {
+function pct(value) {
+  const n = Math.max(0, Math.min(1, Number(value || 0)));
+  return `${Math.round(n * 100)}%`;
+}
+
+function buildWorkloadStatePanel(snapshot) {
+  if (!snapshot || !snapshot.workload_id) return null;
+  const panel = document.createElement("section");
+  panel.className = "workload-state-panel";
+  panel.setAttribute("aria-label", t("terminalState"));
+
+  const header = document.createElement("div");
+  header.className = "workload-state-head";
+  const title = document.createElement("div");
+  title.className = "workload-state-title";
+  const label = document.createElement("span");
+  label.textContent = t("terminalState");
+  const phase = document.createElement("strong");
+  phase.textContent = snapshot.phase || snapshot.status || "-";
+  title.append(label, phase);
+  const status = document.createElement("span");
+  status.className = "state-pill";
+  status.textContent = snapshot.terminal ? t("terminal") : (snapshot.status || "-");
+  header.append(title, status);
+  panel.appendChild(header);
+
+  const metrics = document.createElement("div");
+  metrics.className = "workload-state-metrics";
+  [
+    [t("readiness"), pct(snapshot.readiness_score)],
+    [t("progress"), pct(snapshot.progress)],
+    [t("activeRuns"), fmt(snapshot.active_runs || 0)],
+    [t("staleRuns"), fmt(snapshot.stale_runs || 0)],
+  ].forEach(([key, value]) => {
+    const item = document.createElement("div");
+    item.className = "state-metric";
+    const k = document.createElement("span");
+    k.textContent = key;
+    const v = document.createElement("strong");
+    v.textContent = value;
+    item.append(k, v);
+    metrics.appendChild(item);
+  });
+  panel.appendChild(metrics);
+
+  const next = document.createElement("div");
+  next.className = "state-next";
+  next.textContent = `${t("nextAction")}: ${snapshot.next_action || "-"}`;
+  panel.appendChild(next);
+
+  const notes = document.createElement("div");
+  notes.className = "state-notes";
+  const reasons = Array.isArray(snapshot.reasons) && snapshot.reasons.length ? snapshot.reasons.slice(0, 3).join(" · ") : "-";
+  const risks = Array.isArray(snapshot.risks) && snapshot.risks.length ? snapshot.risks.slice(0, 3).join(" · ") : t("noRisks");
+  const reasonEl = document.createElement("span");
+  reasonEl.textContent = `${t("reasons")}: ${reasons}`;
+  const riskEl = document.createElement("span");
+  riskEl.textContent = `${t("risks")}: ${risks}`;
+  notes.append(reasonEl, riskEl);
+  panel.appendChild(notes);
+  return panel;
+}
+
+function buildWorkloadDetail(data, timelineRows = [], workloadState = null) {
   const wrap = document.createElement("div");
   wrap.className = "workload-detail-grid";
   const summary = data.summary || {};
+  const statePanel = buildWorkloadStatePanel(workloadState);
+  if (statePanel) wrap.appendChild(statePanel);
   const facts = [
     [t("runs"), summary.runs || 0],
     [t("modelCalls"), summary.model_calls || 0],
@@ -1580,6 +1661,7 @@ async function fetchAndFillWorkloadDetail(content, workloadID) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     let timeline = [];
+    let workloadState = null;
     try {
       const timelineParams = new URLSearchParams({ workload_id: workloadID, limit: "50" });
       if (state.privacy) timelineParams.set("privacy", "1");
@@ -1591,7 +1673,15 @@ async function fetchAndFillWorkloadDetail(content, workloadID) {
     } catch (err) {
       timeline = [];
     }
-    content.replaceChildren(buildWorkloadDetail(data, timeline));
+    try {
+      const stateParams = new URLSearchParams({ workload_id: workloadID, max_age: "10m" });
+      if (state.privacy) stateParams.set("privacy", "1");
+      const stateRes = await fetch(`/api/workload-state?${stateParams.toString()}`);
+      if (stateRes.ok) workloadState = await stateRes.json();
+    } catch (err) {
+      workloadState = null;
+    }
+    content.replaceChildren(buildWorkloadDetail(data, timeline, workloadState));
   } catch (err) {
     content.replaceChildren(createMessage(`${t("detailFailed")} ${err.message}`, "empty-state"));
   }
