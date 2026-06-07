@@ -24,22 +24,26 @@ type DiscoveryProtocol struct {
 
 // DiscoveryManifest is the privacy-safe well-known contract for local agents and wrappers.
 type DiscoveryManifest struct {
-	Product              string              `json:"product"`
-	Slug                 string              `json:"slug"`
-	Contract             string              `json:"contract"`
-	Version              string              `json:"version"`
-	PrivacyDefault       string              `json:"privacy_default"`
-	LocalFirst           bool                `json:"local_first"`
-	PromptContentStored  bool                `json:"prompt_content_stored"`
-	UsageDataUploaded    bool                `json:"usage_data_uploaded"`
-	APIBasePath          string              `json:"api_base_path"`
-	WellKnownURI         string              `json:"well_known_uri"`
-	CapabilityCatalogURI string              `json:"capability_catalog_uri"`
-	MCPCommand           string              `json:"mcp_command"`
-	Auth                 string              `json:"auth"`
-	ReadOnly             bool                `json:"read_only"`
-	Summary              Summary             `json:"summary"`
-	Protocols            []DiscoveryProtocol `json:"protocols"`
+	Product               string              `json:"product"`
+	Slug                  string              `json:"slug"`
+	Contract              string              `json:"contract"`
+	Version               string              `json:"version"`
+	PrivacyDefault        string              `json:"privacy_default"`
+	LocalFirst            bool                `json:"local_first"`
+	PromptContentStored   bool                `json:"prompt_content_stored"`
+	UsageDataUploaded     bool                `json:"usage_data_uploaded"`
+	APIBasePath           string              `json:"api_base_path"`
+	WellKnownURI          string              `json:"well_known_uri"`
+	CapabilityCatalogURI  string              `json:"capability_catalog_uri"`
+	RuntimeStatusURI      string              `json:"runtime_status_uri"`
+	CanonicalSchemaURI    string              `json:"canonical_schema_uri"`
+	EventExamplesURI      string              `json:"event_examples_uri"`
+	AdapterConformanceURI string              `json:"adapter_conformance_uri"`
+	MCPCommand            string              `json:"mcp_command"`
+	Auth                  string              `json:"auth"`
+	ReadOnly              bool                `json:"read_only"`
+	Summary               Summary             `json:"summary"`
+	Protocols             []DiscoveryProtocol `json:"protocols"`
 }
 
 // Discovery returns a compact local discovery document for agent ecosystems.
@@ -72,22 +76,26 @@ func Discovery(opts Options) DiscoveryManifest {
 		})
 	}
 	return DiscoveryManifest{
-		Product:              catalog.Product,
-		Slug:                 "agent-ledger",
-		Contract:             "agent-ledger.discovery",
-		Version:              "v1",
-		PrivacyDefault:       catalog.PrivacyDefault,
-		LocalFirst:           true,
-		PromptContentStored:  false,
-		UsageDataUploaded:    false,
-		APIBasePath:          "/api",
-		WellKnownURI:         "/.well-known/agent-ledger.json",
-		CapabilityCatalogURI: "/api/integrations",
-		MCPCommand:           "agent-ledger mcp",
-		Auth:                 discoveryAuth(opts),
-		ReadOnly:             opts.ReadOnly,
-		Summary:              catalog.Summary,
-		Protocols:            protocols,
+		Product:               catalog.Product,
+		Slug:                  "agent-ledger",
+		Contract:              "agent-ledger.discovery",
+		Version:               "v1",
+		PrivacyDefault:        catalog.PrivacyDefault,
+		LocalFirst:            true,
+		PromptContentStored:   false,
+		UsageDataUploaded:     false,
+		APIBasePath:           "/api",
+		WellKnownURI:          "/.well-known/agent-ledger.json",
+		CapabilityCatalogURI:  "/api/integrations",
+		RuntimeStatusURI:      "/api/runtime/status",
+		CanonicalSchemaURI:    "/api/event-schema",
+		EventExamplesURI:      "/api/event-examples",
+		AdapterConformanceURI: "/api/integrations/conformance",
+		MCPCommand:            "agent-ledger mcp",
+		Auth:                  discoveryAuth(opts),
+		ReadOnly:              opts.ReadOnly,
+		Summary:               catalog.Summary,
+		Protocols:             protocols,
 	}
 }
 

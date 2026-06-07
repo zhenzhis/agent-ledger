@@ -97,7 +97,9 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	if manifest.PromptContentStored || manifest.UsageDataUploaded {
 		t.Fatalf("discovery must keep privacy defaults explicit: %#v", manifest)
 	}
-	if manifest.Auth == "" || manifest.MCPCommand != "agent-ledger mcp" || manifest.CapabilityCatalogURI != "/api/integrations" {
+	if manifest.Auth == "" || manifest.MCPCommand != "agent-ledger mcp" || manifest.CapabilityCatalogURI != "/api/integrations" ||
+		manifest.RuntimeStatusURI != "/api/runtime/status" || manifest.CanonicalSchemaURI != "/api/event-schema" ||
+		manifest.EventExamplesURI != "/api/event-examples" || manifest.AdapterConformanceURI != "/api/integrations/conformance" {
 		t.Fatalf("discovery missing entrypoints: %#v", manifest)
 	}
 	if !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
