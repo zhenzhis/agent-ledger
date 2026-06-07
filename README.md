@@ -260,7 +260,7 @@ When a policy returns `require_approval`, Agent Ledger records a local pending a
 
 ## MCP Tool Surface
 
-`agent-ledger mcp` starts a local stdio JSON-RPC tool server for agent frameworks and wrappers. The implementation is intentionally local and privacy-preserving: tools can create or close workloads, start runs on existing workloads, append run heartbeats, check run liveness and terminal-state snapshots, record tool-call metadata, context refs, hashed artifacts, and quality/evaluation signals, ask for advisory policy decisions, query local budget state, explain cost, and find similar workloads. Resources expose metadata-only schema, integration, budget, workload, and policy context; prompts provide reusable workload/cost-review/evidence templates. It does not read prompt content and does not send data to a remote MCP host by itself. MCP, REST, and CLI policy evaluation share the same local evaluator so advisory decisions are consistent across integrations.
+`agent-ledger mcp` starts a local stdio JSON-RPC tool server for agent frameworks and wrappers. The implementation is intentionally local and privacy-preserving: tools can create or close workloads, start runs on existing workloads, append run heartbeats, check run liveness and terminal-state snapshots, record tool-call metadata, context refs, hashed artifacts, and quality/evaluation signals, ask for advisory policy decisions, query local budget state, explain cost, and find similar workloads. Resources expose metadata-only schema, integration, budget, workload, terminal-state, and policy context; prompts provide reusable workload/cost-review/evidence templates. It does not read prompt content and does not send data to a remote MCP host by itself. MCP, REST, and CLI policy evaluation share the same local evaluator so advisory decisions are consistent across integrations.
 
 Current tools:
 
@@ -290,7 +290,7 @@ Current resources:
 - `agent-ledger://schema/canonical-events`
 - `agent-ledger://integrations/catalog`
 - `agent-ledger://budget/current`
-- `agent-ledger://workloads/recent`
+- `agent-ledger://workloads/recent` with summary rows and derived terminal-state snapshots
 - `agent-ledger://policies/status`
 
 Current prompts:

@@ -83,6 +83,38 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 }
 
+func TestMCPRecentWorkloadsResourceIncludesState(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	srv := New(db, cfg)
+	workloadID, err := db.CreateWorkload("resource state workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("create workload: %v", err)
+	}
+
+	out := serveLines(t, srv, `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"agent-ledger://workloads/recent"}}`)
+	var payload map[string]interface{}
+	text := resourceTextPayload(t, out[0])
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		t.Fatalf("decode workload resource: %v\n%s", err, text)
+	}
+	rows, ok := payload["rows"].([]interface{})
+	if !ok || len(rows) == 0 {
+		t.Fatalf("resource missing workload rows: %#v", payload)
+	}
+	states, ok := payload["states"].([]interface{})
+	if !ok || len(states) == 0 {
+		t.Fatalf("resource missing workload states: %#v", payload)
+	}
+	state := states[0].(map[string]interface{})
+	if state["workload_id"] != workloadID || state["phase"] != "planned" || state["terminal"] != false {
+		t.Fatalf("unexpected resource state: %#v", state)
+	}
+	if payload["stale_after_seconds"] == nil {
+		t.Fatalf("resource missing stale threshold: %#v", payload)
+	}
+}
+
 func TestMCPUnknownResourceReturnsError(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()

@@ -354,7 +354,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://schema/canonical-events", "Canonical Event Schema", "Metadata-only event contract for workload, run, model-call, tool-call, artifact, evaluation, and policy events.", "application/json"),
 		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
 		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows.", "application/json"),
-		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries from the local ledger.", "application/json"),
+		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries and terminal-state snapshots from the local ledger.", "application/json"),
 		resource("agent-ledger://policies/status", "Policy Status", "Local policy configuration summary without prompt or secret content.", "application/json"),
 	}
 }
@@ -459,7 +459,20 @@ func (s *Server) readResource(uri string) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		payload = page
+		staleAfter := 10 * time.Minute
+		states, err := s.db.GetWorkloadStates(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", 20, staleAfter)
+		if err != nil {
+			return nil, err
+		}
+		payload = map[string]interface{}{
+			"rows":                page.Rows,
+			"total":               page.Total,
+			"limit":               page.Limit,
+			"offset":              page.Offset,
+			"next_cursor":         page.NextCursor,
+			"states":              states,
+			"stale_after_seconds": int64(staleAfter / time.Second),
+		}
 	case "agent-ledger://policies/status":
 		payload = map[string]interface{}{
 			"enabled":                s.cfg.Policies.Enabled,

@@ -48,6 +48,7 @@
 - Workload detail and graph now expose `context_refs`, making context/worktree/protocol references visible alongside runs, model calls, tools, artifacts, evaluations, and policies.
 - Workload audit timeline through `GET /api/workload-timeline`, `agent-ledger workload timeline`, and MCP `ledger.workload_timeline`, merging runs, heartbeats, model calls, tool calls, context refs, artifacts, evaluations, and policies.
 - Workload terminal-state snapshots through `GET /api/workload-state`, `agent-ledger workload state`, and MCP `ledger.workload_state`, deriving running/stale/blocked/needs-evaluation/accepted phases from local metadata only.
+- MCP `agent-ledger://workloads/recent` now includes derived terminal-state snapshots alongside recent workload summary rows for read-only agent context.
 - Workload detail UI now shows the recent audit timeline while isolating timeline API failures from the core detail view.
 - Explicit tool-call entrypoints through `agent-ledger workload tool` and MCP `ledger.record_tool_call`, recording tool metadata without command parameters or tool input content.
 - Explicit context-reference entrypoints through `agent-ledger workload context` and MCP `ledger.record_context`, both backed by canonical `context.ref` events.
