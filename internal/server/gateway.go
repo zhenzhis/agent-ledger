@@ -177,10 +177,6 @@ func (s *Server) handleAnthropicMessagesGateway(w http.ResponseWriter, r *http.R
 		badRequest(w, fmt.Errorf("model is required"))
 		return
 	}
-	if payload.Stream {
-		badRequest(w, fmt.Errorf("anthropic streaming gateway is not supported yet; send stream=false"))
-		return
-	}
 	ledgerCtx := gatewayContext(r, payload.Metadata, model)
 	if !s.evaluateOperationPolicy(w, r, "model.call", "gateway", model, ledgerCtx.Project, "anthropic-messages") {
 		return
@@ -199,7 +195,11 @@ func (s *Server) handleAnthropicMessagesGateway(w http.ResponseWriter, r *http.R
 	}
 	upReq.Header.Set("X-API-Key", apiKey)
 	upReq.Header.Set("Content-Type", "application/json")
-	upReq.Header.Set("Accept", "application/json")
+	if payload.Stream {
+		upReq.Header.Set("Accept", "text/event-stream")
+	} else {
+		upReq.Header.Set("Accept", "application/json")
+	}
 	upReq.Header.Set("User-Agent", "agent-ledger-gateway")
 	upReq.Header.Set("Anthropic-Version", firstNonEmpty(r.Header.Get("Anthropic-Version"), defaultAnthropicVersion))
 	if beta := strings.TrimSpace(r.Header.Get("Anthropic-Beta")); beta != "" {
@@ -214,6 +214,10 @@ func (s *Server) handleAnthropicMessagesGateway(w http.ResponseWriter, r *http.R
 		return
 	}
 	defer resp.Body.Close()
+	if payload.Stream {
+		s.handleAnthropicMessagesGatewayStream(w, resp, cfg, model, ledgerCtx, started)
+		return
+	}
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, cfg.MaxResponseBytes+1))
 	if err != nil {
 		http.Error(w, "gateway upstream response read failed", http.StatusBadGateway)
@@ -634,6 +638,144 @@ func (s *Server) handleOpenAIResponsesGatewayStream(w http.ResponseWriter, resp 
 	}
 	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
 	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
+}
+
+func (s *Server) handleAnthropicMessagesGatewayStream(w http.ResponseWriter, resp *http.Response, cfg config.GatewayConfig, model string, ledgerCtx gatewayLedgerContext, started time.Time) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming is not supported by this response writer", http.StatusInternalServerError)
+		return
+	}
+	contentType := firstNonEmpty(resp.Header.Get("Content-Type"), "text/event-stream")
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", firstNonEmpty(resp.Header.Get("Cache-Control"), "no-cache"))
+	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
+	w.Header().Set("X-Agent-Ledger-Stream-Usage-Requested", "false")
+	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events")
+	w.WriteHeader(resp.StatusCode)
+
+	var state anthropicStreamUsageState
+	var streamed int64
+	reader := bufio.NewReader(io.LimitReader(resp.Body, cfg.MaxResponseBytes+1))
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			streamed += int64(len(line))
+			if streamed > cfg.MaxResponseBytes {
+				s.appendAuditLog("local", "gateway", "gateway.anthropic.messages.stream_too_large", model, map[string]string{"status": fmt.Sprint(resp.StatusCode), "project": ledgerCtx.Project})
+				break
+			}
+			_, _ = w.Write(line)
+			flusher.Flush()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				state.Observe(line)
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			s.appendAuditLog("local", "gateway", "gateway.anthropic.messages.stream_read_error", model, map[string]string{"error": err.Error(), "status": fmt.Sprint(resp.StatusCode), "project": ledgerCtx.Project})
+			break
+		}
+	}
+
+	recorded := false
+	eventCount := 0
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if body, ok := state.ProviderBody(model, started); ok {
+			recorded, eventCount = s.recordAnthropicMessagesGatewayUsage(body, firstNonEmpty(state.Model, model), ledgerCtx, started)
+		} else {
+			s.appendAuditLog("local", "gateway", "gateway.anthropic.messages.stream_usage_missing", model, map[string]string{"project": ledgerCtx.Project})
+		}
+	} else {
+		s.appendAuditLog("local", "gateway", "gateway.anthropic.messages.upstream_status", model, map[string]string{"status": fmt.Sprint(resp.StatusCode), "project": ledgerCtx.Project})
+	}
+	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
+	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
+}
+
+type anthropicStreamUsageState struct {
+	ID    string
+	Model string
+	Usage map[string]interface{}
+}
+
+func (s *anthropicStreamUsageState) Observe(line []byte) {
+	text := strings.TrimSpace(string(line))
+	if !strings.HasPrefix(text, "data:") {
+		return
+	}
+	data := strings.TrimSpace(strings.TrimPrefix(text, "data:"))
+	if data == "" || data == "[DONE]" {
+		return
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(data), &obj); err != nil {
+		return
+	}
+	s.ID = firstNonEmpty(rawJSONText(obj["id"]), s.ID)
+	s.Model = firstNonEmpty(rawJSONText(obj["model"]), s.Model)
+	if rawMessage, ok := obj["message"]; ok {
+		var message map[string]json.RawMessage
+		if err := json.Unmarshal(rawMessage, &message); err == nil {
+			s.ID = firstNonEmpty(rawJSONText(message["id"]), s.ID)
+			s.Model = firstNonEmpty(rawJSONText(message["model"]), s.Model)
+			s.MergeUsage(message["usage"])
+		}
+	}
+	if rawDelta, ok := obj["delta"]; ok {
+		var delta map[string]json.RawMessage
+		if err := json.Unmarshal(rawDelta, &delta); err == nil {
+			s.MergeUsage(delta["usage"])
+		}
+	}
+	s.MergeUsage(obj["usage"])
+}
+
+func (s *anthropicStreamUsageState) MergeUsage(raw json.RawMessage) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return
+	}
+	var usage map[string]interface{}
+	if err := json.Unmarshal(raw, &usage); err != nil {
+		return
+	}
+	if s.Usage == nil {
+		s.Usage = map[string]interface{}{}
+	}
+	for key, value := range usage {
+		if value != nil {
+			s.Usage[key] = value
+		}
+	}
+}
+
+func (s anthropicStreamUsageState) ProviderBody(fallbackModel string, started time.Time) ([]byte, bool) {
+	if len(s.Usage) == 0 {
+		return nil, false
+	}
+	body, err := json.Marshal(map[string]interface{}{
+		"id":    firstNonEmpty(s.ID, "stream-"+started.Format("20060102T150405.000000000Z")),
+		"type":  "message",
+		"model": firstNonEmpty(s.Model, fallbackModel),
+		"usage": s.Usage,
+	})
+	if err != nil {
+		return nil, false
+	}
+	return body, true
+}
+
+func rawJSONText(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.TrimSpace(text)
+	}
+	return ""
 }
 
 func openAIStreamUsage(line []byte) (id, model string, usage json.RawMessage) {

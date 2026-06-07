@@ -362,16 +362,52 @@ func TestAnthropicGatewayProxiesAndRecordsUsage(t *testing.T) {
 	}
 }
 
-func TestAnthropicGatewayRejectsStreamingExplicitly(t *testing.T) {
+func TestAnthropicGatewayStreamsAndRecordsUsage(t *testing.T) {
 	db := testServerDB(t)
 	t.Setenv("AGENT_LEDGER_TEST_ANTHROPIC_KEY", "sk-ant-test")
-	srv := New(db, "", Options{Gateway: testAnthropicGatewayConfig("http://127.0.0.1:1")})
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/anthropic/v1/messages", strings.NewReader(`{"model":"claude-opus-4-7","stream":true,"messages":[]}`))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("unexpected upstream path %s", r.URL.Path)
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("gateway did not request event stream: %q", r.Header.Get("Accept"))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message_start\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream_gateway_test\",\"type\":\"message\",\"model\":\"claude-opus-4-7\",\"usage\":{\"input_tokens\":100,\"cache_read_input_tokens\":7,\"cache_creation_input_tokens\":3,\"output_tokens\":1}}}\n\n"))
+		_, _ = w.Write([]byte("event: content_block_delta\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"secret anthropic streamed response must not persist\"}}\n\n"))
+		_, _ = w.Write([]byte("event: message_delta\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":20}}\n\n"))
+		_, _ = w.Write([]byte("event: message_stop\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer upstream.Close()
+	srv := New(db, "", Options{Gateway: testAnthropicGatewayConfig(upstream.URL)})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/anthropic/v1/messages", strings.NewReader(`{"model":"claude-opus-4-7","stream":true,"max_tokens":128,"messages":[{"role":"user","content":"secret anthropic streamed prompt must not persist"}],"metadata":{"agent_ledger.project":"anthropic-stream-project","agent_ledger.goal":"anthropic stream"}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.handleAnthropicMessagesGateway(rr, req)
-	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "streaming gateway is not supported") {
-		t.Fatalf("expected explicit streaming rejection, got %d body=%s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "secret anthropic streamed response must not persist") {
+		t.Fatalf("stream body was not proxied: %s", rr.Body.String())
+	}
+	usageRows, err := db.GetModelCalls(time.Now().Add(-time.Hour), time.Now().Add(time.Hour), "gateway", "claude-opus-4-7", "anthropic-stream-project", 10)
+	if err != nil {
+		t.Fatalf("GetModelCalls: %v", err)
+	}
+	if len(usageRows) != 1 || usageRows[0].Calls != 1 || usageRows[0].Tokens != 120 {
+		t.Fatalf("unexpected anthropic stream usage projection: %+v", usageRows)
+	}
+	audit, err := db.GetAuditLog(20)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if strings.Contains(string(rawAudit), "secret anthropic streamed prompt") || strings.Contains(string(rawAudit), "secret anthropic streamed response") || strings.Contains(string(rawAudit), "sk-ant-test") {
+		t.Fatalf("sensitive anthropic stream data leaked into audit log: %s", string(rawAudit))
 	}
 }
 
