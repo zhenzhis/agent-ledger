@@ -68,6 +68,7 @@
 - Black/white/gray data-dense dashboard panels for workloads, pricing, quota, quality, model calls, cache, watchdog, and cost intelligence.
 - Read-only observer mode through `rbac.read_only`, disabling background collectors, pricing sync, cost recalculation, REST/CLI writes, and GET-derived audit/insight/bundle writebacks.
 - Runtime capability contract fields in integration catalog and discovery manifests: `writes_local_state`, `available_in_read_only`, and `runtime_status`.
+- Observer/control-plane runtime status in dashboard, Doctor reports, evidence bundles, and the web UI header, with write controls disabled in read-only mode.
 
 ### Changed
 

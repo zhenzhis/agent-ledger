@@ -142,6 +142,16 @@ func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	report.Runtime = s.runtimeStatus()
+	if report.Runtime.ReadOnly {
+		report.Checks = append(report.Checks, storage.DoctorCheck{
+			Name:     "runtime.read_only",
+			Status:   "info",
+			Severity: "info",
+			Message:  report.Runtime.Message,
+			Action:   "disable rbac.read_only when this instance should collect, import, sync pricing, or repair ledger state",
+		})
+	}
 	applyDoctorPrivacy(report, s.privacyFor(r))
 	if strings.EqualFold(r.URL.Query().Get("format"), "markdown") {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
@@ -691,6 +701,7 @@ func (s *Server) handleEvidenceBundle(w http.ResponseWriter, r *http.Request) {
 	watchdog, _ := s.db.GetInsightEventsFiltered(storage.InsightEventFilter{Kind: "watchdog", Source: source, Model: model, Project: project, From: from, To: to, Limit: 50})
 	insights, _ := s.db.GetCostIntelligence(from, to, source, model, project, 20)
 	workloadStates, _ := s.db.GetWorkloadStates(from, to, source, model, project, 20, 10*time.Minute)
+	runtime := s.runtimeStatus()
 	privacy := s.privacyFor(r)
 	privacy.RedactPaths = true
 	privacy.HashSessionIDs = true
@@ -718,6 +729,7 @@ func (s *Server) handleEvidenceBundle(w http.ResponseWriter, r *http.Request) {
 			"project":      dashboard.Project,
 			"stats":        dashboard.Stats,
 			"consistency":  dashboard.Consistency,
+			"runtime":      runtime,
 		}
 	}
 	bundle := map[string]interface{}{
@@ -725,6 +737,7 @@ func (s *Server) handleEvidenceBundle(w http.ResponseWriter, r *http.Request) {
 		"generated_at":      time.Now().UTC().Format(time.RFC3339),
 		"window":            map[string]string{"from": from.Format(time.RFC3339), "to": to.Format(time.RFC3339)},
 		"privacy":           "redacted",
+		"runtime":           runtime,
 		"quality":           quality,
 		"ingestion_health":  health,
 		"pricing_sources":   pricingSources,

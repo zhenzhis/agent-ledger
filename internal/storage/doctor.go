@@ -29,6 +29,7 @@ type DoctorReport struct {
 	PricingSources []PricingSourceStatus `json:"pricing_sources"`
 	Checks         []DoctorCheck         `json:"checks"`
 	Summary        string                `json:"summary"`
+	Runtime        *RuntimeStatus        `json:"runtime,omitempty"`
 }
 
 // GetDoctorReport returns local diagnostics for "why is my data wrong or empty?"
@@ -262,6 +263,9 @@ func FormatDoctorMarkdown(report *DoctorReport) string {
 	b.WriteString(fmt.Sprintf("- Summary: `%s`\n", report.Summary))
 	b.WriteString(fmt.Sprintf("- Window: `%s` to `%s`\n", report.From, report.To))
 	b.WriteString(fmt.Sprintf("- Calls: `%d`\n- Tokens: `%d`\n- Cost: `$%.4f`\n\n", report.Stats.TotalCalls, report.Stats.TotalTokens, report.Stats.TotalCost))
+	if report.Runtime != nil {
+		b.WriteString(fmt.Sprintf("- Runtime: `%s` (%s)\n\n", sanitizeMarkdownCell(report.Runtime.Mode), sanitizeMarkdownCell(report.Runtime.Message)))
+	}
 	if report.Projection != nil {
 		b.WriteString(fmt.Sprintf("- Projection: `%s` (`%.2f` confidence)\n\n", sanitizeMarkdownCell(report.Projection.Message), report.Projection.Confidence))
 	}

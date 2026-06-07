@@ -78,6 +78,9 @@ const I18N = {
     timeline: "Timeline",
     goal: "Goal",
     status: "Status",
+    observerMode: "Observer Mode",
+    controlPlaneMode: "Control Plane",
+    readOnlyActionDisabled: "Read-only observer mode: write operations are disabled",
     outcome: "Outcome",
     runs: "runs",
     toolCalls: "tool calls",
@@ -266,6 +269,9 @@ const I18N = {
     timeline: "时间线",
     goal: "目标",
     status: "状态",
+    observerMode: "观测模式",
+    controlPlaneMode: "控制面",
+    readOnlyActionDisabled: "只读观测模式：写操作已禁用",
     outcome: "结果",
     runs: "次运行",
     toolCalls: "工具调用",
@@ -445,6 +451,7 @@ let state = {
   project: localStorage.getItem("au-project") || "",
   ledgerQuery: localStorage.getItem("au-ledgerQuery") || "",
   privacy: privacyParam === null ? localStorage.getItem("au-privacy") === "true" : flagEnabled(privacyParam),
+  runtime: null,
 };
 
 let charts = {};
@@ -611,6 +618,26 @@ function updateRangeCaption() {
   $("custom-range-wrap").classList.toggle("is-hidden", state.preset !== "custom");
   $("from").value = state.customFrom || range.from;
   $("to").value = state.customTo || range.to;
+}
+
+function applyRuntimeStatus(runtime) {
+  state.runtime = runtime || null;
+  const readOnly = Boolean(runtime && runtime.read_only);
+  const caption = $("runtime-caption");
+  if (caption) {
+    caption.textContent = readOnly ? t("observerMode") : t("controlPlaneMode");
+    caption.title = (runtime && runtime.message) || "";
+    caption.classList.toggle("is-hidden", !runtime);
+    caption.classList.toggle("is-observer", readOnly);
+  }
+  const disabledTitle = readOnly ? t("readOnlyActionDisabled") : "";
+  ["btn-scan", "btn-pricing-sync", "btn-recalc", "btn-repair-projections", "btn-reset-scan"].forEach((id) => {
+    const button = $(id);
+    if (!button) return;
+    button.disabled = readOnly;
+    button.title = disabledTitle;
+    button.setAttribute("aria-disabled", readOnly ? "true" : "false");
+  });
 }
 
 function buildParams(opts = {}) {
@@ -1344,6 +1371,7 @@ async function refresh(options = {}) {
     });
 
     if (data.dashboard) {
+      applyRuntimeStatus(data.dashboard.runtime);
       data.stats = data.dashboard.stats;
       data.costModel = data.dashboard.cost_by_model || [];
       data.costTime = data.dashboard.cost_over_time || [];
@@ -1938,6 +1966,7 @@ function buildControls() {
   $("btn-privacy").classList.toggle("active", state.privacy);
   $("btn-reset-scan").disabled = !state.source;
   updateRangeCaption();
+  applyRuntimeStatus(state.runtime);
   applyAutoRefresh();
   syncSortHeaders();
 }

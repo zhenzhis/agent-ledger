@@ -102,6 +102,17 @@ type DashboardConsistencyIssue struct {
 	Message  string  `json:"message"`
 }
 
+// RuntimeStatus describes process-level operation mode for UI, doctor, and
+// local agent discovery without exposing secrets or local paths.
+type RuntimeStatus struct {
+	Mode             string   `json:"mode"`
+	ReadOnly         bool     `json:"read_only"`
+	WriteOperations  string   `json:"write_operations"`
+	BackgroundTasks  string   `json:"background_tasks"`
+	DisabledFeatures []string `json:"disabled_features,omitempty"`
+	Message          string   `json:"message"`
+}
+
 // DashboardBundle returns the core dashboard modules from one consistent read window.
 type DashboardBundle struct {
 	GeneratedAt    string                      `json:"generated_at"`
@@ -116,6 +127,7 @@ type DashboardBundle struct {
 	CostOverTime   []TimeSeriesPoint           `json:"cost_over_time"`
 	TokensOverTime []TokenTimeSeriesPoint      `json:"tokens_over_time"`
 	Consistency    []DashboardConsistencyIssue `json:"consistency"`
+	Runtime        *RuntimeStatus              `json:"runtime,omitempty"`
 }
 
 // CostByModel represents total cost for a single model.

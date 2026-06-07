@@ -296,6 +296,26 @@ func (s *Server) appendAuditLog(actor, role, action, target string, params map[s
 	_ = s.db.AppendAuditLog(actor, role, action, target, params)
 }
 
+func (s *Server) runtimeStatus() *storage.RuntimeStatus {
+	if s.options.RBAC.ReadOnly {
+		return &storage.RuntimeStatus{
+			Mode:             "observer",
+			ReadOnly:         true,
+			WriteOperations:  "disabled",
+			BackgroundTasks:  "disabled",
+			DisabledFeatures: []string{"background collectors", "pricing sync", "cost recalculation", "manual scans", "imports", "write APIs", "write MCP tools", "derived GET writebacks"},
+			Message:          "read-only observer mode: local state is not mutated by this process",
+		}
+	}
+	return &storage.RuntimeStatus{
+		Mode:            "control-plane",
+		ReadOnly:        false,
+		WriteOperations: "enabled",
+		BackgroundTasks: "enabled",
+		Message:         "write operations and background collectors are enabled",
+	}
+}
+
 func isSafeMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
 }
@@ -382,6 +402,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	data.Runtime = s.runtimeStatus()
 	writeJSON(w, data)
 }
 

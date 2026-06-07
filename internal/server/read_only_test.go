@@ -95,3 +95,47 @@ func TestReadOnlyAnomaliesEndpointDoesNotWriteDerivedEvents(t *testing.T) {
 		t.Fatalf("test fixture did not produce anomaly events in writable mode")
 	}
 }
+
+func TestReadOnlyRuntimeVisibleInDashboardAndDoctor(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{RBAC: config.RBACConfig{ReadOnly: true}})
+
+	dashboardReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/dashboard?from=2026-06-07&to=2026-06-07", nil)
+	dashboardRR := httptest.NewRecorder()
+	srv.handleDashboard(dashboardRR, dashboardReq)
+	if dashboardRR.Code != http.StatusOK {
+		t.Fatalf("dashboard status=%d body=%s", dashboardRR.Code, dashboardRR.Body.String())
+	}
+	var dashboard struct {
+		Runtime storage.RuntimeStatus `json:"runtime"`
+	}
+	if err := json.Unmarshal(dashboardRR.Body.Bytes(), &dashboard); err != nil {
+		t.Fatalf("decode dashboard: %v", err)
+	}
+	if !dashboard.Runtime.ReadOnly || dashboard.Runtime.Mode != "observer" || dashboard.Runtime.WriteOperations != "disabled" {
+		t.Fatalf("unexpected dashboard runtime: %+v", dashboard.Runtime)
+	}
+
+	doctorReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/doctor?from=2026-06-07&to=2026-06-07", nil)
+	doctorRR := httptest.NewRecorder()
+	srv.handleDoctor(doctorRR, doctorReq)
+	if doctorRR.Code != http.StatusOK {
+		t.Fatalf("doctor status=%d body=%s", doctorRR.Code, doctorRR.Body.String())
+	}
+	var report storage.DoctorReport
+	if err := json.Unmarshal(doctorRR.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode doctor: %v", err)
+	}
+	if report.Runtime == nil || !report.Runtime.ReadOnly {
+		t.Fatalf("doctor runtime missing: %+v", report.Runtime)
+	}
+	found := false
+	for _, check := range report.Checks {
+		if check.Name == "runtime.read_only" && check.Severity == "info" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("runtime.read_only doctor check missing: %+v", report.Checks)
+	}
+}
