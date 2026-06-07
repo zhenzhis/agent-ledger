@@ -114,6 +114,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/a2a/tasks", s.handleA2ATasks)
 	mux.HandleFunc("/api/provider/calls", s.handleProviderCalls)
 	mux.HandleFunc("/gateway/openai/v1/chat/completions", s.handleOpenAIChatGateway)
+	mux.HandleFunc("/gateway/anthropic/v1/messages", s.handleAnthropicMessagesGateway)
 	mux.HandleFunc("/api/health/ingestion", s.handleIngestionHealth)
 	mux.HandleFunc("/api/scan", s.handleScan)
 	mux.HandleFunc("/api/recalculate-costs", s.handleRecalculateCosts)

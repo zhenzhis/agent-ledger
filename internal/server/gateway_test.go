@@ -212,6 +212,73 @@ func TestGatewayProxiesAndRecordsUsage(t *testing.T) {
 	}
 }
 
+func TestAnthropicGatewayProxiesAndRecordsUsage(t *testing.T) {
+	db := testServerDB(t)
+	t.Setenv("AGENT_LEDGER_TEST_ANTHROPIC_KEY", "sk-ant-test")
+	upstreamKey := ""
+	upstreamVersion := ""
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamKey = r.Header.Get("X-API-Key")
+		upstreamVersion = r.Header.Get("Anthropic-Version")
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("unexpected upstream path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_gateway_test",
+			"type":"message",
+			"model":"claude-opus-4-7",
+			"content":[{"type":"text","text":"secret anthropic response must not persist"}],
+			"usage":{"input_tokens":100,"cache_read_input_tokens":7,"cache_creation_input_tokens":3,"output_tokens":20}
+		}`))
+	}))
+	defer upstream.Close()
+
+	srv := New(db, "", Options{Gateway: testAnthropicGatewayConfig(upstream.URL)})
+	body := `{"model":"claude-opus-4-7","max_tokens":128,"messages":[{"role":"user","content":"secret anthropic prompt must not persist"}],"metadata":{"agent_ledger.project":"anthropic-gateway-project","agent_ledger.goal":"anthropic gateway smoke"}}`
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/anthropic/v1/messages", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleAnthropicMessagesGateway(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if upstreamKey != "sk-ant-test" || upstreamVersion != defaultAnthropicVersion {
+		t.Fatalf("unexpected upstream auth/version: key=%q version=%q", upstreamKey, upstreamVersion)
+	}
+	if rr.Header().Get("X-Agent-Ledger-Usage-Recorded") != "true" {
+		t.Fatalf("usage recorded header=%q", rr.Header().Get("X-Agent-Ledger-Usage-Recorded"))
+	}
+	usageRows, err := db.GetModelCalls(time.Now().Add(-time.Hour), time.Now().Add(time.Hour), "gateway", "claude-opus-4-7", "anthropic-gateway-project", 10)
+	if err != nil {
+		t.Fatalf("GetModelCalls: %v", err)
+	}
+	if len(usageRows) != 1 || usageRows[0].Calls != 1 || usageRows[0].Tokens != 120 {
+		t.Fatalf("unexpected anthropic gateway usage projection: %+v", usageRows)
+	}
+	audit, err := db.GetAuditLog(20)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if strings.Contains(string(rawAudit), "secret anthropic prompt") || strings.Contains(string(rawAudit), "secret anthropic response") || strings.Contains(string(rawAudit), "sk-ant-test") {
+		t.Fatalf("sensitive anthropic gateway data leaked into audit log: %s", string(rawAudit))
+	}
+}
+
+func TestAnthropicGatewayRejectsStreamingExplicitly(t *testing.T) {
+	db := testServerDB(t)
+	t.Setenv("AGENT_LEDGER_TEST_ANTHROPIC_KEY", "sk-ant-test")
+	srv := New(db, "", Options{Gateway: testAnthropicGatewayConfig("http://127.0.0.1:1")})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/anthropic/v1/messages", strings.NewReader(`{"model":"claude-opus-4-7","stream":true,"messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleAnthropicMessagesGateway(rr, req)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "streaming gateway is not supported") {
+		t.Fatalf("expected explicit streaming rejection, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestGatewayAttachesLedgerContext(t *testing.T) {
 	db := testServerDB(t)
 	t.Setenv("AGENT_LEDGER_TEST_OPENAI_KEY", "sk-test")
@@ -288,5 +355,16 @@ func testGatewayConfig(upstream string) config.GatewayConfig {
 		MaxBodyBytes:       1 << 20,
 		MaxResponseBytes:   1 << 20,
 		Timeout:            time.Second,
+	}
+}
+
+func testAnthropicGatewayConfig(upstream string) config.GatewayConfig {
+	return config.GatewayConfig{
+		Enabled:                  true,
+		AnthropicUpstreamBaseURL: upstream,
+		AnthropicAPIKeyEnv:       "AGENT_LEDGER_TEST_ANTHROPIC_KEY",
+		MaxBodyBytes:             1 << 20,
+		MaxResponseBytes:         1 << 20,
+		Timeout:                  time.Second,
 	}
 }

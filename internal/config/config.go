@@ -184,13 +184,15 @@ type IntegrationsConfig struct {
 
 // GatewayConfig controls the optional local provider gateway.
 type GatewayConfig struct {
-	Enabled            bool          `yaml:"enabled"`
-	UpstreamBaseURL    string        `yaml:"upstream_base_url"`
-	APIKeyEnv          string        `yaml:"api_key_env"`
-	IncludeStreamUsage bool          `yaml:"include_stream_usage"`
-	MaxBodyBytes       int64         `yaml:"max_body_bytes"`
-	MaxResponseBytes   int64         `yaml:"max_response_bytes"`
-	Timeout            time.Duration `yaml:"timeout"`
+	Enabled                  bool          `yaml:"enabled"`
+	UpstreamBaseURL          string        `yaml:"upstream_base_url"`
+	APIKeyEnv                string        `yaml:"api_key_env"`
+	AnthropicUpstreamBaseURL string        `yaml:"anthropic_upstream_base_url"`
+	AnthropicAPIKeyEnv       string        `yaml:"anthropic_api_key_env"`
+	IncludeStreamUsage       bool          `yaml:"include_stream_usage"`
+	MaxBodyBytes             int64         `yaml:"max_body_bytes"`
+	MaxResponseBytes         int64         `yaml:"max_response_bytes"`
+	Timeout                  time.Duration `yaml:"timeout"`
 }
 
 // OTLPReceiverConfig controls the local OTLP HTTP/JSON traces receiver.
@@ -266,13 +268,15 @@ func DefaultConfig() *Config {
 			OTLPReceiver: OTLPReceiverConfig{Enabled: false, MaxBodyBytes: 4 << 20, MaxSpans: 1000},
 		},
 		Gateway: GatewayConfig{
-			Enabled:            false,
-			UpstreamBaseURL:    "https://api.openai.com",
-			APIKeyEnv:          "OPENAI_API_KEY",
-			IncludeStreamUsage: true,
-			MaxBodyBytes:       4 << 20,
-			MaxResponseBytes:   32 << 20,
-			Timeout:            120 * time.Second,
+			Enabled:                  false,
+			UpstreamBaseURL:          "https://api.openai.com",
+			APIKeyEnv:                "OPENAI_API_KEY",
+			AnthropicUpstreamBaseURL: "https://api.anthropic.com",
+			AnthropicAPIKeyEnv:       "ANTHROPIC_API_KEY",
+			IncludeStreamUsage:       true,
+			MaxBodyBytes:             4 << 20,
+			MaxResponseBytes:         32 << 20,
+			Timeout:                  120 * time.Second,
 		},
 	}
 }
@@ -342,6 +346,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Gateway.APIKeyEnv == "" {
 		cfg.Gateway.APIKeyEnv = "OPENAI_API_KEY"
+	}
+	if cfg.Gateway.AnthropicUpstreamBaseURL == "" {
+		cfg.Gateway.AnthropicUpstreamBaseURL = "https://api.anthropic.com"
+	}
+	if cfg.Gateway.AnthropicAPIKeyEnv == "" {
+		cfg.Gateway.AnthropicAPIKeyEnv = "ANTHROPIC_API_KEY"
 	}
 	if cfg.Gateway.MaxBodyBytes <= 0 {
 		cfg.Gateway.MaxBodyBytes = 4 << 20
