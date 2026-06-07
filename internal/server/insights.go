@@ -205,24 +205,27 @@ func (s *Server) handleQuotaStatus(w http.ResponseWriter, r *http.Request) {
 	weekFrom, weekTo, _ := budgetWindow(now, "week")
 	monthFrom, monthTo, _ := budgetWindow(now, "month")
 	type window struct {
-		Name            string  `json:"name"`
-		From            string  `json:"from"`
-		To              string  `json:"to"`
-		CostUSD         float64 `json:"cost_usd"`
-		Tokens          int64   `json:"tokens"`
-		Prompts         int     `json:"prompts"`
-		CostLimit       float64 `json:"cost_limit"`
-		TokenLimit      int64   `json:"token_limit"`
-		RemainingCost   float64 `json:"remaining_cost"`
-		RemainingTokens int64   `json:"remaining_tokens"`
-		BurnRatePerHour float64 `json:"burn_rate_per_hour"`
+		Name             string  `json:"name"`
+		From             string  `json:"from"`
+		To               string  `json:"to"`
+		CostUSD          float64 `json:"cost_usd"`
+		Tokens           int64   `json:"tokens"`
+		Prompts          int     `json:"prompts"`
+		CostLimit        float64 `json:"cost_limit"`
+		TokenLimit       int64   `json:"token_limit"`
+		RemainingCost    float64 `json:"remaining_cost"`
+		RemainingTokens  int64   `json:"remaining_tokens"`
+		BurnRatePerHour  float64 `json:"burn_rate_per_hour"`
+		ProjectedCostUSD float64 `json:"projected_cost_usd"`
+		ProjectedTokens  int64   `json:"projected_tokens"`
+		ResetAt          string  `json:"reset_at"`
+		TimeToLimitHours float64 `json:"time_to_limit_hours"`
 	}
 	makeWindow := func(name string, from, to time.Time) (window, error) {
 		stats, err := s.db.GetDashboardStatsFiltered(from, to, "", "", "")
 		if err != nil {
 			return window{}, err
 		}
-		hours := mathMax(1, time.Since(from).Hours())
 		costLimit := s.options.Quota.MonthlyBudget
 		tokenLimit := s.options.Quota.TokenBudget
 		if name == "5h" {
@@ -235,12 +238,30 @@ func (s *Server) handleQuotaStatus(w http.ResponseWriter, r *http.Request) {
 			costLimit = s.options.Quota.MonthlyBudget / 4.35
 			tokenLimit = s.options.Quota.TokenBudget / 4
 		}
+		elapsedHours := mathMax(1, time.Since(from).Hours())
+		windowHours := mathMax(1, to.Sub(from).Hours())
+		burnRate := stats.TotalCost / elapsedHours
+		tokenBurnRate := float64(stats.TotalTokens) / elapsedHours
+		timeToLimit := -1.0
+		if costLimit > 0 && burnRate > 0 {
+			timeToLimit = (costLimit - stats.TotalCost) / burnRate
+		} else if tokenLimit > 0 && tokenBurnRate > 0 {
+			timeToLimit = float64(tokenLimit-stats.TotalTokens) / tokenBurnRate
+		}
+		resetAt := ""
+		if name != "5h" {
+			resetAt = to.Format(time.RFC3339)
+		}
 		return window{
 			Name: name, From: from.Format(time.RFC3339), To: to.Format(time.RFC3339),
 			CostUSD: stats.TotalCost, Tokens: stats.TotalTokens, Prompts: stats.TotalPrompts,
 			CostLimit: costLimit, TokenLimit: tokenLimit,
 			RemainingCost: costLimit - stats.TotalCost, RemainingTokens: tokenLimit - stats.TotalTokens,
-			BurnRatePerHour: stats.TotalCost / hours,
+			BurnRatePerHour:  burnRate,
+			ProjectedCostUSD: burnRate * windowHours,
+			ProjectedTokens:  int64(tokenBurnRate * windowHours),
+			ResetAt:          resetAt,
+			TimeToLimitHours: timeToLimit,
 		}, nil
 	}
 	var windows []window

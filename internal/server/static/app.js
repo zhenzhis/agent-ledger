@@ -734,7 +734,10 @@ function renderQuota(payload) {
     windows.forEach((row) => {
       const ratio = row.cost_limit > 0 ? Number(row.cost_usd || 0) / Number(row.cost_limit || 1) : 0;
       const severity = ratio >= 1 ? "critical" : ratio >= 0.8 ? "warning" : "ok";
-      addOpsRow(fragment, row.name, `${fmtCost(row.cost_usd)} · ${fmt(row.tokens)} tokens · ${fmtCost(row.burn_rate_per_hour)}/h`, row.cost_limit > 0 ? `${(ratio * 100).toFixed(0)}%` : "-", severity);
+      const eta = Number(row.time_to_limit_hours || -1);
+      const etaText = eta >= 0 ? ` · ETA ${eta.toFixed(1)}h` : "";
+      const resetText = row.reset_at ? ` · reset ${relTime(row.reset_at)}` : "";
+      addOpsRow(fragment, row.name, `${fmtCost(row.cost_usd)} · ${fmt(row.tokens)} tokens · ${fmtCost(row.burn_rate_per_hour)}/h${etaText}${resetText}`, row.cost_limit > 0 ? `${(ratio * 100).toFixed(0)}%` : "-", severity);
     });
     const month = windows.find((row) => row.name === "month") || windows[0];
     const ratio = month.cost_limit > 0 ? Number(month.cost_usd || 0) / Number(month.cost_limit || 1) : 0;
