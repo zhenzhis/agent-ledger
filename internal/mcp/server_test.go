@@ -31,7 +31,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 2", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.integrations") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.integrations") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	payload := toolTextPayload(t, out[1])
@@ -122,7 +122,8 @@ func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 	evaluationLine := `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"ledger.record_evaluation","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","source":"codex","evaluation_id":"eval-mcp","evaluator":"ci","status":"pass","score":0.97,"signal":"unit-tests","notes":"privacy-safe acceptance signal"}}}`
 	closeLine := `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"ledger.close_workload","arguments":{"workload_id":"` + workloadID + `","status":"completed","outcome":"accepted"}}}`
 	timelineLine := `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"ledger.workload_timeline","arguments":{"workload_id":"` + workloadID + `","limit":20}}}`
-	responses := serveLines(t, srv, startRunLine, policyLine, toolLine, contextLine, artifactLine, evaluationLine, closeLine, timelineLine)
+	stateLine := `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"ledger.workload_state","arguments":{"workload_id":"` + workloadID + `","max_age":"10m"}}}`
+	responses := serveLines(t, srv, startRunLine, policyLine, toolLine, contextLine, artifactLine, evaluationLine, closeLine, timelineLine, stateLine)
 	startedRun := toolTextPayload(t, responses[0])
 	if startedRun["run_id"] == "" || startedRun["workload_id"] != workloadID {
 		t.Fatalf("start run payload=%#v", startedRun)
@@ -158,6 +159,10 @@ func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 	}
 	if !timelineHasKind(rows, "evaluation") {
 		t.Fatalf("timeline missing evaluation: %#v", timeline)
+	}
+	state := toolTextPayload(t, responses[8])
+	if state["phase"] != "accepted" || state["terminal"] != true {
+		t.Fatalf("unexpected workload state: %#v", state)
 	}
 
 	detail, err := db.GetWorkloadDetail(workloadID)

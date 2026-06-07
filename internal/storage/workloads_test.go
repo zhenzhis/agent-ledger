@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -207,6 +208,68 @@ func TestAgentRunLivenessReportsStaleActiveRuns(t *testing.T) {
 	}
 	if len(emptyRows) != 0 {
 		t.Fatalf("expected empty filtered rows, got %+v", emptyRows)
+	}
+}
+
+func TestWorkloadStateDerivesAsyncTerminalSignals(t *testing.T) {
+	db := tempDB(t)
+	id, err := db.CreateWorkload("ship terminal state", "codex", "repo-a", "repo-a", "main", "alice", "research", 10)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	runID, err := db.StartAgentRun(id, "codex", "codex", "codex exec", "/home/user/repo-a")
+	if err != nil {
+		t.Fatalf("StartAgentRun: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-state-stale", runID, "working", "testing", "waiting on tests", 0.4, nil, time.Now().UTC().Add(-20*time.Minute), 1); err != nil {
+		t.Fatalf("RecordAgentRunHeartbeat: %v", err)
+	}
+	state, err := db.GetWorkloadState(id, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("GetWorkloadState stale: %v", err)
+	}
+	if state.Phase != "stale" || !state.Stale || state.StaleRuns != 1 || state.NextAction == "" || len(state.Risks) == 0 {
+		t.Fatalf("unexpected stale state: %+v", state)
+	}
+
+	if err := db.FinishAgentRun(runID, "completed", 0, "", 1200); err != nil {
+		t.Fatalf("FinishAgentRun: %v", err)
+	}
+	if _, err := db.IngestCanonicalEvent(CanonicalEvent{
+		Source:     "test",
+		EventType:  "evaluation.recorded",
+		WorkloadID: id,
+		AgentRunID: runID,
+		Timestamp:  time.Now().UTC(),
+		Payload:    json.RawMessage(`{"evaluation_id":"eval-state","evaluator":"ci","status":"pass","score":0.95,"signal":"unit-tests"}`),
+		Confidence: 1,
+	}); err != nil {
+		t.Fatalf("IngestCanonicalEvent evaluation: %v", err)
+	}
+	if err := db.CloseWorkload(id, "completed", "accepted"); err != nil {
+		t.Fatalf("CloseWorkload: %v", err)
+	}
+	state, err = db.GetWorkloadState(id, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("GetWorkloadState accepted: %v", err)
+	}
+	if !state.Terminal || state.Phase != "accepted" || state.Progress != 1 || state.PositiveEvaluations != 1 || state.CompletedRuns != 1 || state.Stale {
+		t.Fatalf("unexpected accepted state: %+v", state)
+	}
+
+	blockedID, err := db.CreateWorkload("blocked policy", "codex", "repo-b", "repo-b", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload blocked: %v", err)
+	}
+	if _, err := db.RecordPolicyDecision(blockedID, "", "deny-model", "block", "model not allowed", "operator"); err != nil {
+		t.Fatalf("RecordPolicyDecision: %v", err)
+	}
+	blockedState, err := db.GetWorkloadState(blockedID, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("GetWorkloadState blocked: %v", err)
+	}
+	if blockedState.Phase != "blocked" || blockedState.PolicyBlocks != 1 || len(blockedState.Risks) == 0 {
+		t.Fatalf("unexpected blocked state: %+v", blockedState)
 	}
 }
 

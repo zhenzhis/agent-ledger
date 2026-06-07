@@ -197,6 +197,10 @@ func tools() []map[string]interface{} {
 			"workload_id": requiredStringSchema(),
 			"limit":       integerSchema(),
 		}),
+		tool("ledger.workload_state", "Return a derived terminal-state snapshot for one async agent workload.", map[string]interface{}{
+			"workload_id": requiredStringSchema(),
+			"max_age":     stringSchema(),
+		}),
 		tool("ledger.record_tool_call", "Record metadata-only tool execution such as shell, file, browser, MCP, or custom agent actions.", map[string]interface{}{
 			"workload_id":  requiredStringSchema(),
 			"run_id":       stringSchema(),
@@ -405,6 +409,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolRunLiveness(args)
 	case "ledger.workload_timeline":
 		return s.toolWorkloadTimeline(args)
+	case "ledger.workload_state":
+		return s.toolWorkloadState(args)
 	case "ledger.record_tool_call":
 		return s.toolRecordToolCall(args)
 	case "ledger.record_artifact":
@@ -709,6 +715,31 @@ func (s *Server) toolWorkloadTimeline(args json.RawMessage) (interface{}, error)
 		return nil, err
 	}
 	return map[string]interface{}{"workload_id": in.WorkloadID, "rows": rows}, nil
+}
+
+func (s *Server) toolWorkloadState(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		WorkloadID string `json:"workload_id"`
+		MaxAge     string `json:"max_age"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	if in.WorkloadID == "" {
+		return nil, fmt.Errorf("workload_id is required")
+	}
+	maxAge := 10 * time.Minute
+	if in.MaxAge != "" {
+		parsed, err := time.ParseDuration(in.MaxAge)
+		if err != nil {
+			return nil, err
+		}
+		if parsed <= 0 {
+			return nil, fmt.Errorf("max_age must be positive")
+		}
+		maxAge = parsed
+	}
+	return s.db.GetWorkloadState(in.WorkloadID, maxAge)
 }
 
 func (s *Server) toolRecordArtifact(args json.RawMessage) (interface{}, error) {

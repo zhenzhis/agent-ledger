@@ -154,6 +154,38 @@ func TestAgentRunLivenessAPI(t *testing.T) {
 	}
 }
 
+func TestWorkloadStateAPIPrivacy(t *testing.T) {
+	db := testServerDB(t)
+	workloadID, err := db.CreateWorkload("private terminal-state goal", "codex", "private-project", "zhenzhis/private-project", "feature/private", "", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	runID, err := db.StartAgentRun(workloadID, "codex", "codex", "codex", "C:/private/workspace")
+	if err != nil {
+		t.Fatalf("StartAgentRun: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-api-state", runID, "working", "testing", "private message", 0.6, nil, time.Now().UTC().Add(-20*time.Minute), 1); err != nil {
+		t.Fatalf("RecordAgentRunHeartbeat: %v", err)
+	}
+	srv := New(db, "", Options{Privacy: config.PrivacyConfig{ScreenshotMode: true}})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/workload-state?workload_id="+workloadID+"&max_age=10m&privacy=1", nil)
+	rr := httptest.NewRecorder()
+	srv.handleWorkloadState(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("state status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var state storage.WorkloadState
+	if err := json.Unmarshal(rr.Body.Bytes(), &state); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	if state.Phase != "stale" || !state.Stale || state.StaleRuns != 1 || state.Progress != 0.6 {
+		t.Fatalf("unexpected state: %+v", state)
+	}
+	if state.Goal != "<redacted>" || state.Project != "<redacted>" || state.Repo != "<redacted>" || state.GitBranch != "<redacted>" || state.Team != "<redacted>" {
+		t.Fatalf("privacy redaction failed: %+v", state)
+	}
+}
+
 func TestWorkloadDetailPrivacyRedactsContextRefs(t *testing.T) {
 	detail := &storage.WorkloadDetail{
 		Summary: storage.WorkloadSummary{

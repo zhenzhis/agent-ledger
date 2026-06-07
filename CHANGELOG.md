@@ -43,9 +43,10 @@
 - Filterable operational audit log through `GET /api/audit-log`, `agent-ledger audit`, MCP `ledger.audit_log`, privacy-aware audit export, and a dashboard Audit Log panel.
 - Local policy approval requests with `GET/POST /api/policy/approvals`, `agent-ledger policy approvals`, and `agent-ledger policy resolve`, allowing approved action/target retries by `approval_id`.
 - Legacy session backfill into workload/run/model-call records for immediate compatibility with existing local data.
-- Workload APIs: list/create/close/start-run/heartbeat/liveness/detail/graph/timeline, model registry, policy decisions, and workload CSV/JSON export.
+- Workload APIs: list/create/close/start-run/heartbeat/liveness/detail/graph/timeline/state, model registry, policy decisions, and workload CSV/JSON export.
 - Workload detail and graph now expose `context_refs`, making context/worktree/protocol references visible alongside runs, model calls, tools, artifacts, evaluations, and policies.
 - Workload audit timeline through `GET /api/workload-timeline`, `agent-ledger workload timeline`, and MCP `ledger.workload_timeline`, merging runs, heartbeats, model calls, tool calls, context refs, artifacts, evaluations, and policies.
+- Workload terminal-state snapshots through `GET /api/workload-state`, `agent-ledger workload state`, and MCP `ledger.workload_state`, deriving running/stale/blocked/needs-evaluation/accepted phases from local metadata only.
 - Workload detail UI now shows the recent audit timeline while isolating timeline API failures from the core detail view.
 - Explicit tool-call entrypoints through `agent-ledger workload tool` and MCP `ledger.record_tool_call`, recording tool metadata without command parameters or tool input content.
 - Explicit context-reference entrypoints through `agent-ledger workload context` and MCP `ledger.record_context`, both backed by canonical `context.ref` events.
@@ -53,7 +54,7 @@
 - Local MCP stdio JSON-RPC tools for budget lookup, workload lifecycle, run start/heartbeat/liveness, privacy-safe artifacts, advisory policy decisions, cost explanation, and similar workload search.
 - Local MCP resources and prompts for metadata-only schema/catalog/budget/workload/policy context plus workload, cost-review, and incident-evidence templates.
 - Hourly and daily usage aggregate tables with dashboard aggregate fallback.
-- CLI commands: `today`, `top`, `doctor`, `battery`, `workload list/create/show/timeline/close/start-run/heartbeat/liveness/tool/context/evaluation`, `run --goal ... -- <command>`, `export`, `pricing sync`, `router simulate`, `preflight`, `replay`, `badge`, and `wrapped`.
+- CLI commands: `today`, `top`, `doctor`, `battery`, `workload list/create/show/timeline/state/close/start-run/heartbeat/liveness/tool/context/evaluation`, `run --goal ... -- <command>`, `export`, `pricing sync`, `router simulate`, `preflight`, `replay`, `badge`, and `wrapped`.
 - Cursor-compatible session pagination via `next_cursor`.
 - Black/white/gray data-dense dashboard panels for workloads, pricing, quota, quality, model calls, cache, watchdog, and cost intelligence.
 

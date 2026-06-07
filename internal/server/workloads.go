@@ -257,6 +257,34 @@ func (s *Server) handleWorkloadTimeline(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, map[string]interface{}{"workload_id": id, "rows": rows})
 }
 
+func (s *Server) handleWorkloadState(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("workload_id")
+	if id == "" {
+		badRequest(w, fmt.Errorf("workload_id required"))
+		return
+	}
+	maxAge := 10 * time.Minute
+	if raw := r.URL.Query().Get("max_age"); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			badRequest(w, fmt.Errorf("invalid max_age: %w", err))
+			return
+		}
+		if parsed <= 0 {
+			badRequest(w, fmt.Errorf("invalid max_age: must be positive"))
+			return
+		}
+		maxAge = parsed
+	}
+	state, err := s.db.GetWorkloadState(id, maxAge)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	applyWorkloadStatePrivacy(state, s.privacyFor(r))
+	writeJSON(w, state)
+}
+
 func (s *Server) handleFleetAttribution(w http.ResponseWriter, r *http.Request) {
 	if !s.requireRole(w, r, "viewer") {
 		return
@@ -430,6 +458,21 @@ func applyWorkloadTimelinePrivacy(rows []storage.WorkloadTimelineRow, privacy co
 				rows[i].Detail = "<redacted>"
 			}
 		}
+	}
+}
+
+func applyWorkloadStatePrivacy(state *storage.WorkloadState, privacy config.PrivacyConfig) {
+	if state == nil {
+		return
+	}
+	if privacy.ScreenshotMode {
+		state.Goal = "<redacted>"
+	}
+	if privacy.HideProjectNames || privacy.ScreenshotMode {
+		state.Project = "<redacted>"
+		state.Repo = "<redacted>"
+		state.GitBranch = "<redacted>"
+		state.Team = "<redacted>"
 	}
 }
 

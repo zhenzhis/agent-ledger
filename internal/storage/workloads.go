@@ -116,6 +116,46 @@ type AgentRunLivenessRow struct {
 	Stale           bool    `json:"stale"`
 }
 
+// WorkloadState is a derived terminal-state snapshot for async agent workloads.
+type WorkloadState struct {
+	WorkloadID               string   `json:"workload_id"`
+	Goal                     string   `json:"goal"`
+	Status                   string   `json:"status"`
+	Phase                    string   `json:"phase"`
+	Terminal                 bool     `json:"terminal"`
+	Stale                    bool     `json:"stale"`
+	ReadinessScore           float64  `json:"readiness_score"`
+	Progress                 float64  `json:"progress"`
+	NextAction               string   `json:"next_action"`
+	Reasons                  []string `json:"reasons"`
+	Risks                    []string `json:"risks"`
+	Project                  string   `json:"project"`
+	Repo                     string   `json:"repo"`
+	GitBranch                string   `json:"git_branch"`
+	Team                     string   `json:"team"`
+	LastActivity             string   `json:"last_activity"`
+	StaleAfterSeconds        int64    `json:"stale_after_seconds"`
+	Runs                     int      `json:"runs"`
+	ActiveRuns               int      `json:"active_runs"`
+	StaleRuns                int      `json:"stale_runs"`
+	CompletedRuns            int      `json:"completed_runs"`
+	FailedRuns               int      `json:"failed_runs"`
+	ModelCalls               int      `json:"model_calls"`
+	ToolCalls                int      `json:"tool_calls"`
+	ContextRefs              int      `json:"context_refs"`
+	Artifacts                int      `json:"artifacts"`
+	Evaluations              int      `json:"evaluations"`
+	PositiveEvaluations      int      `json:"positive_evaluations"`
+	NegativeEvaluations      int      `json:"negative_evaluations"`
+	PolicyBlocks             int      `json:"policy_blocks"`
+	PolicyApprovalsRequired  int      `json:"policy_approvals_required"`
+	BudgetUSD                float64  `json:"budget_usd"`
+	CostUSD                  float64  `json:"cost_usd"`
+	Tokens                   int64    `json:"tokens"`
+	EstimatedRemainingBudget float64  `json:"estimated_remaining_budget"`
+	EstimatedBudgetExhausted bool     `json:"estimated_budget_exhausted"`
+}
+
 // ModelCallDetail summarizes canonical model calls by source/model/session.
 type ModelCallDetail struct {
 	CallID            string  `json:"call_id,omitempty"`
@@ -755,6 +795,104 @@ func (d *DB) GetWorkloadDetail(workloadID string) (*WorkloadDetail, error) {
 	return detail, nil
 }
 
+// GetWorkloadState returns a derived terminal-state snapshot for one workload.
+func (d *DB) GetWorkloadState(workloadID string, staleAfter time.Duration) (*WorkloadState, error) {
+	if staleAfter <= 0 {
+		staleAfter = 10 * time.Minute
+	}
+	detail, err := d.GetWorkloadDetail(workloadID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	state := &WorkloadState{
+		WorkloadID:               detail.Summary.WorkloadID,
+		Goal:                     detail.Summary.Goal,
+		Status:                   detail.Summary.Status,
+		Project:                  detail.Summary.Project,
+		Repo:                     detail.Summary.Repo,
+		GitBranch:                detail.Summary.GitBranch,
+		Team:                     detail.Summary.Team,
+		BudgetUSD:                detail.Summary.BudgetUSD,
+		CostUSD:                  detail.Summary.CostUSD,
+		Tokens:                   detail.Summary.Tokens,
+		Runs:                     len(detail.Runs),
+		ModelCalls:               len(detail.ModelCalls),
+		ToolCalls:                len(detail.ToolCalls),
+		ContextRefs:              len(detail.ContextRefs),
+		Artifacts:                len(detail.Artifacts),
+		Evaluations:              len(detail.Evaluations),
+		StaleAfterSeconds:        int64(staleAfter.Seconds()),
+		EstimatedRemainingBudget: detail.Summary.BudgetUSD - detail.Summary.CostUSD,
+	}
+	if detail.Summary.BudgetUSD > 0 && detail.Summary.CostUSD >= detail.Summary.BudgetUSD {
+		state.EstimatedBudgetExhausted = true
+	}
+
+	latest := latestWorkloadActivity(detail)
+	if latest.IsZero() {
+		latest = now
+	}
+	state.LastActivity = latest.UTC().Format(time.RFC3339Nano)
+	state.Terminal = isTerminalWorkloadStatus(detail.Summary.Status) || strings.TrimSpace(detail.Summary.ClosedAt) != ""
+
+	maxProgress := 0.0
+	for _, run := range detail.Runs {
+		if run.Progress > maxProgress {
+			maxProgress = run.Progress
+		}
+		status := strings.ToLower(strings.TrimSpace(run.Status))
+		switch {
+		case isSuccessfulRunStatus(status):
+			state.CompletedRuns++
+		case isFailedRunStatus(status):
+			state.FailedRuns++
+		case isTerminalRunStatus(status):
+			state.CompletedRuns++
+		case state.Terminal:
+			state.CompletedRuns++
+		default:
+			state.ActiveRuns++
+			activity := staleRunActivity(run)
+			if !activity.IsZero() && now.Sub(activity) > staleAfter {
+				state.StaleRuns++
+			}
+		}
+	}
+	state.Stale = state.StaleRuns > 0
+
+	for _, evaluation := range detail.Evaluations {
+		status := strings.ToLower(strings.TrimSpace(evaluation.Status))
+		switch {
+		case isPositiveEvaluationStatus(status):
+			state.PositiveEvaluations++
+		case isNegativeEvaluationStatus(status):
+			state.NegativeEvaluations++
+		}
+	}
+	for _, decision := range detail.Policies {
+		action := strings.ToLower(strings.TrimSpace(decision.Action))
+		switch action {
+		case "block", "blocked", "deny", "denied":
+			state.PolicyBlocks++
+		case "require_approval", "approval_required", "approval":
+			state.PolicyApprovalsRequired++
+		}
+	}
+
+	state.Phase, state.NextAction = deriveWorkloadPhase(state)
+	state.Reasons = workloadStateReasons(state)
+	state.Risks = workloadStateRisks(state)
+	state.ReadinessScore = workloadReadinessScore(state)
+	state.Progress = clamp01(maxProgress)
+	if state.Terminal || state.PositiveEvaluations > 0 && state.Artifacts > 0 {
+		state.Progress = 1
+	} else if state.Progress == 0 {
+		state.Progress = state.ReadinessScore
+	}
+	return state, nil
+}
+
 // GetWorkloadGraph returns a compact workload graph.
 func (d *DB) GetWorkloadGraph(workloadID string) (*WorkloadGraph, error) {
 	detail, err := d.GetWorkloadDetail(workloadID)
@@ -1384,6 +1522,247 @@ func getAgentRunEventTx(tx *sql.Tx, eventID string) (*AgentRunEventRow, error) {
 		return nil, err
 	}
 	return &row, nil
+}
+
+func latestWorkloadActivity(detail *WorkloadDetail) time.Time {
+	var latest time.Time
+	consider := func(raw string) {
+		if t, ok := parseDBTime(raw); ok && t.After(latest) {
+			latest = t
+		}
+	}
+	consider(detail.Summary.LastActivity)
+	consider(detail.Summary.UpdatedAt)
+	consider(detail.Summary.CreatedAt)
+	consider(detail.Summary.ClosedAt)
+	for _, run := range detail.Runs {
+		if t := latestRunActivity(run); t.After(latest) {
+			latest = t
+		}
+	}
+	for _, event := range detail.RunEvents {
+		consider(event.Timestamp)
+	}
+	for _, call := range detail.ModelCalls {
+		consider(call.LastAt)
+		consider(call.FirstAt)
+	}
+	for _, tool := range detail.ToolCalls {
+		consider(tool.Timestamp)
+	}
+	for _, ref := range detail.ContextRefs {
+		consider(ref.CreatedAt)
+	}
+	for _, artifact := range detail.Artifacts {
+		consider(artifact.CreatedAt)
+	}
+	for _, evaluation := range detail.Evaluations {
+		consider(evaluation.CreatedAt)
+	}
+	for _, policy := range detail.Policies {
+		consider(policy.CreatedAt)
+	}
+	return latest
+}
+
+func latestRunActivity(run AgentRunRow) time.Time {
+	var latest time.Time
+	for _, raw := range []string{run.LastHeartbeatAt, run.EndedAt, run.StartedAt} {
+		if t, ok := parseDBTime(raw); ok && t.After(latest) {
+			latest = t
+		}
+	}
+	return latest
+}
+
+func staleRunActivity(run AgentRunRow) time.Time {
+	if run.HeartbeatCount > 0 && strings.TrimSpace(run.LastHeartbeatAt) != "" {
+		t, _ := parseDBTime(run.LastHeartbeatAt)
+		return t
+	}
+	t, _ := parseDBTime(run.StartedAt)
+	return t
+}
+
+func deriveWorkloadPhase(state *WorkloadState) (string, string) {
+	switch {
+	case state.PolicyBlocks > 0:
+		return "blocked", "resolve blocking policy decision"
+	case state.PolicyApprovalsRequired > 0:
+		return "needs_approval", "approve, reject, or revise the guarded action"
+	case state.NegativeEvaluations > 0 && !state.Terminal:
+		return "needs_revision", "address failing evaluation signal"
+	case state.Terminal && state.PositiveEvaluations > 0:
+		return "accepted", "archive, report, or use as precedent"
+	case state.Terminal && state.NegativeEvaluations > 0:
+		return "rejected", "review failure signal and reopen if needed"
+	case state.Terminal:
+		return "terminal", "archive or report workload"
+	case state.StaleRuns > 0:
+		return "stale", "inspect stale agent run heartbeat"
+	case state.ActiveRuns > 0:
+		return "running", "continue monitoring run heartbeat"
+	case state.Artifacts > 0 && state.Evaluations == 0:
+		return "needs_evaluation", "record review, test, or acceptance signal"
+	case state.Runs == 0:
+		return "planned", "start an agent run or attach an existing session"
+	default:
+		return "active", "continue workload instrumentation"
+	}
+}
+
+func workloadStateReasons(state *WorkloadState) []string {
+	reasons := []string{}
+	if state.Runs > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d runs recorded", state.Runs))
+	}
+	if state.ModelCalls > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d model call groups", state.ModelCalls))
+	}
+	if state.ToolCalls > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d tool calls", state.ToolCalls))
+	}
+	if state.ContextRefs > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d context refs", state.ContextRefs))
+	}
+	if state.Artifacts > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d artifacts", state.Artifacts))
+	}
+	if state.PositiveEvaluations > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d positive evaluations", state.PositiveEvaluations))
+	}
+	if state.Terminal {
+		reasons = append(reasons, "workload is terminal")
+	}
+	if len(reasons) == 0 {
+		reasons = append(reasons, "workload exists")
+	}
+	return reasons
+}
+
+func workloadStateRisks(state *WorkloadState) []string {
+	risks := []string{}
+	if state.PolicyBlocks > 0 {
+		risks = append(risks, fmt.Sprintf("%d blocking policy decisions", state.PolicyBlocks))
+	}
+	if state.PolicyApprovalsRequired > 0 {
+		risks = append(risks, fmt.Sprintf("%d approval-required policy decisions", state.PolicyApprovalsRequired))
+	}
+	if state.StaleRuns > 0 {
+		risks = append(risks, fmt.Sprintf("%d stale active runs", state.StaleRuns))
+	}
+	if state.FailedRuns > 0 {
+		risks = append(risks, fmt.Sprintf("%d failed runs", state.FailedRuns))
+	}
+	if state.NegativeEvaluations > 0 {
+		risks = append(risks, fmt.Sprintf("%d negative evaluations", state.NegativeEvaluations))
+	}
+	if state.EstimatedBudgetExhausted {
+		risks = append(risks, "budget exhausted")
+	}
+	return risks
+}
+
+func workloadReadinessScore(state *WorkloadState) float64 {
+	score := 0.15
+	if state.Runs > 0 {
+		score += 0.15
+	}
+	if state.ContextRefs > 0 {
+		score += 0.10
+	}
+	if state.ModelCalls > 0 {
+		score += 0.15
+	}
+	if state.ToolCalls > 0 {
+		score += 0.10
+	}
+	if state.Artifacts > 0 {
+		score += 0.15
+	}
+	if state.PositiveEvaluations > 0 {
+		score += 0.20
+	} else if state.Evaluations > 0 {
+		score += 0.10
+	}
+	if state.Terminal {
+		score += 0.10
+	}
+	if state.PolicyBlocks > 0 {
+		score -= 0.25
+	}
+	if state.PolicyApprovalsRequired > 0 {
+		score -= 0.15
+	}
+	if state.StaleRuns > 0 {
+		score -= 0.20
+	}
+	if state.FailedRuns > 0 {
+		score -= 0.10
+	}
+	if state.NegativeEvaluations > 0 {
+		score -= 0.20
+	}
+	return clamp01(score)
+}
+
+func isTerminalWorkloadStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "complete", "closed", "failed", "failure", "error", "cancelled", "canceled", "accepted", "rejected", "merged", "deployed", "reverted", "abandoned", "partial":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTerminalRunStatus(status string) bool {
+	return isSuccessfulRunStatus(status) || isFailedRunStatus(status) || status == "cancelled" || status == "canceled"
+}
+
+func isSuccessfulRunStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "complete", "succeeded", "success", "done", "closed":
+		return true
+	default:
+		return false
+	}
+}
+
+func isFailedRunStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "failure", "error", "errored", "timeout", "timed_out":
+		return true
+	default:
+		return false
+	}
+}
+
+func isPositiveEvaluationStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pass", "passed", "success", "succeeded", "accepted", "approved", "complete", "completed", "ok":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNegativeEvaluationStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "fail", "failed", "failure", "rejected", "blocked", "regressed", "needs_work", "needs-rework":
+		return true
+	default:
+		return false
+	}
+}
+
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 func firstNonEmpty(values ...string) string {
