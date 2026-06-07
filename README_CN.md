@@ -52,6 +52,8 @@ CLI：
 ./agent-ledger event schema
 ./agent-ledger event ingest --file event.json
 ./agent-ledger integrations
+./agent-ledger otel convert --file spans.json
+./agent-ledger otel ingest --file spans.json
 ./agent-ledger bundle export --privacy --signed --out usage-bundle.json
 ./agent-ledger bundle import --file usage-bundle.json --verify
 ./agent-ledger policy evaluate --model gpt-5.5 --action model.call
@@ -165,6 +167,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/integrations` | 隐私安全的集成能力目录 |
 | `GET /api/event-schema` | Canonical event schema 与支持的事件类型 |
 | `POST /api/events` | 写入 metadata-only canonical events |
+| `POST /api/otel/genai` | 将 OpenTelemetry GenAI JSON span 转成 canonical model-call events |
 | `POST /api/policy/evaluate` | 评估本地 advisory policy，并可选择写入 policy decision |
 | `GET /api/sessions` | 服务端分页会话账本 |
 | `GET /api/model-registry` | 模型与价格治理注册表 |
@@ -202,7 +205,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `ledger.explain_cost`
 - `ledger.find_similar_workloads`
 
-Canonical event ingest 支持 workload、run、model call、tool call、context ref、artifact、evaluation、policy decision 事件。Payload 只允许元数据；如果出现 raw prompt/content 相关键会直接失败，不会静默持久化。`GET /api/integrations`、`agent-ledger integrations` 与 `ledger.integrations` 会暴露当前 connector/protocol 能力目录，但不会泄露本地 source 原始路径。
+Canonical event ingest 支持 workload、run、model call、tool call、context ref、artifact、evaluation、policy decision 事件。Payload 只允许元数据；如果出现 raw prompt/content 相关键会直接失败，不会静默持久化。`GET /api/integrations`、`agent-ledger integrations` 与 `ledger.integrations` 会暴露当前 connector/protocol 能力目录，但不会泄露本地 source 原始路径。`POST /api/otel/genai` 与 `agent-ledger otel ingest` 支持 OpenTelemetry GenAI JSON span，并只保留经过挑选的元数据和 token 字段。
 
 ## 安全模型
 
@@ -232,9 +235,9 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . &
 
 ## Roadmap
 
-已落地基础：canonical workload schema、metadata-only canonical event ingest、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、CLI workload/event/policy 命令、CLI run wrapper 和本地 MCP stdio tools。
+已落地基础：canonical workload schema、metadata-only canonical event ingest、OpenTelemetry GenAI JSON span mapping、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、CLI workload/event/policy 命令、CLI run wrapper 和本地 MCP stdio tools。
 
-后续路线：A2A task telemetry、OpenTelemetry GenAI mapping、可选 provider/API gateway、Postgres 团队模式、OIDC/SSO、更完整的 MCP resources/prompts、企业策略审批流。
+后续路线：A2A task telemetry、完整 OTLP receiver mode、可选 provider/API gateway、Postgres 团队模式、OIDC/SSO、更完整的 MCP resources/prompts、企业策略审批流。
 
 ## License
 

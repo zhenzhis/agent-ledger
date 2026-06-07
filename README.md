@@ -52,6 +52,8 @@ CLI:
 ./agent-ledger event schema
 ./agent-ledger event ingest --file event.json
 ./agent-ledger integrations
+./agent-ledger otel convert --file spans.json
+./agent-ledger otel ingest --file spans.json
 ./agent-ledger bundle export --privacy --signed --out usage-bundle.json
 ./agent-ledger bundle import --file usage-bundle.json --verify
 ./agent-ledger policy evaluate --model gpt-5.5 --action model.call
@@ -165,6 +167,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/integrations` | Privacy-safe integration capability catalog |
 | `GET /api/event-schema` | Canonical event schema and supported event types |
 | `POST /api/events` | Ingest metadata-only canonical events |
+| `POST /api/otel/genai` | Convert OpenTelemetry GenAI JSON spans into canonical model-call events |
 | `POST /api/policy/evaluate` | Evaluate local advisory policy rules and optionally record decisions |
 | `GET /api/sessions` | Server-side paginated session ledger |
 | `GET /api/model-registry` | Pricing and model governance registry |
@@ -202,7 +205,7 @@ Current tools:
 - `ledger.explain_cost`
 - `ledger.find_similar_workloads`
 
-Canonical event ingest supports workload, run, model-call, tool-call, context-ref, artifact, evaluation, and policy-decision events. Payloads are metadata-only; raw prompt/content keys are rejected instead of silently persisted. `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations` expose the current connector/protocol capability catalog without leaking local source paths.
+Canonical event ingest supports workload, run, model-call, tool-call, context-ref, artifact, evaluation, and policy-decision events. Payloads are metadata-only; raw prompt/content keys are rejected instead of silently persisted. `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations` expose the current connector/protocol capability catalog without leaking local source paths. `POST /api/otel/genai` and `agent-ledger otel ingest` accept OpenTelemetry GenAI JSON spans and persist only selected metadata/token fields.
 
 ## Security Model
 
@@ -232,9 +235,9 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . &
 
 ## Roadmap
 
-Implemented foundation: canonical workload schema, metadata-only canonical event ingest, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, CLI workload/event/policy commands, CLI run wrapper, and local MCP stdio tools.
+Implemented foundation: canonical workload schema, metadata-only canonical event ingest, OpenTelemetry GenAI JSON span mapping, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, CLI workload/event/policy commands, CLI run wrapper, and local MCP stdio tools.
 
-Planned integrations: A2A task telemetry, OpenTelemetry GenAI mapping, optional provider/API gateway, Postgres team mode, OIDC/SSO, richer MCP resources/prompts, and enterprise policy approval flows.
+Planned integrations: A2A task telemetry, full OTLP receiver mode, optional provider/API gateway, Postgres team mode, OIDC/SSO, richer MCP resources/prompts, and enterprise policy approval flows.
 
 ## License
 

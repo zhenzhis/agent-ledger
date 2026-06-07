@@ -397,12 +397,47 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runPolicyCLI(args[1:], cfg, db)
 	case "integrations":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
+	case "otel":
+		return runOTelCLI(args[1:], db)
 	case "mcp":
 		return mcp.New(db, cfg).Serve(os.Stdin, os.Stdout)
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
 	return nil
+}
+
+func runOTelCLI(args []string, db *storage.DB) error {
+	if len(args) == 0 || (args[0] != "convert" && args[0] != "ingest") {
+		return fmt.Errorf("usage: agent-ledger otel convert|ingest [--file spans.json]")
+	}
+	raw, err := readCLIInput(args[1:], "--file", 4<<20)
+	if err != nil {
+		return err
+	}
+	spans, err := integrations.DecodeOTelGenAISpans(raw)
+	if err != nil {
+		return err
+	}
+	events, err := integrations.ConvertOTelGenAISpans(spans)
+	if err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return fmt.Errorf("no GenAI spans found")
+	}
+	if args[0] == "convert" {
+		return json.NewEncoder(os.Stdout).Encode(events)
+	}
+	results := make([]*storage.CanonicalEventResult, 0, len(events))
+	for _, event := range events {
+		result, err := db.IngestCanonicalEvent(event)
+		if err != nil {
+			return err
+		}
+		results = append(results, result)
+	}
+	return json.NewEncoder(os.Stdout).Encode(results)
 }
 
 func runPolicyCLI(args []string, cfg *config.Config, db *storage.DB) error {
@@ -519,13 +554,7 @@ func runEventCLI(args []string, db *storage.DB) error {
 	if len(args) == 0 || args[0] != "ingest" {
 		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event ingest [--file event.json]")
 	}
-	var raw []byte
-	var err error
-	if path := cliValue(args[1:], "--file"); path != "" {
-		raw, err = os.ReadFile(path)
-	} else {
-		raw, err = io.ReadAll(io.LimitReader(os.Stdin, 4<<20))
-	}
+	raw, err := readCLIInput(args[1:], "--file", 4<<20)
 	if err != nil {
 		return err
 	}
@@ -548,6 +577,13 @@ func runEventCLI(args []string, db *storage.DB) error {
 		results = append(results, result)
 	}
 	return json.NewEncoder(os.Stdout).Encode(results)
+}
+
+func readCLIInput(args []string, fileFlag string, limit int64) ([]byte, error) {
+	if path := cliValue(args, fileFlag); path != "" {
+		return os.ReadFile(path)
+	}
+	return io.ReadAll(io.LimitReader(os.Stdin, limit))
 }
 
 func decodeCLIEvents(raw []byte) ([]storage.CanonicalEvent, error) {

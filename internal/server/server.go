@@ -88,6 +88,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/integrations", s.handleIntegrations)
 	mux.HandleFunc("/api/event-schema", s.handleCanonicalEventSchema)
 	mux.HandleFunc("/api/events", s.handleCanonicalEvents)
+	mux.HandleFunc("/api/otel/genai", s.handleOTelGenAI)
 	mux.HandleFunc("/api/health/ingestion", s.handleIngestionHealth)
 	mux.HandleFunc("/api/scan", s.handleScan)
 	mux.HandleFunc("/api/recalculate-costs", s.handleRecalculateCosts)
