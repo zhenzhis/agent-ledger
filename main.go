@@ -1275,8 +1275,8 @@ func runEventCLI(args []string, db *storage.DB) error {
 	if len(args) > 0 && args[0] == "schema" {
 		return json.NewEncoder(os.Stdout).Encode(storage.CanonicalEventSchema())
 	}
-	if len(args) == 0 || args[0] != "ingest" {
-		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event ingest [--file event.json]")
+	if len(args) == 0 || (args[0] != "ingest" && args[0] != "validate") {
+		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event validate [--file event.json] | agent-ledger event ingest [--file event.json]")
 	}
 	raw, err := readCLIInput(args[1:], "--file", 4<<20)
 	if err != nil {
@@ -1291,6 +1291,17 @@ func runEventCLI(args []string, db *storage.DB) error {
 	}
 	if len(events) > 500 {
 		return fmt.Errorf("too many events: max 500")
+	}
+	if args[0] == "validate" {
+		results := make([]*storage.CanonicalEventValidation, 0, len(events))
+		for _, event := range events {
+			result, err := storage.ValidateCanonicalEvent(event)
+			if err != nil {
+				return err
+			}
+			results = append(results, result)
+		}
+		return json.NewEncoder(os.Stdout).Encode(results)
 	}
 	results := make([]*storage.CanonicalEventResult, 0, len(events))
 	for _, event := range events {

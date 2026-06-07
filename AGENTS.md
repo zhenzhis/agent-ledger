@@ -16,6 +16,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger workload liveness --max-age 10m --stale-only
 ./agent-ledger workload feed --severity warning --max-age 10m
 ./agent-ledger event schema                # print canonical event schema
+./agent-ledger event validate < event.json # validate canonical events without writing SQLite
 ./agent-ledger event ingest < event.json   # ingest metadata-only canonical event(s)
 ./agent-ledger discovery                   # print local discovery manifest
 ./agent-ledger integrations                # print privacy-safe integration capability catalog

@@ -102,6 +102,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/integrations", s.handleIntegrations)
 	mux.HandleFunc("/api/runtime/status", s.handleRuntimeStatus)
 	mux.HandleFunc("/api/event-schema", s.handleCanonicalEventSchema)
+	mux.HandleFunc("/api/events/validate", s.handleCanonicalEventValidate)
 	mux.HandleFunc("/api/events", s.handleCanonicalEvents)
 	mux.HandleFunc("/api/otel/genai", s.handleOTelGenAI)
 	mux.HandleFunc("/api/otlp/v1/traces", s.handleOTLPTraces)

@@ -481,6 +481,44 @@ func (s *Server) handleCanonicalEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"ok": true, "results": results})
 }
 
+func (s *Server) handleCanonicalEventValidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) {
+		return
+	}
+	raw := bytes.Buffer{}
+	if _, err := raw.ReadFrom(http.MaxBytesReader(w, r.Body, 4<<20)); err != nil {
+		badRequest(w, err)
+		return
+	}
+	events, err := decodeCanonicalEventRequest(raw.Bytes())
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	if len(events) == 0 {
+		badRequest(w, fmt.Errorf("at least one event is required"))
+		return
+	}
+	if len(events) > 500 {
+		badRequest(w, fmt.Errorf("too many events: max 500"))
+		return
+	}
+	results := make([]*storage.CanonicalEventValidation, 0, len(events))
+	for _, event := range events {
+		result, err := storage.ValidateCanonicalEvent(event)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+		results = append(results, result)
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "results": results})
+}
+
 func decodeCanonicalEventRequest(raw []byte) ([]storage.CanonicalEvent, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {

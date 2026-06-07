@@ -417,6 +417,30 @@ func TestCanonicalEventProvenancePersistsAndExports(t *testing.T) {
 	}
 }
 
+func TestValidateCanonicalEventDryRun(t *testing.T) {
+	result, err := ValidateCanonicalEvent(CanonicalEvent{
+		Source:    "codex",
+		EventType: "workload.started",
+		Payload:   rawJSON(t, map[string]interface{}{"goal": "validate adapter"}),
+	})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if result.EventID == "" || result.PayloadHash == "" || result.EventType != "workload.started" || result.Source != "codex" {
+		t.Fatalf("unexpected validation result: %#v", result)
+	}
+	if result.Status != "valid_with_warnings" || len(result.Warnings) == 0 {
+		t.Fatalf("expected provenance warnings: %#v", result)
+	}
+	if _, err := ValidateCanonicalEvent(CanonicalEvent{
+		Source:    "codex",
+		EventType: "unknown.event",
+		Payload:   rawJSON(t, map[string]interface{}{}),
+	}); err == nil {
+		t.Fatal("expected unsupported event type error")
+	}
+}
+
 func rawJSON(t *testing.T, value map[string]interface{}) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(value)

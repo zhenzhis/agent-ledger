@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,5 +152,37 @@ func TestReadOnlyRuntimeVisibleInDashboardAndDoctor(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("runtime.read_only doctor check missing: %+v", report.Checks)
+	}
+}
+
+func TestReadOnlyAllowsCanonicalEventValidationWithoutWrites(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{RBAC: config.RBACConfig{ReadOnly: true}})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/events/validate", strings.NewReader(`{
+		"source":"codex",
+		"event_type":"workload.started",
+		"payload":{"goal":"validate only"}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleCanonicalEventValidate(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("validate status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Results []storage.CanonicalEventValidation `json:"results"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode validate response: %v", err)
+	}
+	if len(body.Results) != 1 || body.Results[0].Status != "valid_with_warnings" {
+		t.Fatalf("unexpected validate response: %+v", body.Results)
+	}
+	quality, err := db.GetDataQuality(time.Hour)
+	if err != nil {
+		t.Fatalf("GetDataQuality: %v", err)
+	}
+	if quality.Provenance == nil || quality.Provenance.Events != 0 {
+		t.Fatalf("validate wrote canonical events: %#v", quality.Provenance)
 	}
 }

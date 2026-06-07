@@ -112,7 +112,7 @@ func Registry(opts Options) Catalog {
 			Enabled:    true,
 			Privacy:    "metadata-only payloads; raw prompt and content keys are rejected",
 			EventTypes: eventTypes,
-			Endpoints:  []string{"GET /api/event-schema", "POST /api/events"},
+			Endpoints:  []string{"GET /api/event-schema", "POST /api/events/validate", "POST /api/events"},
 			DataClasses: []string{
 				"workload metadata", "adapter provenance", "model call usage", "tool call metadata", "context references", "artifact hashes", "evaluation signals", "policy decisions",
 			},
@@ -128,7 +128,7 @@ func Registry(opts Options) Catalog {
 			Enabled:    true,
 			Privacy:    "metadata-only payloads; stdin and file inputs are size limited; provenance fields should use hashes, row ids, or offsets instead of raw prompt content",
 			EventTypes: eventTypes,
-			Commands:   []string{"agent-ledger event schema", "agent-ledger event ingest --file event.json"},
+			Commands:   []string{"agent-ledger event schema", "agent-ledger event validate --file event.json", "agent-ledger event ingest --file event.json"},
 		},
 		{
 			ID:        "protocol.mcp_stdio",

@@ -45,6 +45,16 @@ type CanonicalEventResult struct {
 	Derived    []string `json:"derived,omitempty"`
 }
 
+// CanonicalEventValidation describes a dry-run contract validation outcome.
+type CanonicalEventValidation struct {
+	EventID     string   `json:"event_id"`
+	Status      string   `json:"status"`
+	EventType   string   `json:"event_type"`
+	Source      string   `json:"source"`
+	PayloadHash string   `json:"payload_hash"`
+	Warnings    []string `json:"warnings,omitempty"`
+}
+
 // CanonicalEventTypeInfo describes one supported canonical event type.
 type CanonicalEventTypeInfo struct {
 	EventType     string            `json:"event_type"`
@@ -243,32 +253,9 @@ func CanonicalEventTypes() []CanonicalEventTypeInfo {
 
 // IngestCanonicalEvent stores one canonical event and applies supported ledger projections.
 func (d *DB) IngestCanonicalEvent(event CanonicalEvent) (*CanonicalEventResult, error) {
-	event.Source = strings.TrimSpace(event.Source)
-	event.EventType = normalizeCanonicalEventType(event.EventType)
-	if event.Source == "" {
-		return nil, fmt.Errorf("source is required")
-	}
-	if event.EventType == "" {
-		return nil, fmt.Errorf("event_type is required")
-	}
-	if err := normalizeCanonicalEventProvenance(&event); err != nil {
-		return nil, err
-	}
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
-	}
-	if event.Confidence <= 0 {
-		event.Confidence = 1
-	}
-	payload, payloadJSON, err := canonicalPayload(event.Payload)
+	payload, payloadJSON, err := prepareCanonicalEvent(&event)
 	if err != nil {
 		return nil, err
-	}
-	if event.PayloadHash == "" {
-		event.PayloadHash = hashPayload(payloadJSON)
-	}
-	if event.EventID == "" {
-		event.EventID = deterministicEventID(event, event.PayloadHash)
 	}
 
 	d.mu.Lock()
@@ -331,6 +318,115 @@ func (d *DB) IngestCanonicalEvent(event CanonicalEvent) (*CanonicalEventResult, 
 		return nil, err
 	}
 	return &CanonicalEventResult{EventID: event.EventID, Status: "inserted", EventType: event.EventType, WorkloadID: event.WorkloadID, RunID: event.AgentRunID, Derived: derived}, nil
+}
+
+// ValidateCanonicalEvent performs the same metadata-only envelope validation as
+// ingest without writing to SQLite.
+func ValidateCanonicalEvent(event CanonicalEvent) (*CanonicalEventValidation, error) {
+	if _, _, err := prepareCanonicalEvent(&event); err != nil {
+		return nil, err
+	}
+	warnings := canonicalEventWarnings(event)
+	status := "valid"
+	if len(warnings) > 0 {
+		status = "valid_with_warnings"
+	}
+	return &CanonicalEventValidation{
+		EventID:     event.EventID,
+		Status:      status,
+		EventType:   event.EventType,
+		Source:      event.Source,
+		PayloadHash: event.PayloadHash,
+		Warnings:    warnings,
+	}, nil
+}
+
+func prepareCanonicalEvent(event *CanonicalEvent) (map[string]interface{}, string, error) {
+	event.Source = strings.TrimSpace(event.Source)
+	event.EventType = normalizeCanonicalEventType(event.EventType)
+	if event.Source == "" {
+		return nil, "", fmt.Errorf("source is required")
+	}
+	if event.EventType == "" {
+		return nil, "", fmt.Errorf("event_type is required")
+	}
+	if !isSupportedCanonicalEventType(event.EventType) {
+		return nil, "", fmt.Errorf("unsupported event_type %q", event.EventType)
+	}
+	if err := normalizeCanonicalEventProvenance(event); err != nil {
+		return nil, "", err
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	}
+	if event.Confidence <= 0 {
+		event.Confidence = 1
+	}
+	payload, payloadJSON, err := canonicalPayload(event.Payload)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := validateCanonicalEventRequirements(*event, payload); err != nil {
+		return nil, "", err
+	}
+	if event.PayloadHash == "" {
+		event.PayloadHash = hashPayload(payloadJSON)
+	}
+	if event.EventID == "" {
+		event.EventID = deterministicEventID(*event, event.PayloadHash)
+	}
+	return payload, payloadJSON, nil
+}
+
+func validateCanonicalEventRequirements(event CanonicalEvent, payload map[string]interface{}) error {
+	hasWorkload := event.WorkloadID != "" || payloadString(payload, "workload_id") != "" || payloadString(payload, "goal") != ""
+	switch event.EventType {
+	case "workload.started":
+		if payloadString(payload, "goal") == "" {
+			return fmt.Errorf("payload.goal is required for %s", event.EventType)
+		}
+	case "workload.closed":
+		if event.WorkloadID == "" && payloadString(payload, "workload_id") == "" {
+			return fmt.Errorf("workload_id is required for %s", event.EventType)
+		}
+	case "agent.run.started":
+		if !hasWorkload {
+			return fmt.Errorf("workload_id or payload.goal is required for %s", event.EventType)
+		}
+	case "agent.run.finished", "agent.run.heartbeat":
+		if event.AgentRunID == "" && firstPayloadString(payload, "run_id", "agent_run_id") == "" {
+			return fmt.Errorf("agent_run_id is required for %s", event.EventType)
+		}
+	case "model.call":
+		if !hasWorkload {
+			return fmt.Errorf("workload_id or payload.goal is required for %s", event.EventType)
+		}
+		if event.Model == "" && payloadString(payload, "model") == "" {
+			return fmt.Errorf("model or payload.model is required for %s", event.EventType)
+		}
+	case "tool.call", "context.ref", "artifact.created", "evaluation.recorded", "policy.decision":
+		if !hasWorkload {
+			return fmt.Errorf("workload_id or payload.goal is required for %s", event.EventType)
+		}
+	}
+	return nil
+}
+
+func canonicalEventWarnings(event CanonicalEvent) []string {
+	var warnings []string
+	if event.SourceVersion == "" {
+		warnings = append(warnings, "source_version is missing")
+	}
+	if event.ParserVersion == "" {
+		warnings = append(warnings, "parser_version is missing")
+	}
+	if event.RawRef == "" {
+		warnings = append(warnings, "raw_ref is missing")
+	}
+	if event.MatchType == "" {
+		warnings = append(warnings, "match_type is missing")
+	}
+	return warnings
 }
 
 func (d *DB) applyCanonicalEvent(tx *sql.Tx, event *CanonicalEvent, payload map[string]interface{}, now time.Time) ([]string, error) {
@@ -701,6 +797,15 @@ func normalizeCanonicalEventType(raw string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(raw))
 	}
+}
+
+func isSupportedCanonicalEventType(eventType string) bool {
+	for _, info := range CanonicalEventTypes() {
+		if info.EventType == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 func deterministicEventID(event CanonicalEvent, payloadHash string) string {
