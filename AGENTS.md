@@ -20,7 +20,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger event validate < event.json # validate canonical events without writing SQLite
 ./agent-ledger event ingest < event.json   # ingest metadata-only canonical event(s)
 ./agent-ledger adapter spec                # print machine-readable adapter contract
-./agent-ledger adapter conformance --kind provider --strict --file fixture.json # validate adapter fixture output without writing SQLite
+./agent-ledger adapter conformance --kind provider-stream --strict --file fixture.sse # validate adapter fixture output without writing SQLite
 ./agent-ledger discovery                   # print local discovery manifest
 ./agent-ledger integrations                # print privacy-safe integration capability catalog
 ./agent-ledger runtime                     # print runtime mode and read-only/write status

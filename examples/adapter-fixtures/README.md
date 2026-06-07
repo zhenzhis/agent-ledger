@@ -9,8 +9,11 @@ agent-ledger adapter conformance --kind canonical --strict --file examples/adapt
 agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-openai-response.json
 agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-openai-chat-completion.json
 agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-anthropic-message.json
+agent-ledger adapter conformance --kind provider-stream --strict --file examples/adapter-fixtures/provider-openai-chat-stream.sse
+agent-ledger adapter conformance --kind provider-stream --strict --file examples/adapter-fixtures/provider-openai-responses-stream.sse
+agent-ledger adapter conformance --kind provider-stream --strict --file examples/adapter-fixtures/provider-anthropic-message-stream.sse
 agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otel-genai-span.json
 agent-ledger adapter conformance --kind a2a --strict --file examples/adapter-fixtures/a2a-task.json
 ```
 
-These examples intentionally contain metadata, counters, hashes, and lifecycle fields only. Do not add prompt, response, message, transcript, or raw artifact content to fixtures.
+These examples intentionally contain metadata, counters, hashes, lifecycle fields, and placeholder stream deltas only. Do not add prompt, response, message, transcript, or raw artifact content to fixtures.

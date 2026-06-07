@@ -438,10 +438,11 @@ func tools() []map[string]interface{} {
 		tool("ledger.event_examples", "Return privacy-safe canonical event examples for adapter authors.", map[string]interface{}{
 			"event_type": stringSchema(),
 		}),
-		tool("ledger.adapter_conformance", "Validate a canonical/provider/OpenTelemetry/A2A fixture without writing local state.", map[string]interface{}{
-			"kind":     stringSchema(),
-			"strict":   booleanSchema(),
-			"raw_json": requiredStringSchema(),
+		tool("ledger.adapter_conformance", "Validate a canonical/provider/provider-stream/OpenTelemetry/A2A fixture without writing local state.", map[string]interface{}{
+			"kind":      stringSchema(),
+			"strict":    booleanSchema(),
+			"raw_json":  stringSchema(),
+			"raw_input": stringSchema(),
 		}),
 		tool("ledger.adapter_contract", "Return the machine-readable adapter contract for privacy-safe ecosystem integrations.", map[string]interface{}{}),
 		tool("ledger.integrations", "Return the Agent Ledger integration capability catalog.", map[string]interface{}{}),
@@ -1262,20 +1263,22 @@ func (s *Server) toolValidateEvent(args json.RawMessage) (interface{}, error) {
 
 func (s *Server) toolAdapterConformance(args json.RawMessage) (interface{}, error) {
 	var in struct {
-		Kind    string `json:"kind"`
-		Strict  bool   `json:"strict"`
-		RawJSON string `json:"raw_json"`
+		Kind     string `json:"kind"`
+		Strict   bool   `json:"strict"`
+		RawJSON  string `json:"raw_json"`
+		RawInput string `json:"raw_input"`
 	}
 	if err := json.Unmarshal(args, &in); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(in.RawJSON) == "" {
-		return nil, fmt.Errorf("raw_json is required")
+	raw := firstNonEmpty(in.RawInput, in.RawJSON)
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("raw_input or raw_json is required")
 	}
 	return integrations.RunAdapterConformanceWithOptions(integrations.AdapterConformanceOptions{
 		Kind:   in.Kind,
 		Strict: in.Strict,
-	}, []byte(in.RawJSON))
+	}, []byte(raw))
 }
 
 func (s *Server) toolGetPolicy(args json.RawMessage) (interface{}, error) {

@@ -48,6 +48,27 @@ func TestRunAdapterConformanceReportsCanonicalPrivacyFailure(t *testing.T) {
 	}
 }
 
+func TestRunAdapterConformanceAutoDetectsProviderStreamUsage(t *testing.T) {
+	report, err := RunAdapterConformance("auto", []byte(`event: message_start
+data: {"type":"message_start","message":{"id":"msg_stream_conf_1","model":"claude-opus-4-7","usage":{"input_tokens":100,"cache_read_input_tokens":10,"cache_creation_input_tokens":5,"output_tokens":1}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"must not persist"}}
+
+event: message_delta
+data: {"type":"message_delta","usage":{"output_tokens":25}}
+
+event: message_stop
+data: {"type":"message_stop"}
+`))
+	if err != nil {
+		t.Fatalf("conformance: %v", err)
+	}
+	if !report.OK || report.Status != "pass" || report.InputKind != "provider-stream" || report.DecodedEvents != 2 || report.FailedEvents != 0 {
+		t.Fatalf("unexpected provider-stream report: %#v", report)
+	}
+}
+
 func TestRunAdapterConformanceCanonicalWarnings(t *testing.T) {
 	report, err := RunAdapterConformance("canonical", []byte(`{
 		"source":"test-adapter",
@@ -80,6 +101,11 @@ func TestAdapterFixtureFilesPassStrictConformance(t *testing.T) {
 	}{
 		{"canonical", "canonical-workload.json"},
 		{"provider", "provider-openai-response.json"},
+		{"provider", "provider-openai-chat-completion.json"},
+		{"provider", "provider-anthropic-message.json"},
+		{"provider-stream", "provider-openai-chat-stream.sse"},
+		{"provider-stream", "provider-openai-responses-stream.sse"},
+		{"provider-stream", "provider-anthropic-message-stream.sse"},
 		{"otel", "otel-genai-span.json"},
 		{"a2a", "a2a-task.json"},
 	}

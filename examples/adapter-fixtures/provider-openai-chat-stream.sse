@@ -1,0 +1,5 @@
+data: {"id":"chatcmpl_fixture_stream_001","model":"gpt-5.5","choices":[{"delta":{"role":"assistant"}}],"usage":null}
+
+data: {"id":"chatcmpl_fixture_stream_001","model":"gpt-5.5","choices":[],"usage":{"prompt_tokens":120,"completion_tokens":30,"prompt_tokens_details":{"cached_tokens":20}}}
+
+data: [DONE]

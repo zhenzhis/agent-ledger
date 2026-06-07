@@ -1,0 +1,2 @@
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_fixture_stream_001","model":"gpt-5.5","usage":{"input_tokens":150,"input_tokens_details":{"cached_tokens":25},"output_tokens":45,"output_tokens_details":{"reasoning_tokens":5}}}}

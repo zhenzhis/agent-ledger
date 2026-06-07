@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -120,7 +121,8 @@ func RunAdapterConformanceWithOptions(opts AdapterConformanceOptions, raw []byte
 }
 
 // DecodeAdapterConformanceEvents maps a raw fixture into canonical events without
-// persisting anything. kind supports auto, canonical, provider, otel, a2a.
+// persisting anything. kind supports auto, canonical, provider, provider-stream,
+// otel, a2a.
 func DecodeAdapterConformanceEvents(kind string, raw []byte) (string, []storage.CanonicalEvent, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
@@ -141,6 +143,13 @@ func DecodeAdapterConformanceEvents(kind string, raw []byte) (string, []storage.
 		}
 		events, err := ConvertProviderCalls(calls)
 		return normalized, events, err
+	case "provider-stream":
+		calls, err := DecodeProviderStream(trimmed)
+		if err != nil {
+			return normalized, nil, err
+		}
+		events, err := ConvertProviderCalls(calls)
+		return normalized, events, err
 	case "otel":
 		spans, err := DecodeOTelGenAISpans(trimmed)
 		if err != nil {
@@ -156,7 +165,7 @@ func DecodeAdapterConformanceEvents(kind string, raw []byte) (string, []storage.
 		events, err := ConvertA2ATasks(tasks)
 		return normalized, events, err
 	default:
-		return normalized, nil, fmt.Errorf("unsupported conformance kind %q: use auto, canonical, provider, otel, or a2a", kind)
+		return normalized, nil, fmt.Errorf("unsupported conformance kind %q: use auto, canonical, provider, provider-stream, otel, or a2a", kind)
 	}
 }
 
@@ -194,6 +203,8 @@ func normalizeConformanceKind(kind string) string {
 		return "canonical"
 	case "provider", "usage", "openai", "anthropic", "litellm":
 		return "provider"
+	case "provider-stream", "stream", "sse", "provider-sse", "openai-stream", "anthropic-stream":
+		return "provider-stream"
 	case "otel", "opentelemetry", "otlp", "genai":
 		return "otel"
 	case "a2a", "agent2agent", "agent-to-agent":
@@ -204,6 +215,9 @@ func normalizeConformanceKind(kind string) string {
 }
 
 func inferConformanceKind(raw []byte) string {
+	if looksLikeSSETranscript(raw) {
+		return "provider-stream"
+	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		if bytes.HasPrefix(raw, []byte("[")) {
@@ -243,6 +257,18 @@ func inferConformanceKind(raw []byte) string {
 		}
 	}
 	return "canonical"
+}
+
+func looksLikeSSETranscript(raw []byte) bool {
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		return strings.HasPrefix(line, "event:") || strings.HasPrefix(line, "data:")
+	}
+	return false
 }
 
 func arrayLooksCanonical(raw json.RawMessage) bool {

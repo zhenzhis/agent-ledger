@@ -128,12 +128,13 @@ func AdapterContractSpec() AdapterContract {
 			"confidence below 1 must explain estimation or fuzzy matching through match_type or payload metadata",
 		},
 		Validation: AdapterValidationContract{
-			HTTP:    "POST /api/integrations/conformance?kind=auto|canonical|provider|otel|a2a&strict=true",
+			HTTP:    "POST /api/integrations/conformance?kind=auto|canonical|provider|provider-stream|otel|a2a&strict=true",
 			CLI:     "agent-ledger adapter conformance --kind auto --strict --file fixture.json",
 			MCPTool: "ledger.adapter_conformance",
 			StrictCI: []string{
 				"agent-ledger adapter conformance --kind canonical --strict --file examples/adapter-fixtures/canonical-workload.json",
 				"agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-openai-response.json",
+				"agent-ledger adapter conformance --kind provider-stream --strict --file examples/adapter-fixtures/provider-anthropic-message-stream.sse",
 				"agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otel-genai-span.json",
 				"agent-ledger adapter conformance --kind a2a --strict --file examples/adapter-fixtures/a2a-task.json",
 			},

@@ -896,13 +896,13 @@ func runProviderCLI(args []string, db *storage.DB) error {
 
 func runAdapterCLI(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: agent-ledger adapter spec|conformance [--kind auto|canonical|provider|otel|a2a] [--strict] [--file fixture.json]")
+		return fmt.Errorf("usage: agent-ledger adapter spec|conformance [--kind auto|canonical|provider|provider-stream|otel|a2a] [--strict] [--file fixture.json]")
 	}
 	if args[0] == "spec" {
 		return json.NewEncoder(os.Stdout).Encode(integrations.AdapterContractSpec())
 	}
 	if args[0] != "conformance" {
-		return fmt.Errorf("usage: agent-ledger adapter spec|conformance [--kind auto|canonical|provider|otel|a2a] [--strict] [--file fixture.json]")
+		return fmt.Errorf("usage: agent-ledger adapter spec|conformance [--kind auto|canonical|provider|provider-stream|otel|a2a] [--strict] [--file fixture.json]")
 	}
 	raw, err := readCLIInput(args[1:], "--file", 4<<20)
 	if err != nil {
