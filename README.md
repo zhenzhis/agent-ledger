@@ -224,7 +224,7 @@ Manual scan, reset, pricing sync, imports, and recalculation require localhost a
 
 ## MCP Tool Surface
 
-`agent-ledger mcp` starts a local stdio JSON-RPC tool server for agent frameworks and wrappers. The first implementation is intentionally local and privacy-preserving: tools can create or close workloads, record hashed artifacts, ask for advisory policy decisions, query local budget state, explain cost, and find similar workloads. It does not read prompt content and does not send data to a remote MCP host by itself. MCP, REST, and CLI policy evaluation share the same local evaluator so advisory decisions are consistent across integrations.
+`agent-ledger mcp` starts a local stdio JSON-RPC tool server for agent frameworks and wrappers. The implementation is intentionally local and privacy-preserving: tools can create or close workloads, record hashed artifacts, ask for advisory policy decisions, query local budget state, explain cost, and find similar workloads. Resources expose metadata-only schema, integration, budget, workload, and policy context; prompts provide reusable workload/cost-review/evidence templates. It does not read prompt content and does not send data to a remote MCP host by itself. MCP, REST, and CLI policy evaluation share the same local evaluator so advisory decisions are consistent across integrations.
 
 Current tools:
 
@@ -238,6 +238,20 @@ Current tools:
 - `ledger.get_policy`
 - `ledger.explain_cost`
 - `ledger.find_similar_workloads`
+
+Current resources:
+
+- `agent-ledger://schema/canonical-events`
+- `agent-ledger://integrations/catalog`
+- `agent-ledger://budget/current`
+- `agent-ledger://workloads/recent`
+- `agent-ledger://policies/status`
+
+Current prompts:
+
+- `agent-ledger/workload-brief`
+- `agent-ledger/cost-review`
+- `agent-ledger/incident-evidence`
 
 Canonical event ingest supports workload, run, model-call, tool-call, context-ref, artifact, evaluation, and policy-decision events. Payloads are metadata-only; raw prompt/content keys are rejected instead of silently persisted. `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations` expose the current connector/protocol capability catalog without leaking local source paths. `POST /api/otel/genai` and `agent-ledger otel ingest` accept OpenTelemetry GenAI JSON spans and persist only selected metadata/token fields. When explicitly enabled, `POST /v1/traces` and `POST /api/otlp/v1/traces` accept OTLP HTTP/JSON trace batches with body and span-count limits; OTLP protobuf/gRPC are intentionally rejected until conformance tests are added. `POST /api/a2a/tasks` and `agent-ledger a2a ingest` accept A2A task snapshots/events and persist task lifecycle metadata while excluding message/history/artifact-part content. `POST /api/provider/calls` and `agent-ledger provider ingest` accept OpenAI-compatible, Anthropic-style, and LiteLLM-style usage envelopes while excluding request/response message content. `POST /api/reconciliation/import` and `agent-ledger reconcile import` accept local provider CSV/JSON billing exports, store only summary totals, statement hash, window, and warnings, and compare them with the local ledger for the same window.
 
@@ -302,9 +316,9 @@ Releases use GoReleaser for platform archives and GitHub Actions for GHCR images
 
 ## Roadmap
 
-Implemented foundation: canonical workload schema, metadata-only canonical event ingest, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP/JSON traces receiver, A2A task telemetry mapping, provider usage envelope mapping, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, CLI workload/event/policy/router/replay/badge/preflight commands, CLI run wrapper, and local MCP stdio tools.
+Implemented foundation: canonical workload schema, metadata-only canonical event ingest, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP/JSON traces receiver, A2A task telemetry mapping, provider usage envelope mapping, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, CLI workload/event/policy/router/replay/badge/preflight commands, CLI run wrapper, and local MCP stdio tools/resources/prompts.
 
-Planned integrations: OTLP protobuf/gRPC conformance, live provider/API gateway mode, Postgres team mode, OIDC/SSO, richer MCP resources/prompts, and enterprise policy approval flows.
+Planned integrations: OTLP protobuf/gRPC conformance, live provider/API gateway mode, Postgres team mode, OIDC/SSO, richer MCP subscriptions, and enterprise policy approval flows.
 
 ## License
 

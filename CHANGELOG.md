@@ -31,6 +31,7 @@
 - Legacy session backfill into workload/run/model-call records for immediate compatibility with existing local data.
 - Workload APIs: list/create/close/detail/graph, model registry, policy decisions, and workload CSV/JSON export.
 - Local MCP stdio JSON-RPC tools for budget lookup, workload lifecycle, privacy-safe artifacts, advisory policy decisions, cost explanation, and similar workload search.
+- Local MCP resources and prompts for metadata-only schema/catalog/budget/workload/policy context plus workload, cost-review, and incident-evidence templates.
 - Hourly and daily usage aggregate tables with dashboard aggregate fallback.
 - CLI commands: `today`, `top`, `doctor`, `battery`, `workload list/create/show/close`, `run --goal ... -- <command>`, `export`, `pricing sync`, `router simulate`, `preflight`, `replay`, `badge`, and `wrapped`.
 - Cursor-compatible session pagination via `next_cursor`.

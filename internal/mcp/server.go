@@ -51,6 +51,15 @@ type toolCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
+type resourceReadParams struct {
+	URI string `json:"uri"`
+}
+
+type promptGetParams struct {
+	Name      string            `json:"name"`
+	Arguments map[string]string `json:"arguments"`
+}
+
 // Serve reads newline-delimited JSON-RPC requests from r and writes responses to w.
 func (s *Server) Serve(r io.Reader, w io.Writer) error {
 	scanner := bufio.NewScanner(r)
@@ -91,7 +100,9 @@ func (s *Server) handle(req request) (interface{}, error) {
 		return map[string]interface{}{
 			"protocolVersion": "2024-11-05",
 			"capabilities": map[string]interface{}{
-				"tools": map[string]interface{}{"listChanged": false},
+				"tools":     map[string]interface{}{"listChanged": false},
+				"resources": map[string]interface{}{"subscribe": false, "listChanged": false},
+				"prompts":   map[string]interface{}{"listChanged": false},
 			},
 			"serverInfo": map[string]string{"name": "agent-ledger", "version": "dev"},
 		}, nil
@@ -110,6 +121,22 @@ func (s *Server) handle(req request) (interface{}, error) {
 		return map[string]interface{}{
 			"content": []map[string]string{{"type": "text", "text": string(raw)}},
 		}, nil
+	case "resources/list":
+		return map[string]interface{}{"resources": resources()}, nil
+	case "resources/read":
+		var params resourceReadParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, err
+		}
+		return s.readResource(params.URI)
+	case "prompts/list":
+		return map[string]interface{}{"prompts": prompts()}, nil
+	case "prompts/get":
+		var params promptGetParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, err
+		}
+		return getPrompt(params.Name, params.Arguments)
 	case "ping":
 		return map[string]bool{"ok": true}, nil
 	default:
@@ -227,6 +254,50 @@ func enumSchema(values []string) map[string]interface{} {
 	return map[string]interface{}{"type": "string", "enum": values}
 }
 
+func resources() []map[string]interface{} {
+	return []map[string]interface{}{
+		resource("agent-ledger://schema/canonical-events", "Canonical Event Schema", "Metadata-only event contract for workload, run, model-call, tool-call, artifact, evaluation, and policy events.", "application/json"),
+		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
+		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows.", "application/json"),
+		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries from the local ledger.", "application/json"),
+		resource("agent-ledger://policies/status", "Policy Status", "Local policy configuration summary without prompt or secret content.", "application/json"),
+	}
+}
+
+func resource(uri, name, description, mimeType string) map[string]interface{} {
+	return map[string]interface{}{"uri": uri, "name": name, "description": description, "mimeType": mimeType}
+}
+
+func prompts() []map[string]interface{} {
+	return []map[string]interface{}{
+		prompt("agent-ledger/workload-brief", "Plan an agent workload with explicit goal, context boundaries, budget awareness, and ledger instrumentation.", []map[string]string{
+			{"name": "goal", "description": "The workload goal to execute or review.", "required": "true"},
+			{"name": "project", "description": "Project, repo, or workspace label.", "required": "false"},
+			{"name": "constraints", "description": "Operational, privacy, policy, or budget constraints.", "required": "false"},
+		}),
+		prompt("agent-ledger/cost-review", "Review local token/cost usage with privacy-safe Agent Ledger resources and tools.", []map[string]string{
+			{"name": "period", "description": "Time window such as today, week, month, or YYYY-MM-DD..YYYY-MM-DD.", "required": "false"},
+			{"name": "project", "description": "Optional project or repo filter.", "required": "false"},
+		}),
+		prompt("agent-ledger/incident-evidence", "Prepare a privacy-safe data quality, pricing, or usage anomaly evidence bundle.", []map[string]string{
+			{"name": "issue", "description": "Observed discrepancy or failure mode.", "required": "true"},
+			{"name": "period", "description": "Relevant time window.", "required": "false"},
+		}),
+	}
+}
+
+func prompt(name, description string, args []map[string]string) map[string]interface{} {
+	outArgs := make([]map[string]interface{}, 0, len(args))
+	for _, arg := range args {
+		outArgs = append(outArgs, map[string]interface{}{
+			"name":        arg["name"],
+			"description": arg["description"],
+			"required":    arg["required"] == "true",
+		})
+	}
+	return map[string]interface{}{"name": name, "description": description, "arguments": outArgs}
+}
+
 func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error) {
 	switch name {
 	case "ledger.current_budget":
@@ -252,6 +323,97 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 	default:
 		return nil, fmt.Errorf("unknown tool %q", name)
 	}
+}
+
+func (s *Server) readResource(uri string) (interface{}, error) {
+	var payload interface{}
+	switch uri {
+	case "agent-ledger://schema/canonical-events":
+		payload = storage.CanonicalEventSchema()
+	case "agent-ledger://integrations/catalog":
+		payload = integrations.Registry(integrations.OptionsFromConfig(s.cfg))
+	case "agent-ledger://budget/current":
+		budget, err := s.toolCurrentBudget([]byte(`{"window":"all"}`))
+		if err != nil {
+			return nil, err
+		}
+		payload = budget
+	case "agent-ledger://workloads/recent":
+		now := s.now()
+		page, err := s.db.GetWorkloadsPage(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", "", "", 20, 0)
+		if err != nil {
+			return nil, err
+		}
+		payload = page
+	case "agent-ledger://policies/status":
+		payload = map[string]interface{}{
+			"enabled":                s.cfg.Policies.Enabled,
+			"require_privacy_export": s.cfg.Policies.RequirePrivacyExport,
+			"rules":                  s.cfg.Policies.Rules,
+		}
+	default:
+		return nil, fmt.Errorf("unknown resource %q", uri)
+	}
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"contents": []map[string]string{{
+			"uri":      uri,
+			"mimeType": "application/json",
+			"text":     string(raw),
+		}},
+	}, nil
+}
+
+func getPrompt(name string, args map[string]string) (interface{}, error) {
+	switch name {
+	case "agent-ledger/workload-brief":
+		return promptResponse(name, fmt.Sprintf(`Use Agent Ledger as the local workload control plane.
+
+Goal: %s
+Project: %s
+Constraints: %s
+
+Start by checking ledger resources for schema, policy, and budget. If execution begins, create or attach a workload, record metadata-only events, and avoid sending prompt content, secrets, raw file contents, or private paths into durable ledger fields. Keep cost, cache, model choice, and policy decisions explainable.`, promptArg(args, "goal", "<unset>"), promptArg(args, "project", "<unset>"), promptArg(args, "constraints", "<unset>"))), nil
+	case "agent-ledger/cost-review":
+		return promptResponse(name, fmt.Sprintf(`Review Agent Ledger usage for period %s and project %s.
+
+Use budget, cost-intelligence, integrations, and recent workload resources/tools. Explain cost drivers by model, cache behavior, project attribution, and anomalies. Do not inspect or request prompt content. Produce concise findings with concrete next actions.`, promptArg(args, "period", "recent"), promptArg(args, "project", "all"))), nil
+	case "agent-ledger/incident-evidence":
+		return promptResponse(name, fmt.Sprintf(`Prepare a privacy-safe Agent Ledger incident evidence summary.
+
+Issue: %s
+Period: %s
+
+Use diagnostics, integration catalog, pricing/data-quality resources, audit metadata, and evidence/export tools where available. Redact paths, session IDs, project names, machine names, and authors unless explicitly authorized. Separate verified facts from hypotheses and list exact remediation steps.`, promptArg(args, "issue", "<unset>"), promptArg(args, "period", "recent"))), nil
+	default:
+		return nil, fmt.Errorf("unknown prompt %q", name)
+	}
+}
+
+func promptResponse(description, text string) map[string]interface{} {
+	return map[string]interface{}{
+		"description": description,
+		"messages": []map[string]interface{}{{
+			"role": "user",
+			"content": map[string]string{
+				"type": "text",
+				"text": text,
+			},
+		}},
+	}
+}
+
+func promptArg(args map[string]string, key, fallback string) string {
+	if args == nil {
+		return fallback
+	}
+	if strings.TrimSpace(args[key]) == "" {
+		return fallback
+	}
+	return args[key]
 }
 
 func (s *Server) toolCurrentBudget(args json.RawMessage) (interface{}, error) {

@@ -44,6 +44,55 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	}
 }
 
+func TestMCPResourcesAndPrompts(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.Policies.Enabled = true
+	srv := New(db, cfg)
+	srv.now = func() time.Time { return time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC) }
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/list"}`,
+		`{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"agent-ledger://schema/canonical-events"}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"prompts/list"}`,
+		`{"jsonrpc":"2.0","id":5,"method":"prompts/get","params":{"name":"agent-ledger/workload-brief","arguments":{"goal":"ship router","project":"quant","constraints":"privacy strict"}}}`,
+	)
+	caps := out[0]["result"].(map[string]interface{})["capabilities"].(map[string]interface{})
+	if caps["resources"] == nil || caps["prompts"] == nil {
+		t.Fatalf("missing resource/prompt capabilities: %#v", caps)
+	}
+	resources := out[1]["result"].(map[string]interface{})["resources"].([]interface{})
+	if !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://budget/current") {
+		t.Fatalf("expected core resources, got %#v", resources)
+	}
+	resourceText := resourceTextPayload(t, out[2])
+	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
+		t.Fatalf("unexpected schema resource text: %s", resourceText)
+	}
+	prompts := out[3]["result"].(map[string]interface{})["prompts"].([]interface{})
+	if !hasPrompt(prompts, "agent-ledger/workload-brief") || !hasPrompt(prompts, "agent-ledger/cost-review") {
+		t.Fatalf("expected prompts, got %#v", prompts)
+	}
+	promptText := promptTextPayload(t, out[4])
+	if !strings.Contains(promptText, "ship router") || !strings.Contains(promptText, "privacy strict") {
+		t.Fatalf("prompt did not interpolate arguments: %s", promptText)
+	}
+	if strings.Contains(strings.ToLower(promptText), "raw file contents") && !strings.Contains(promptText, "avoid") {
+		t.Fatalf("prompt should warn against durable sensitive content: %s", promptText)
+	}
+}
+
+func TestMCPUnknownResourceReturnsError(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	srv := New(db, cfg)
+	responses := serveRawLines(t, srv, `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"agent-ledger://unknown"}}`)
+	if responses[0]["error"] == nil {
+		t.Fatalf("expected unknown resource error: %#v", responses[0])
+	}
+}
+
 func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()
@@ -152,6 +201,17 @@ func openTestDB(t *testing.T) *storage.DB {
 
 func serveLines(t *testing.T, srv *Server, lines ...string) []map[string]interface{} {
 	t.Helper()
+	responses := serveRawLines(t, srv, lines...)
+	for _, resp := range responses {
+		if errObj, ok := resp["error"]; ok {
+			t.Fatalf("rpc error: %#v", errObj)
+		}
+	}
+	return responses
+}
+
+func serveRawLines(t *testing.T, srv *Server, lines ...string) []map[string]interface{} {
+	t.Helper()
 	var input strings.Builder
 	for _, line := range lines {
 		input.WriteString(line)
@@ -167,9 +227,6 @@ func serveLines(t *testing.T, srv *Server, lines ...string) []map[string]interfa
 		var resp map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
 			t.Fatalf("decode response %q: %v", scanner.Text(), err)
-		}
-		if errObj, ok := resp["error"]; ok {
-			t.Fatalf("rpc error: %#v", errObj)
 		}
 		responses = append(responses, resp)
 	}
@@ -194,6 +251,39 @@ func toolTextPayload(t *testing.T, resp map[string]interface{}) map[string]inter
 func hasTool(tools []interface{}, name string) bool {
 	for _, tool := range tools {
 		if tool.(map[string]interface{})["name"] == name {
+			return true
+		}
+	}
+	return false
+}
+
+func resourceTextPayload(t *testing.T, resp map[string]interface{}) string {
+	t.Helper()
+	result := resp["result"].(map[string]interface{})
+	contents := result["contents"].([]interface{})
+	return contents[0].(map[string]interface{})["text"].(string)
+}
+
+func promptTextPayload(t *testing.T, resp map[string]interface{}) string {
+	t.Helper()
+	result := resp["result"].(map[string]interface{})
+	messages := result["messages"].([]interface{})
+	content := messages[0].(map[string]interface{})["content"].(map[string]interface{})
+	return content["text"].(string)
+}
+
+func hasResource(resources []interface{}, uri string) bool {
+	for _, resource := range resources {
+		if resource.(map[string]interface{})["uri"] == uri {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPrompt(prompts []interface{}, name string) bool {
+	for _, prompt := range prompts {
+		if prompt.(map[string]interface{})["name"] == name {
 			return true
 		}
 	}
