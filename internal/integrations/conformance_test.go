@@ -1,6 +1,10 @@
 package integrations
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestRunAdapterConformanceAutoDetectsProviderUsage(t *testing.T) {
 	report, err := RunAdapterConformance("auto", []byte(`{
@@ -66,5 +70,32 @@ func TestRunAdapterConformanceCanonicalWarnings(t *testing.T) {
 	}
 	if strict.OK || strict.Status != "fail" || strict.WarningEvents != 1 || strict.FailedEvents != 0 {
 		t.Fatalf("expected strict warning failure: %#v", strict)
+	}
+}
+
+func TestAdapterFixtureFilesPassStrictConformance(t *testing.T) {
+	fixtures := []struct {
+		kind string
+		file string
+	}{
+		{"canonical", "canonical-workload.json"},
+		{"provider", "provider-openai-response.json"},
+		{"otel", "otel-genai-span.json"},
+		{"a2a", "a2a-task.json"},
+	}
+	for _, fixture := range fixtures {
+		t.Run(fixture.file, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "adapter-fixtures", fixture.file))
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			report, err := RunAdapterConformanceWithOptions(AdapterConformanceOptions{Kind: fixture.kind, Strict: true}, raw)
+			if err != nil {
+				t.Fatalf("conformance: %v", err)
+			}
+			if !report.OK || report.Status != "pass" || report.FailedEvents != 0 || report.WarningEvents != 0 {
+				t.Fatalf("fixture failed strict conformance: %#v", report)
+			}
+		})
 	}
 }

@@ -91,6 +91,8 @@ CLI：
 ./agent-ledger mcp
 ```
 
+仓库内 `examples/adapter-fixtures/` 提供 canonical events、provider usage envelope、OpenTelemetry GenAI span 与 A2A task snapshot 的 strict conformance 样例。
+
 ## 配置
 
 配置搜索顺序：

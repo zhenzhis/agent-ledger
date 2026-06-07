@@ -1,0 +1,33 @@
+{
+  "id": "task-fixture-001",
+  "contextId": "ctx-fixture-001",
+  "kind": "task",
+  "status": {
+    "state": "completed",
+    "timestamp": "2026-06-07T12:00:00Z"
+  },
+  "artifacts": [
+    {
+      "artifactId": "artifact-fixture-001",
+      "name": "metadata report",
+      "description": "privacy-safe artifact reference",
+      "parts": [
+        {
+          "kind": "file"
+        }
+      ],
+      "metadata": {
+        "sha256": "sha256:fixtureartifacthash"
+      }
+    }
+  ],
+  "metadata": {
+    "agent_ledger.goal": "Validate A2A task fixture",
+    "agent_ledger.project": "agent-ledger",
+    "agent_ledger.agent_name": "remote-fixture-agent",
+    "agent_ledger.source": "a2a-fixture",
+    "agent_ledger.source_version": "a2a-fixture@v1",
+    "agent_ledger.parser_version": "agent-ledger-a2a@v1",
+    "agent_ledger.raw_ref": "a2a:task-fixture-001"
+  }
+}

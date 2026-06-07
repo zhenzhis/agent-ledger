@@ -1,0 +1,22 @@
+{
+  "source": "example-adapter",
+  "event_type": "workload.started",
+  "schema_version": "v1",
+  "source_version": "example-agent@1.0.0",
+  "parser_version": "example-adapter@v1",
+  "source_event_id": "native-workload-001",
+  "raw_ref": "example:workload:001",
+  "match_type": "source_reported",
+  "workload_id": "wl_example_fixture",
+  "project": "agent-ledger",
+  "git_branch": "main",
+  "timestamp": "2026-06-07T12:00:00Z",
+  "confidence": 0.95,
+  "payload": {
+    "goal": "Validate canonical adapter fixture",
+    "project": "agent-ledger",
+    "repo": "zhenzhis/agent-ledger",
+    "git_branch": "main",
+    "team": "platform"
+  }
+}
