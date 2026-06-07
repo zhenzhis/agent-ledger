@@ -74,6 +74,7 @@ const I18N = {
     teamShowback: "Team Showback",
     team: "Team",
     workloadLedger: "Workload Ledger",
+    timeline: "Timeline",
     goal: "Goal",
     status: "Status",
     outcome: "Outcome",
@@ -241,6 +242,7 @@ const I18N = {
     teamShowback: "团队 Showback",
     team: "团队",
     workloadLedger: "工作负载账本",
+    timeline: "时间线",
     goal: "目标",
     status: "状态",
     outcome: "结果",
@@ -1431,7 +1433,7 @@ function renderWorkloadTable() {
   setText("workload-meta", `${workloadTotal} ${t("rows")}`);
 }
 
-function buildWorkloadDetail(data) {
+function buildWorkloadDetail(data, timelineRows = []) {
   const wrap = document.createElement("div");
   wrap.className = "workload-detail-grid";
   const summary = data.summary || {};
@@ -1503,6 +1505,17 @@ function buildWorkloadDetail(data) {
     tr.appendChild(createCell(row.ref_hash || "-", "muted-cell"));
     return tr;
   }));
+  const timeline = Array.isArray(timelineRows) ? timelineRows.slice(-12) : [];
+  appendDetailTable([t("timeline"), t("time"), t("status"), t("tokens"), t("cost")], timeline.map((row) => {
+    const tr = document.createElement("tr");
+    const label = `${row.kind || "-"} · ${row.label || row.id || "-"}`;
+    tr.appendChild(createCell(label, "project-cell"));
+    tr.appendChild(createCell(relTime(row.timestamp), "muted-cell"));
+    tr.appendChild(createCell(row.status || "-", "muted-cell"));
+    tr.appendChild(createCell(fmt(row.tokens || 0), "num"));
+    tr.appendChild(createCell(fmtCost(row.cost_usd || 0), "cost-cell"));
+    return tr;
+  }));
   return wrap;
 }
 
@@ -1517,7 +1530,19 @@ async function fetchAndFillWorkloadDetail(content, workloadID) {
     const res = await fetch(`/api/workload-detail?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    content.replaceChildren(buildWorkloadDetail(data));
+    let timeline = [];
+    try {
+      const timelineParams = new URLSearchParams({ workload_id: workloadID, limit: "50" });
+      if (state.privacy) timelineParams.set("privacy", "1");
+      const timelineRes = await fetch(`/api/workload-timeline?${timelineParams.toString()}`);
+      if (timelineRes.ok) {
+        const timelineData = await timelineRes.json();
+        timeline = Array.isArray(timelineData.rows) ? timelineData.rows : [];
+      }
+    } catch (err) {
+      timeline = [];
+    }
+    content.replaceChildren(buildWorkloadDetail(data, timeline));
   } catch (err) {
     content.replaceChildren(createMessage(`${t("detailFailed")} ${err.message}`, "empty-state"));
   }

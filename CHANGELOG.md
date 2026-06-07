@@ -42,6 +42,7 @@
 - Workload APIs: list/create/close/start-run/heartbeat/liveness/detail/graph/timeline, model registry, policy decisions, and workload CSV/JSON export.
 - Workload detail and graph now expose `context_refs`, making context/worktree/protocol references visible alongside runs, model calls, tools, artifacts, evaluations, and policies.
 - Workload audit timeline through `GET /api/workload-timeline`, `agent-ledger workload timeline`, and MCP `ledger.workload_timeline`, merging runs, heartbeats, model calls, tool calls, context refs, artifacts, evaluations, and policies.
+- Workload detail UI now shows the recent audit timeline while isolating timeline API failures from the core detail view.
 - Explicit tool-call entrypoints through `agent-ledger workload tool` and MCP `ledger.record_tool_call`, recording tool metadata without command parameters or tool input content.
 - Explicit context-reference entrypoints through `agent-ledger workload context` and MCP `ledger.record_context`, both backed by canonical `context.ref` events.
 - Local MCP stdio JSON-RPC tools for budget lookup, workload lifecycle, run start/heartbeat/liveness, privacy-safe artifacts, advisory policy decisions, cost explanation, and similar workload search.
