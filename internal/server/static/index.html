@@ -11,9 +11,10 @@
 <script defer src="app.js"></script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to content</a>
 <div id="global-loader" class="loader" aria-hidden="true"></div>
 <div class="app-shell">
-  <header class="topbar">
+  <header class="topbar" role="banner">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
       <div class="brand-copy">
@@ -105,7 +106,7 @@
       <section class="control-group control-preferences" aria-label="Preferences">
         <div class="control-heading" data-i18n="preferences">Preferences</div>
         <div class="action-cluster">
-          <button class="icon-btn" id="btn-auto-refresh" type="button">
+          <button class="icon-btn" id="btn-auto-refresh" type="button" aria-label="Toggle auto refresh">
             <span id="auto-status">Auto</span>
           </button>
         <select id="sel-refresh-interval" aria-label="Refresh interval"></select>
@@ -116,7 +117,7 @@
     </div>
   </header>
 
-  <main>
+  <main id="main-content" tabindex="-1">
     <section class="kpi-grid" aria-label="Usage summary">
       <article class="kpi-card accent-cyan">
         <span class="kpi-label" data-i18n="totalTokens">Total Tokens</span>

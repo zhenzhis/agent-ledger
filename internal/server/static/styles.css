@@ -1991,3 +1991,269 @@ select,
     grid-column: 1 / -1;
   }
 }
+
+/* Stability pass: keep the dense console usable across viewport sizes. */
+body {
+  overflow-x: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  z-index: 200;
+  transform: translateY(-180%);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+#main-content:focus {
+  outline: none;
+}
+
+.topbar,
+.control-surface,
+.control-group,
+.kpi-grid,
+.chart-grid,
+.ledger-panel,
+.table-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.control-surface {
+  align-items: start;
+}
+
+.control-group {
+  min-height: 74px;
+}
+
+.control-heading {
+  letter-spacing: 0;
+}
+
+.control-time .segmented {
+  max-width: 100%;
+}
+
+.segmented {
+  scrollbar-width: thin;
+}
+
+.segmented button,
+.icon-btn,
+.page-btn,
+input,
+select,
+.advanced-menu summary {
+  min-height: 40px;
+}
+
+.segmented button {
+  line-height: 1.1;
+}
+
+.icon-btn,
+.advanced-menu summary {
+  white-space: nowrap;
+}
+
+.action-cluster {
+  align-content: start;
+}
+
+.control-preferences .action-cluster {
+  display: grid;
+  grid-template-columns: minmax(116px, auto) repeat(3, minmax(96px, 1fr));
+  align-items: center;
+}
+
+.control-preferences .icon-btn,
+.control-preferences select {
+  min-width: 0;
+}
+
+.advanced-actions {
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34);
+}
+
+.kpi-card,
+.panel,
+.ledger-panel {
+  min-width: 0;
+}
+
+.kpi-label,
+.kpi-value,
+.kpi-sub,
+.panel-header,
+.ledger-header,
+.ops-main,
+.ops-main strong,
+.ops-main span,
+.project-cell,
+.goal-cell,
+.detail-content,
+.workload-state-title strong,
+.state-notes span {
+  min-width: 0;
+}
+
+.kpi-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-header,
+.ledger-header {
+  flex-wrap: wrap;
+}
+
+.panel-header h2,
+.ledger-header h2,
+.panel-meta,
+.ops-main strong,
+.ops-main span,
+.project-cell,
+.goal-cell,
+.detail-content,
+.workload-state-title strong,
+.state-notes span {
+  overflow-wrap: anywhere;
+}
+
+.ops-row {
+  align-items: start;
+}
+
+.ops-main strong,
+.ops-main span {
+  white-space: normal;
+}
+
+.ops-value {
+  align-self: start;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+table {
+  max-width: 100%;
+}
+
+th,
+td {
+  line-height: 1.35;
+}
+
+.badge[class*="source-"] {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+@media (min-width: 1441px) {
+  .control-actions {
+    grid-column: span 7;
+  }
+
+  .control-preferences {
+    grid-column: span 5;
+  }
+}
+
+@media (max-width: 1180px) {
+  .control-preferences .action-cluster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    gap: 12px;
+  }
+
+  .brand {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .control-group {
+    min-height: 0;
+  }
+
+  .segmented button,
+  .icon-btn,
+  .page-btn,
+  input,
+  select,
+  .advanced-menu summary {
+    min-height: 44px;
+  }
+
+  .control-preferences .action-cluster {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-header {
+    align-items: stretch;
+  }
+
+  .search-field {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    padding-inline: 8px;
+  }
+
+  .control-group,
+  .kpi-card,
+  .panel,
+  .ledger-header,
+  .pagination {
+    padding-inline: 10px;
+  }
+
+  .brand h1 {
+    font-size: 18px;
+  }
+
+  .kpi-value {
+    font-size: 25px;
+  }
+
+  .chart {
+    height: 220px;
+  }
+
+  .chart-compact {
+    height: 168px;
+  }
+}
