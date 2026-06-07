@@ -271,9 +271,33 @@ func tools() []map[string]interface{} {
 			"timestamp":       stringSchema(),
 			"payload":         objectSchema(),
 		}),
+		tool("ledger.validate_event", "Validate one canonical metadata-only event without writing local state.", map[string]interface{}{
+			"source":          requiredStringSchema(),
+			"event_type":      requiredStringSchema(),
+			"event_id":        stringSchema(),
+			"schema_version":  stringSchema(),
+			"source_version":  stringSchema(),
+			"parser_version":  stringSchema(),
+			"source_event_id": stringSchema(),
+			"raw_ref":         stringSchema(),
+			"match_type":      stringSchema(),
+			"workload_id":     stringSchema(),
+			"agent_run_id":    stringSchema(),
+			"session_id":      stringSchema(),
+			"model":           stringSchema(),
+			"project":         stringSchema(),
+			"git_branch":      stringSchema(),
+			"timestamp":       stringSchema(),
+			"payload":         objectSchema(),
+		}),
 		tool("ledger.event_schema", "Return the canonical metadata-only event schema and supported event types.", map[string]interface{}{}),
 		tool("ledger.event_examples", "Return privacy-safe canonical event examples for adapter authors.", map[string]interface{}{
 			"event_type": stringSchema(),
+		}),
+		tool("ledger.adapter_conformance", "Validate a canonical/provider/OpenTelemetry/A2A fixture without writing local state.", map[string]interface{}{
+			"kind":     stringSchema(),
+			"strict":   booleanSchema(),
+			"raw_json": requiredStringSchema(),
 		}),
 		tool("ledger.integrations", "Return the Agent Ledger integration capability catalog.", map[string]interface{}{}),
 		tool("ledger.get_policy", "Evaluate local advisory policy rules for a proposed agent action.", map[string]interface{}{
@@ -353,6 +377,7 @@ func requiredStringSchema() map[string]interface{} {
 func numberSchema() map[string]interface{}  { return map[string]interface{}{"type": "number"} }
 func integerSchema() map[string]interface{} { return map[string]interface{}{"type": "integer"} }
 func objectSchema() map[string]interface{}  { return map[string]interface{}{"type": "object"} }
+func booleanSchema() map[string]interface{} { return map[string]interface{}{"type": "boolean"} }
 func enumSchema(values []string) map[string]interface{} {
 	return map[string]interface{}{"type": "string", "enum": values}
 }
@@ -433,6 +458,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolRecordContext(args)
 	case "ledger.record_event":
 		return s.toolRecordEvent(args)
+	case "ledger.validate_event":
+		return s.toolValidateEvent(args)
 	case "ledger.event_schema":
 		return storage.CanonicalEventSchema(), nil
 	case "ledger.event_examples":
@@ -445,6 +472,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 			"version":  "v1",
 			"examples": storage.CanonicalEventExamples(req.EventType),
 		}, nil
+	case "ledger.adapter_conformance":
+		return s.toolAdapterConformance(args)
 	case "ledger.integrations":
 		return integrations.Registry(integrations.OptionsFromConfig(s.cfg)), nil
 	case "ledger.get_policy":
@@ -985,6 +1014,32 @@ func (s *Server) toolRecordEvent(args json.RawMessage) (interface{}, error) {
 		return nil, err
 	}
 	return s.db.IngestCanonicalEvent(event)
+}
+
+func (s *Server) toolValidateEvent(args json.RawMessage) (interface{}, error) {
+	var event storage.CanonicalEvent
+	if err := json.Unmarshal(args, &event); err != nil {
+		return nil, err
+	}
+	return storage.ValidateCanonicalEvent(event)
+}
+
+func (s *Server) toolAdapterConformance(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		Kind    string `json:"kind"`
+		Strict  bool   `json:"strict"`
+		RawJSON string `json:"raw_json"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(in.RawJSON) == "" {
+		return nil, fmt.Errorf("raw_json is required")
+	}
+	return integrations.RunAdapterConformanceWithOptions(integrations.AdapterConformanceOptions{
+		Kind:   in.Kind,
+		Strict: in.Strict,
+	}, []byte(in.RawJSON))
 }
 
 func (s *Server) toolGetPolicy(args json.RawMessage) (interface{}, error) {

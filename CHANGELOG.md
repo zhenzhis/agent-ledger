@@ -18,6 +18,7 @@
 - Adapter conformance validation through `POST /api/integrations/conformance` and `agent-ledger adapter conformance`, covering canonical, provider, OpenTelemetry GenAI, and A2A fixtures without writing SQLite.
 - Adapter conformance strict mode via `strict=true` or `--strict` treats provenance warnings as CI failures.
 - Discovery manifests now expose first-class runtime, canonical schema, event examples, and adapter conformance URIs for wrappers and routers.
+- MCP now exposes read-only `ledger.validate_event` and `ledger.adapter_conformance` tools so agents can verify events and fixtures before writing.
 - Canonical event provenance fields for future adapters: `schema_version`, `source_version`, `parser_version`, `raw_ref`, and `match_type`, persisted locally and included in offline bundle exports.
 - Data Quality and Doctor provenance checks for canonical events, including schema/source/parser coverage, raw reference coverage, match-type mix, confidence, and UI panel visibility.
 - Provenance metadata is now populated by OpenTelemetry, A2A, provider usage, and gateway adapters so downstream quality checks can distinguish source-reported data from reconstructed references.

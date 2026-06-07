@@ -310,8 +310,10 @@ Current tools:
 - `ledger.record_artifact`
 - `ledger.record_evaluation`
 - `ledger.record_event`
+- `ledger.validate_event`
 - `ledger.event_schema`
 - `ledger.event_examples`
+- `ledger.adapter_conformance`
 - `ledger.integrations`
 - `ledger.get_policy`
 - `ledger.policy_audit`

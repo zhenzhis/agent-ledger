@@ -31,7 +31,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 2", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.integrations") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.validate_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.adapter_conformance") || !hasTool(tools, "ledger.integrations") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	payload := toolTextPayload(t, out[1])
@@ -357,6 +357,48 @@ func TestMCPRecordEvent(t *testing.T) {
 	}
 	if detail.Summary.Goal != "mcp event bridge" {
 		t.Fatalf("summary=%#v", detail.Summary)
+	}
+}
+
+func TestMCPValidateAndConformanceAreReadOnly(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+	srv := New(db, cfg)
+
+	validateResp := serveLines(t, srv, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.validate_event","arguments":{"source":"codex","event_type":"workload.started","payload":{"goal":"mcp validate only"}}}}`)[0]
+	validatePayload := toolTextPayload(t, validateResp)
+	if validatePayload["status"] != "valid_with_warnings" || validatePayload["event_id"] == "" {
+		t.Fatalf("unexpected validate payload: %#v", validatePayload)
+	}
+
+	request, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name": "ledger.adapter_conformance",
+			"arguments": map[string]interface{}{
+				"kind":     "canonical",
+				"strict":   true,
+				"raw_json": `{"source":"codex","event_type":"workload.started","payload":{"goal":"mcp conformance only"}}`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	conformanceResp := serveLines(t, srv, string(request))[0]
+	conformancePayload := toolTextPayload(t, conformanceResp)
+	if conformancePayload["ok"] != false || conformancePayload["status"] != "fail" {
+		t.Fatalf("unexpected conformance payload: %#v", conformancePayload)
+	}
+	quality, err := db.GetDataQuality(time.Hour)
+	if err != nil {
+		t.Fatalf("GetDataQuality: %v", err)
+	}
+	if quality.Provenance == nil || quality.Provenance.Events != 0 {
+		t.Fatalf("read-only validation tools wrote events: %#v", quality.Provenance)
 	}
 }
 
