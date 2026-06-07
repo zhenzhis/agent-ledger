@@ -479,7 +479,13 @@ func cliCommandRequiresWrite(args []string) bool {
 		return sub == "ingest"
 	case "projection":
 		return sub == "repair"
-	case "notify", "run":
+	case "notify":
+		notifyArgs := []string{}
+		if len(args) > 2 {
+			notifyArgs = args[2:]
+		}
+		return !(sub == "webhook" && cliBool(notifyArgs, "--dry-run"))
+	case "run":
 		return true
 	case "policy":
 		if sub == "resolve" {
