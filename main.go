@@ -398,6 +398,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runPolicyCLI(args[1:], cfg, db)
 	case "reconcile":
 		return runReconcileCLI(args[1:], db)
+	case "router":
+		return runRouterCLI(args[1:], db)
 	case "integrations":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "otel":
@@ -485,6 +487,35 @@ func statementWindowEnd(end time.Time) time.Time {
 		return end.AddDate(0, 0, 1)
 	}
 	return end.Add(time.Nanosecond)
+}
+
+func runRouterCLI(args []string, db *storage.DB) error {
+	if len(args) == 0 || args[0] != "simulate" {
+		return fmt.Errorf("usage: agent-ledger router simulate --to-model model [--from-model model] [--ratio 0.3] [--from YYYY-MM-DD --to YYYY-MM-DD] [--source s] [--project p]")
+	}
+	now := time.Now()
+	from, to, err := cliDateRange(args[1:], now)
+	if err != nil {
+		return err
+	}
+	toModel := firstNonEmptyCLI(cliValue(args[1:], "--to-model"), cliValue(args[1:], "--target-model"))
+	if toModel == "" {
+		return fmt.Errorf("--to-model is required")
+	}
+	ratio := 1.0
+	if raw := firstNonEmptyCLI(cliValue(args[1:], "--ratio"), cliValue(args[1:], "--replacement-ratio")); raw != "" {
+		ratio, err = parseFloat(raw)
+		if err != nil {
+			return fmt.Errorf("invalid --ratio %q: %w", raw, err)
+		}
+	}
+	report, err := db.SimulateModelRouting(from, to, cliValue(args[1:], "--source"),
+		firstNonEmptyCLI(cliValue(args[1:], "--from-model"), cliValue(args[1:], "--model")),
+		toModel, cliValue(args[1:], "--project"), ratio, 200)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(report)
 }
 
 func runProviderCLI(args []string, db *storage.DB) error {

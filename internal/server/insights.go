@@ -285,6 +285,41 @@ func (s *Server) handleReconciliationStatus(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, rows)
 }
 
+func (s *Server) handleRouterSimulation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
+	from, to, _, err := s.parseTimeRange(r)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	toModel := firstNonEmpty(r.URL.Query().Get("to_model"), r.URL.Query().Get("target_model"))
+	if toModel == "" {
+		badRequest(w, fmt.Errorf("to_model is required"))
+		return
+	}
+	fromModel := firstNonEmpty(r.URL.Query().Get("from_model"), r.URL.Query().Get("model"))
+	ratio := 1.0
+	if raw := firstNonEmpty(r.URL.Query().Get("ratio"), r.URL.Query().Get("replacement_ratio")); raw != "" {
+		ratio, err = strconv.ParseFloat(raw, 64)
+		if err != nil {
+			badRequest(w, fmt.Errorf("invalid replacement ratio %q", raw))
+			return
+		}
+	}
+	report, err := s.db.SimulateModelRouting(from, to, r.URL.Query().Get("source"), fromModel, toModel, r.URL.Query().Get("project"), ratio, parseLimit(r, 200))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	writeJSON(w, report)
+}
+
 func (s *Server) handleReconciliationImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
