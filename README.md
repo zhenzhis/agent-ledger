@@ -51,6 +51,8 @@ CLI:
 ./agent-ledger run --goal "debug ingestion" --agent codex -- codex
 ./agent-ledger event schema
 ./agent-ledger event ingest --file event.json
+./agent-ledger bundle export --privacy --signed --out usage-bundle.json
+./agent-ledger bundle import --file usage-bundle.json --verify
 ./agent-ledger pricing sync
 ./agent-ledger wrapped
 ./agent-ledger mcp
@@ -172,6 +174,8 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/quota/status` | Local quota and burn-rate estimates |
 | `GET /api/anomalies` | Robust-statistics anomaly events |
 | `GET /api/evidence-bundle` | Redacted support/audit bundle |
+| `GET /api/offline-bundle/export` | Export signed/hashed offline bundle |
+| `POST /api/offline-bundle/import` | Import offline bundle canonical events |
 | `GET /api/export?type=workloads&format=csv` | CSV/JSON exports |
 | `GET /api/report?format=markdown` | Markdown report |
 
@@ -204,6 +208,7 @@ Canonical event ingest supports workload, run, model-call, tool-call, context-re
 - Optional RBAC supports `viewer`, `operator`, and `admin` tokens.
 - Privacy presets can hide paths, project names, branches, machine names, and session IDs.
 - Webhooks are disabled by default and should only send redacted summaries.
+- Offline bundles are local JSON exports. Set `AGENT_LEDGER_BUNDLE_KEY` and pass `signed=1` / `--signed` to add an HMAC-SHA256 signature; use `verify=1` / `--verify` on import to require signature verification.
 
 ## Development
 

@@ -5,7 +5,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -223,6 +225,81 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	_, _ = w.Write([]byte(b.String()))
+}
+
+func (s *Server) handleOfflineBundleExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "viewer") {
+		return
+	}
+	from, to, _, err := s.parseTimeRange(r)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	privacyLabel := "metadata-only"
+	if r.URL.Query().Get("privacy") == "1" || r.URL.Query().Get("privacy") == "true" {
+		privacyLabel = "redacted"
+	}
+	signed := r.URL.Query().Get("signed") == "1" || r.URL.Query().Get("signed") == "true"
+	key := os.Getenv("AGENT_LEDGER_BUNDLE_KEY")
+	signingKey := ""
+	if signed && key == "" {
+		badRequest(w, fmt.Errorf("AGENT_LEDGER_BUNDLE_KEY is required for signed bundle export"))
+		return
+	}
+	if signed {
+		signingKey = key
+	}
+	bundle, raw, err := s.db.BuildOfflineBundle(
+		from, to,
+		r.URL.Query().Get("source"),
+		r.URL.Query().Get("model"),
+		r.URL.Query().Get("project"),
+		privacyLabel,
+		signingKey,
+		r.URL.Query().Get("key_id"),
+		parseLimit(r, 10000),
+	)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "offline_bundle.export", bundle.BundleID, map[string]string{"privacy": privacyLabel, "signed": fmt.Sprint(bundle.Integrity.Signature != "")})
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=agent-ledger-"+bundle.BundleID+".json")
+	_, _ = w.Write(raw)
+}
+
+func (s *Server) handleOfflineBundleImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
+		return
+	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<20))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	requireSignature := r.URL.Query().Get("verify") == "1" || r.URL.Query().Get("verify") == "true"
+	key := os.Getenv("AGENT_LEDGER_BUNDLE_KEY")
+	if requireSignature && key == "" {
+		badRequest(w, fmt.Errorf("AGENT_LEDGER_BUNDLE_KEY is required for signature verification"))
+		return
+	}
+	result, err := s.db.ImportOfflineBundle(raw, key, requireSignature)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "offline_bundle.import", result.BundleID, map[string]string{"events_inserted": fmt.Sprint(result.EventsInserted), "signature_verified": fmt.Sprint(result.SignatureVerified)})
+	writeJSON(w, map[string]interface{}{"ok": true, "result": result})
 }
 
 func csvFor(exportType string, payload interface{}) ([]byte, error) {

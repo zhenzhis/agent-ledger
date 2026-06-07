@@ -26,6 +26,8 @@ Agent Ledger should not store prompt content, secrets, API keys, webhook URLs, p
 
 Canonical event ingest accepts metadata only and rejects obvious raw prompt/content payload keys. Integrations should send hashes, IDs, counts, timings, and status instead of raw prompts, transcripts, or model output.
 
+Offline bundles are local JSON files. They always include a payload SHA-256 hash and can include an HMAC-SHA256 signature when `AGENT_LEDGER_BUNDLE_KEY` is set. Do not put signing keys in config files, reports, screenshots, or durable logs.
+
 Use privacy presets before sharing screenshots, reports, evidence bundles, or CSV exports from sensitive workspaces.
 
 ## Network Exposure

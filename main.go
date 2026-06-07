@@ -389,12 +389,92 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runWrappedCLI(args[1:], db)
 	case "event":
 		return runEventCLI(args[1:], db)
+	case "bundle":
+		return runBundleCLI(args[1:], db)
 	case "mcp":
 		return mcp.New(db, cfg).Serve(os.Stdin, os.Stdout)
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
 	return nil
+}
+
+func runBundleCLI(args []string, db *storage.DB) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: agent-ledger bundle export|import")
+	}
+	now := time.Now()
+	from, to, err := cliDateRange(args[1:], now)
+	if err != nil {
+		return err
+	}
+	key := os.Getenv("AGENT_LEDGER_BUNDLE_KEY")
+	switch args[0] {
+	case "export":
+		signed := cliBool(args[1:], "--signed")
+		if signed && key == "" {
+			return fmt.Errorf("AGENT_LEDGER_BUNDLE_KEY is required for signed bundle export")
+		}
+		signingKey := ""
+		if signed {
+			signingKey = key
+		}
+		privacyLabel := "metadata-only"
+		if cliBool(args[1:], "--privacy") {
+			privacyLabel = "redacted"
+		}
+		_, raw, err := db.BuildOfflineBundle(from, to, cliValue(args[1:], "--source"), cliValue(args[1:], "--model"), cliValue(args[1:], "--project"),
+			privacyLabel, signingKey, cliValue(args[1:], "--key-id"), 10000)
+		if err != nil {
+			return err
+		}
+		if out := cliValue(args[1:], "--out"); out != "" {
+			return os.WriteFile(out, raw, 0o600)
+		}
+		_, err = os.Stdout.Write(raw)
+		if err == nil {
+			_, err = os.Stdout.Write([]byte("\n"))
+		}
+		return err
+	case "import":
+		var raw []byte
+		if file := cliValue(args[1:], "--file"); file != "" {
+			raw, err = os.ReadFile(file)
+		} else {
+			raw, err = io.ReadAll(io.LimitReader(os.Stdin, 32<<20))
+		}
+		if err != nil {
+			return err
+		}
+		result, err := db.ImportOfflineBundle(raw, key, cliBool(args[1:], "--verify"))
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(result)
+	default:
+		return fmt.Errorf("unknown bundle command %q", args[0])
+	}
+}
+
+func cliDateRange(args []string, now time.Time) (time.Time, time.Time, error) {
+	fromRaw := cliValue(args, "--from")
+	toRaw := cliValue(args, "--to")
+	if fromRaw == "" {
+		from := now.AddDate(0, 0, -30)
+		return from, now, nil
+	}
+	from, err := time.Parse("2006-01-02", fromRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if toRaw == "" {
+		return from, from.AddDate(0, 0, 1), nil
+	}
+	to, err := time.Parse("2006-01-02", toRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return from, to.AddDate(0, 0, 1), nil
 }
 
 func runEventCLI(args []string, db *storage.DB) error {
@@ -567,6 +647,19 @@ func cliValue(args []string, key string) string {
 		}
 	}
 	return ""
+}
+
+func cliBool(args []string, key string) bool {
+	for i := 0; i < len(args); i++ {
+		if args[i] == key {
+			return true
+		}
+		if strings.HasPrefix(args[i], key+"=") {
+			value := strings.ToLower(strings.TrimPrefix(args[i], key+"="))
+			return value == "1" || value == "true" || value == "yes"
+		}
+	}
+	return false
 }
 
 func parseFloat(raw string) (float64, error) {

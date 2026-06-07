@@ -51,6 +51,8 @@ CLI：
 ./agent-ledger run --goal "debug ingestion" --agent codex -- codex
 ./agent-ledger event schema
 ./agent-ledger event ingest --file event.json
+./agent-ledger bundle export --privacy --signed --out usage-bundle.json
+./agent-ledger bundle import --file usage-bundle.json --verify
 ./agent-ledger pricing sync
 ./agent-ledger wrapped
 ./agent-ledger mcp
@@ -172,6 +174,8 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/quota/status` | 本地 quota 和 burn-rate 估算 |
 | `GET /api/anomalies` | 异常检测事件 |
 | `GET /api/evidence-bundle` | 脱敏证据包 |
+| `GET /api/offline-bundle/export` | 导出带 hash/可选签名的离线包 |
+| `POST /api/offline-bundle/import` | 导入离线包中的 canonical events |
 | `GET /api/export?type=workloads&format=csv` | CSV/JSON 导出 |
 | `GET /api/report?format=markdown` | Markdown 报告 |
 
@@ -204,6 +208,7 @@ Canonical event ingest 支持 workload、run、model call、tool call、context 
 - 可选 RBAC：`viewer`、`operator`、`admin`。
 - 隐私 preset 可隐藏路径、项目、分支、机器名和 session id。
 - Webhook 默认关闭，只应发送脱敏摘要。
+- Offline bundle 是本地 JSON 导出。设置 `AGENT_LEDGER_BUNDLE_KEY` 并使用 `signed=1` / `--signed` 可加入 HMAC-SHA256 签名；导入时使用 `verify=1` / `--verify` 可强制验证签名。
 
 ## 开发验证
 
