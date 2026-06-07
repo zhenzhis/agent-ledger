@@ -23,6 +23,7 @@
 - Discovery manifests now expose first-class runtime, canonical schema, event examples, adapter spec, and adapter conformance URIs for wrappers and routers.
 - Canonical event schema now includes a stable `schema_hash`, also surfaced in conformance reports and discovery manifests.
 - Adapter fixture examples under `examples/adapter-fixtures/` cover canonical, provider, OpenTelemetry GenAI, and A2A strict conformance.
+- Provider adapter fixtures now separately cover OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages usage envelopes in CI.
 - CI now builds the binary, checks embedded UI JavaScript syntax, and runs strict conformance against public adapter fixtures.
 - MCP now exposes read-only `ledger.validate_event`, `ledger.adapter_contract`, and `ledger.adapter_conformance` tools so agents can inspect contracts and verify events or fixtures before writing.
 - Canonical event provenance fields for future adapters: `schema_version`, `source_version`, `parser_version`, `raw_ref`, and `match_type`, persisted locally and included in offline bundle exports.

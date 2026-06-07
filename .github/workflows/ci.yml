@@ -39,6 +39,8 @@ jobs:
         run: |
           ./agent-ledger adapter conformance --kind canonical --strict --file examples/adapter-fixtures/canonical-workload.json
           ./agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-openai-response.json
+          ./agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-openai-chat-completion.json
+          ./agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-anthropic-message.json
           ./agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otel-genai-span.json
           ./agent-ledger adapter conformance --kind a2a --strict --file examples/adapter-fixtures/a2a-task.json
 

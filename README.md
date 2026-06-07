@@ -93,7 +93,7 @@ CLI:
 ./agent-ledger mcp
 ```
 
-Strict adapter fixtures are available in `examples/adapter-fixtures/` for canonical events, provider usage envelopes, OpenTelemetry GenAI spans, and A2A task snapshots.
+Strict adapter fixtures are available in `examples/adapter-fixtures/` for canonical events, OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, OpenTelemetry GenAI spans, and A2A task snapshots.
 
 ## Configuration
 
