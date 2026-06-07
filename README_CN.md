@@ -288,6 +288,10 @@ docker compose up -d --build
 docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . && go test ./..."
 ```
 
+## 发布治理
+
+Release 使用 GoReleaser 构建多平台归档，使用 GitHub Actions 发布 GHCR 镜像。归档产物已配置 Syft SBOM；Docker workflow 会为 GHCR 镜像发布 BuildKit SBOM attestation 和 `mode=max` provenance。发布前请按 [RELEASE.md](RELEASE.md) 核验每个归档的 `.sbom.json`、`checksums.txt`、镜像 digest 的 SBOM/provenance，再对外声明供应链证据。
+
 ## Roadmap
 
 已落地基础：canonical workload schema、metadata-only canonical event ingest、OpenTelemetry GenAI JSON span mapping、A2A task telemetry mapping、provider usage envelope mapping、provider 账单导入对账、model router simulation、preflight cost estimates、session cost replay、repo cost badge、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、CLI workload/event/policy/router/replay/badge/preflight 命令、CLI run wrapper 和本地 MCP stdio tools。

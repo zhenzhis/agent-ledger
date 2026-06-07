@@ -62,4 +62,14 @@ Release notes must include:
 
 ## SBOM And Provenance
 
-SBOM/provenance are planned release-governance items unless the active GoReleaser and CI workflow explicitly produce them in the release run. Do not claim SBOM availability before verifying generated artifacts.
+The release pipeline is configured to produce supply-chain evidence:
+
+- GHCR images are built by `.github/workflows/docker.yml` with BuildKit SBOM attestations and `mode=max` provenance.
+- GoReleaser archives are cataloged by Syft through the `sboms` section in `.goreleaser.yaml`; the release workflow installs Syft before running GoReleaser.
+
+Release verification must confirm:
+
+- The GitHub Release contains one `.sbom.json` file for each published archive.
+- `checksums.txt` covers the release archives.
+- GHCR shows SBOM/provenance attestations for the pushed image digest.
+- Release notes do not claim signing, SLSA level, or vulnerability attestation unless those artifacts are present in the release run.

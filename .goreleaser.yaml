@@ -1,3 +1,4 @@
+version: 2
 project_name: agent-ledger
 
 before:
@@ -23,11 +24,13 @@ builds:
       - -X main.date={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - README.md
       - README_CN.md
@@ -36,6 +39,11 @@ archives:
 
 checksum:
   name_template: "checksums.txt"
+
+sboms:
+  - id: archives
+    artifacts: archive
+    disable: false
 
 changelog:
   sort: asc

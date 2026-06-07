@@ -47,6 +47,7 @@
 - Added RBAC configuration fields and role checks for side-effectful governance APIs.
 - Added local audit logging for scan, pricing sync, recalculation, and reconciliation import operations.
 - Exports can be forced into privacy mode by policy.
+- Release workflows now configure Syft SBOMs for GoReleaser archives and BuildKit SBOM/provenance attestations for GHCR images.
 
 ### Credits
 

@@ -2,6 +2,8 @@ name: Docker
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -9,6 +11,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   docker:
@@ -49,10 +52,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
           build-args: |
             VERSION=${{ github.ref_name }}
             COMMIT=${{ github.sha }}
-            DATE=${{ github.event.head_commit.timestamp }}
+            DATE=${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
             GOPROXY=${{ vars.GOPROXY || 'https://proxy.golang.org,direct' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

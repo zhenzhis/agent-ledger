@@ -288,6 +288,10 @@ On hosts without Go installed:
 docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . && go test ./..."
 ```
 
+## Release Governance
+
+Releases use GoReleaser for platform archives and GitHub Actions for GHCR images. Release archives are configured to include Syft-generated SBOM files, while the Docker workflow publishes GHCR images with BuildKit SBOM attestations and `mode=max` provenance. See [RELEASE.md](RELEASE.md) for the release checklist and required artifact verification before announcing supply-chain claims.
+
 ## Roadmap
 
 Implemented foundation: canonical workload schema, metadata-only canonical event ingest, OpenTelemetry GenAI JSON span mapping, A2A task telemetry mapping, provider usage envelope mapping, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, CLI workload/event/policy/router/replay/badge/preflight commands, CLI run wrapper, and local MCP stdio tools.
