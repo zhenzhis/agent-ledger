@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -534,9 +536,9 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://schema/canonical-event-examples", "Canonical Event Examples", "Privacy-safe templates for all supported canonical event types.", "application/json"),
 		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
 		resource("agent-ledger://integrations/adapter-contract", "Adapter Contract", "Machine-readable contract for writing privacy-safe Agent Ledger adapters.", "application/json"),
-		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows.", "application/json"),
-		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries and terminal-state snapshots from the local ledger.", "application/json"),
-		resource("agent-ledger://workloads/feed", "Workload Event Feed", "Cursor-stable metadata-only workload state feed for local monitors and agent routers.", "application/json"),
+		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows; supports window/source/model/project query parameters.", "application/json"),
+		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries and terminal-state snapshots from the local ledger; supports from/to/source/model/project/status/q/limit/offset/stale_after query parameters.", "application/json"),
+		resource("agent-ledger://workloads/feed", "Workload Event Feed", "Cursor-stable metadata-only workload state feed for local monitors and agent routers; supports from/to/source/model/project/phase/severity/limit/stale_after query parameters.", "application/json"),
 		resource("agent-ledger://policies/status", "Policy Status", "Local policy configuration summary without prompt or secret content.", "application/json"),
 	}
 }
@@ -682,43 +684,29 @@ func (s *Server) readResource(uri string) (interface{}, error) {
 }
 
 func (s *Server) resourcePayload(uri string) (interface{}, error) {
-	switch uri {
+	baseURI, values, err := parseResourceURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	switch baseURI {
 	case "agent-ledger://schema/canonical-events":
 		return storage.CanonicalEventSchema(), nil
 	case "agent-ledger://schema/canonical-event-examples":
 		return map[string]interface{}{
 			"contract": "agent-ledger.canonical-event-examples",
 			"version":  "v1",
-			"examples": storage.CanonicalEventExamples(""),
+			"examples": storage.CanonicalEventExamples(firstNonEmpty(values.Get("type"), values.Get("event_type"))),
 		}, nil
 	case "agent-ledger://integrations/catalog":
 		return integrations.Registry(integrations.OptionsFromConfig(s.cfg)), nil
 	case "agent-ledger://integrations/adapter-contract":
 		return integrations.AdapterContractSpec(), nil
 	case "agent-ledger://budget/current":
-		return s.toolCurrentBudget([]byte(`{"window":"all"}`))
+		return s.resourceBudget(values)
 	case "agent-ledger://workloads/recent":
-		now := s.now()
-		page, err := s.db.GetWorkloadsPage(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", "", "", 20, 0)
-		if err != nil {
-			return nil, err
-		}
-		staleAfter := 10 * time.Minute
-		states, err := s.db.GetWorkloadStates(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", 20, staleAfter)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]interface{}{
-			"rows":                page.Rows,
-			"total":               page.Total,
-			"limit":               page.Limit,
-			"offset":              page.Offset,
-			"next_cursor":         page.NextCursor,
-			"states":              states,
-			"stale_after_seconds": int64(staleAfter / time.Second),
-		}, nil
+		return s.resourceRecentWorkloads(values)
 	case "agent-ledger://workloads/feed":
-		return s.defaultWorkloadFeed()
+		return s.resourceWorkloadFeed(values)
 	case "agent-ledger://policies/status":
 		return map[string]interface{}{
 			"enabled":                s.cfg.Policies.Enabled,
@@ -728,6 +716,125 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 	default:
 		return nil, fmt.Errorf("unknown resource %q", uri)
 	}
+}
+
+func parseResourceURI(raw string) (string, url.Values, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil, fmt.Errorf("uri is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", nil, err
+	}
+	if parsed.Scheme != "agent-ledger" || parsed.Host == "" {
+		return "", nil, fmt.Errorf("unknown resource %q", raw)
+	}
+	base := parsed.Scheme + "://" + parsed.Host + parsed.EscapedPath()
+	return base, parsed.Query(), nil
+}
+
+func (s *Server) resourceBudget(values url.Values) (interface{}, error) {
+	payload := map[string]string{
+		"window":  firstNonEmpty(values.Get("window"), "all"),
+		"source":  values.Get("source"),
+		"model":   values.Get("model"),
+		"project": values.Get("project"),
+	}
+	raw, _ := json.Marshal(payload)
+	return s.toolCurrentBudget(raw)
+}
+
+func (s *Server) resourceRecentWorkloads(values url.Values) (interface{}, error) {
+	now := s.now()
+	from, to, err := parseDateRange(values.Get("from"), values.Get("to"), now)
+	if err != nil {
+		return nil, err
+	}
+	limit := boundedQueryInt(values, "limit", 20, 1, 100)
+	offset := boundedQueryInt(values, "offset", 0, 0, 1000000)
+	staleAfter, err := queryDuration(values, "stale_after", 10*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.db.GetWorkloadsPage(from, to, values.Get("source"), values.Get("model"), values.Get("project"), values.Get("status"), values.Get("q"), limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	states, err := s.db.GetWorkloadStates(from, to, values.Get("source"), values.Get("model"), values.Get("project"), limit, staleAfter)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"rows":                page.Rows,
+		"total":               page.Total,
+		"limit":               page.Limit,
+		"offset":              page.Offset,
+		"next_cursor":         page.NextCursor,
+		"states":              states,
+		"from":                from.UTC().Format(time.RFC3339Nano),
+		"to":                  to.UTC().Format(time.RFC3339Nano),
+		"stale_after_seconds": int64(staleAfter / time.Second),
+	}, nil
+}
+
+func (s *Server) resourceWorkloadFeed(values url.Values) (*storage.WorkloadEventFeed, error) {
+	if len(values) == 0 {
+		return s.defaultWorkloadFeed()
+	}
+	now := s.now()
+	from, to, err := parseDateRange(values.Get("from"), values.Get("to"), now)
+	if err != nil {
+		return nil, err
+	}
+	staleAfter, err := queryDuration(values, "stale_after", 10*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	return s.db.GetWorkloadEventFeed(from, to,
+		values.Get("source"),
+		values.Get("model"),
+		values.Get("project"),
+		values.Get("phase"),
+		values.Get("severity"),
+		boundedQueryInt(values, "limit", 50, 1, 200),
+		staleAfter)
+}
+
+func boundedQueryInt(values url.Values, key string, fallback, min, max int) int {
+	raw := strings.TrimSpace(values.Get(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	if parsed < min {
+		return min
+	}
+	if parsed > max {
+		return max
+	}
+	return parsed
+}
+
+func queryDuration(values url.Values, key string, fallback time.Duration) (time.Duration, error) {
+	raw := strings.TrimSpace(values.Get(key))
+	if raw == "" {
+		raw = strings.TrimSpace(values.Get("max_age"))
+	}
+	if raw == "" {
+		return fallback, nil
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, err
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("%s must be positive", key)
+	}
+	return parsed, nil
 }
 
 func (s *Server) resourceCursor(uri string) (string, error) {

@@ -160,6 +160,65 @@ func TestMCPWorkloadFeedToolAndResource(t *testing.T) {
 	}
 }
 
+func TestMCPParameterizedWorkloadResources(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	srv := New(db, cfg)
+	now := time.Now().UTC()
+	srv.now = func() time.Time { return now }
+	if _, err := db.CreateWorkload("planned feed workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0); err != nil {
+		t.Fatalf("create planned workload: %v", err)
+	}
+	staleWorkloadID, err := db.CreateWorkload("stale feed workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("create stale workload: %v", err)
+	}
+	runID, err := db.StartAgentRun(staleWorkloadID, "codex", "codex", "codex run", "C:/work")
+	if err != nil {
+		t.Fatalf("start stale run: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-stale-mcp", runID, "working", "testing", "stale heartbeat", 0.4, nil, now.Add(-20*time.Minute), 1); err != nil {
+		t.Fatalf("record stale heartbeat: %v", err)
+	}
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"agent-ledger://workloads/feed?severity=warning&source=codex&project=agent-ledger&limit=5&stale_after=1m"}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://workloads/recent?source=codex&project=agent-ledger&limit=1"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"agent-ledger://budget/current?window=day&source=codex&project=agent-ledger"}}`,
+	)
+	var feed map[string]interface{}
+	if err := json.Unmarshal([]byte(resourceTextPayload(t, out[0])), &feed); err != nil {
+		t.Fatalf("decode feed resource: %v", err)
+	}
+	rows := feed["rows"].([]interface{})
+	if len(rows) != 1 {
+		t.Fatalf("expected one warning row, got %#v", feed)
+	}
+	row := rows[0].(map[string]interface{})
+	if row["severity"] != "warning" || row["phase"] != "stale" || row["source"] != "codex" {
+		t.Fatalf("unexpected parameterized feed row: %#v", row)
+	}
+	if feed["stale_after_seconds"] != float64(60) {
+		t.Fatalf("parameterized stale_after not applied: %#v", feed)
+	}
+
+	var recent map[string]interface{}
+	if err := json.Unmarshal([]byte(resourceTextPayload(t, out[1])), &recent); err != nil {
+		t.Fatalf("decode recent resource: %v", err)
+	}
+	if recent["limit"] != float64(1) || recent["from"] == "" || recent["to"] == "" {
+		t.Fatalf("recent resource query parameters not applied: %#v", recent)
+	}
+	var budget map[string]interface{}
+	if err := json.Unmarshal([]byte(resourceTextPayload(t, out[2])), &budget); err != nil {
+		t.Fatalf("decode budget resource: %v", err)
+	}
+	windows := budget["windows"].([]interface{})
+	if budget["method"] != "local-estimate" || len(windows) != 1 || windows[0].(map[string]interface{})["name"] != "day" {
+		t.Fatalf("budget resource query parameters not applied: %#v", budget)
+	}
+}
+
 func TestMCPResourceSubscribeUnsubscribe(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()
@@ -183,6 +242,50 @@ func TestMCPResourceSubscribeUnsubscribe(t *testing.T) {
 	}
 	if out[2]["error"] == nil {
 		t.Fatalf("unknown resource subscribe should fail: %#v", out[2])
+	}
+}
+
+func TestMCPParameterizedResourceSubscriptionNotification(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	srv := New(db, cfg)
+	srv.subscriptionInterval = time.Hour
+	now := time.Now().UTC()
+	srv.now = func() time.Time { return now }
+	var output bytes.Buffer
+	subscriptions := newSubscriptionState(srv, json.NewEncoder(&output))
+	defer subscriptions.stop()
+	uri := "agent-ledger://workloads/feed?severity=warning&source=codex&project=agent-ledger&limit=10&stale_after=1m"
+	result, err := subscriptions.subscribe(uri)
+	if err != nil {
+		t.Fatalf("subscribe parameterized resource: %v", err)
+	}
+	if result["uri"] != uri || result["mode"] != "local-poll" {
+		t.Fatalf("unexpected subscribe result: %#v", result)
+	}
+	workloadID, err := db.CreateWorkload("subscription warning workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("create workload: %v", err)
+	}
+	runID, err := db.StartAgentRun(workloadID, "codex", "codex", "codex run", "C:/work")
+	if err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-subscribe-mcp", runID, "working", "testing", "stale heartbeat", 0.4, nil, now.Add(-20*time.Minute), 1); err != nil {
+		t.Fatalf("record heartbeat: %v", err)
+	}
+	subscriptions.pollOnce()
+
+	var notification map[string]interface{}
+	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &notification); err != nil {
+		t.Fatalf("decode notification: %v\n%s", err, output.String())
+	}
+	if notification["method"] != "notifications/resources/updated" {
+		t.Fatalf("unexpected notification: %#v", notification)
+	}
+	params := notification["params"].(map[string]interface{})
+	if params["uri"] != uri || !strings.HasPrefix(params["cursor"].(string), "sha256:") {
+		t.Fatalf("unexpected notification params: %#v", params)
 	}
 }
 

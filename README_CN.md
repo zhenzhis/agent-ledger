@@ -301,7 +301,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 
 ## MCP 工具接口
 
-`agent-ledger mcp` 会启动本地 stdio JSON-RPC 工具服务，供 agent 框架或 wrapper 接入。当前实现保持本地优先和隐私优先：工具可以创建或关闭 workload、关联 workload 依赖、在已有 workload 下启动 run、写入 run heartbeat、查询 run liveness 与 terminal-state 快照、读取 cursor-stable workload event feed、记录 tool-call 元数据、context ref、hash 后的 artifact 与质量/evaluation 信号、查询本地策略建议、查询预算状态、解释成本、查找相似 workload。Resources 提供 metadata-only 的 schema、integration、budget、workload、feed、terminal-state、policy 上下文；`resources/subscribe` 会在本地观察已订阅资源，并在内容变化时用 `notifications/resources/updated` 返回最新 cursor/hash。Prompts 提供可复用的 workload、成本复盘、证据包模板。它不会读取 prompt 内容，也不会主动把数据发送到远程 MCP host。MCP、REST 与 CLI 的 policy evaluation 共用同一个本地 evaluator，确保不同接入方式得到一致的 advisory 决策。
+`agent-ledger mcp` 会启动本地 stdio JSON-RPC 工具服务，供 agent 框架或 wrapper 接入。当前实现保持本地优先和隐私优先：工具可以创建或关闭 workload、关联 workload 依赖、在已有 workload 下启动 run、写入 run heartbeat、查询 run liveness 与 terminal-state 快照、读取 cursor-stable workload event feed、记录 tool-call 元数据、context ref、hash 后的 artifact 与质量/evaluation 信号、查询本地策略建议、查询预算状态、解释成本、查找相似 workload。Resources 提供 metadata-only 的 schema、integration、budget、workload、feed、terminal-state、policy 上下文；resource URI 支持查询参数，例如 `agent-ledger://workloads/feed?severity=warning&source=codex&project=agent-ledger&limit=50`。`resources/subscribe` 会在本地观察精确订阅的 URI，并在该 scope 变化时用 `notifications/resources/updated` 返回最新 cursor/hash。Prompts 提供可复用的 workload、成本复盘、证据包模板。它不会读取 prompt 内容，也不会主动把数据发送到远程 MCP host。MCP、REST 与 CLI 的 policy evaluation 共用同一个本地 evaluator，确保不同接入方式得到一致的 advisory 决策。
 
 `GET /api/integrations`、`GET /.well-known/agent-ledger.json`、`agent-ledger integrations` 和 MCP `ledger.integrations` 会暴露运行时能力字段：`writes_local_state`、`available_in_read_only`、`runtime_status`。Discovery manifest 还会以一等字段暴露 `runtime_status_uri`、`canonical_schema_uri`、`canonical_schema_hash`、`event_examples_uri`、`adapter_spec_uri`、`adapter_conformance_uri`，便于轻量 wrapper 自动接入。`GET /api/integrations/adapter-spec`、`agent-ledger adapter spec`、MCP `ledger.adapter_contract` 和 `agent-ledger://integrations/adapter-contract` 会暴露同一份机器可读 adapter 契约。`GET /api/runtime/status` 与 `agent-ledger runtime` 提供同一个进程级 observer/control-plane 状态，适合探针使用。Agent router 和 wrapper 应读取这些字段，而不是硬编码 endpoint 假设，尤其是在启用 `rbac.read_only` 时。
 
@@ -340,9 +340,9 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `agent-ledger://schema/canonical-event-examples`
 - `agent-ledger://integrations/catalog`
 - `agent-ledger://integrations/adapter-contract`
-- `agent-ledger://budget/current`
-- `agent-ledger://workloads/recent`，包含 workload summary rows 与派生 terminal-state snapshots
-- `agent-ledger://workloads/feed`，包含供本地 monitor 和 router 使用的 cursor-stable workload state events
+- `agent-ledger://budget/current`，支持 `window`、`source`、`model`、`project` 查询参数
+- `agent-ledger://workloads/recent`，包含 workload summary rows 与派生 terminal-state snapshots，支持 `from`、`to`、`source`、`model`、`project`、`status`、`q`、`limit`、`offset`、`stale_after`
+- `agent-ledger://workloads/feed`，包含供本地 monitor 和 router 使用的 cursor-stable workload state events，支持 `from`、`to`、`source`、`model`、`project`、`phase`、`severity`、`limit`、`stale_after`
 - `agent-ledger://policies/status`
 
 当前 prompts：
@@ -422,7 +422,7 @@ Release 使用 GoReleaser 构建多平台归档，使用 GitHub Actions 发布 G
 
 已落地基础：canonical workload schema、metadata-only canonical event ingest、机器可读 adapter contract、workload 依赖/lineage links、异步 run start/heartbeat/liveness 账本、workload terminal-state 派生快照与本地 workload event feed/SSE stream、显式 workload evaluation 信号、默认关闭的 workload 与 approval 脱敏 webhook 通知、隐私安全 discovery manifest、canonical-to-usage projection 与 repair、OpenTelemetry GenAI JSON span mapping、可选本地 OTLP HTTP JSON/protobuf traces receiver、A2A task telemetry mapping、provider usage envelope mapping、可选本地 OpenAI-compatible Chat Completions JSON/SSE、OpenAI Responses JSON/SSE 与 Anthropic Messages JSON/SSE gateway、provider 账单导入对账、model router simulation、preflight cost estimates、session cost replay、repo cost badge、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、本地策略审批请求与执行证据、CLI workload/event/policy/router/replay/badge/preflight/projection 命令、CLI run wrapper 和本地 MCP stdio tools/resources/resource-subscriptions/prompts。
 
-后续路线：OTLP gRPC receiver conformance、provider-native gateway adapters、Postgres 团队模式、OIDC/SSO、更完整的 MCP subscriptions、多操作者审批 workflow。
+后续路线：OTLP gRPC receiver conformance、provider-native gateway adapters、Postgres 团队模式、OIDC/SSO、host client 支持后接入原生 MCP subscription transport、多操作者审批 workflow。
 
 ## License
 

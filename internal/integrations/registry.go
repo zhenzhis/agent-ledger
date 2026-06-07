@@ -173,7 +173,7 @@ func Registry(opts Options) Catalog {
 			Endpoints:   []string{"GET /api/workload-events", "GET /api/workload-events/stream"},
 			Commands:    []string{"agent-ledger workload feed --severity warning --max-age 10m"},
 			DataClasses: []string{"workload state", "phase", "severity", "next action", "risk metadata"},
-			Limitations: []string{"derived snapshot feed; SSE stream is a local polling subscription"},
+			Limitations: []string{"derived snapshot feed; SSE stream is a local polling subscription", "MCP resource subscriptions support parameterized local polling URIs, not native host push transport"},
 			NextMilestones: []string{
 				"add native MCP subscription transport when host clients support it",
 				"allow desktop notification adapters to consume the same event schema",
