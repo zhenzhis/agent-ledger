@@ -280,7 +280,7 @@ Start with the one-click doctor:
 agent-ledger doctor --format markdown
 ```
 
-Or open `GET /api/doctor?format=markdown&privacy=1`. The report checks the selected time range, collector health, path existence/readability, last scan errors, pricing freshness, unpriced models, and empty usage windows.
+Or open `GET /api/doctor?format=markdown&privacy=1`. The report checks the selected time range, collector health, path existence/readability, last scan errors, pricing freshness, unpriced models, empty usage windows, and canonical-to-usage projection consistency.
 
 If Codex, OpenCode, or another source shows no data:
 
@@ -293,7 +293,7 @@ If KPI totals and charts disagree:
 
 - The web UI uses `GET /api/dashboard` for KPI, token, cost, and model panels so they are read from one storage window.
 - Run `POST /api/recalculate-costs?mode=zero` after pricing changes.
-- Run `agent-ledger doctor --format markdown` and inspect `dashboard consistency` or pricing warnings if a mismatch persists.
+- Run `agent-ledger doctor --format markdown` and inspect projection, dashboard consistency, or pricing warnings if a mismatch persists.
 
 If costs differ from a provider invoice:
 

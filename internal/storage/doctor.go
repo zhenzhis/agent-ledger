@@ -24,6 +24,7 @@ type DoctorReport struct {
 	Stats          DashboardStats        `json:"stats"`
 	Ingestion      []IngestionHealth     `json:"ingestion"`
 	Quality        *DataQualityReport    `json:"quality"`
+	Projection     *ProjectionQuality    `json:"projection"`
 	PricingSources []PricingSourceStatus `json:"pricing_sources"`
 	Checks         []DoctorCheck         `json:"checks"`
 	Summary        string                `json:"summary"`
@@ -47,6 +48,10 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 	if err != nil {
 		return nil, err
 	}
+	projection, err := d.GetProjectionQuality(from, to, source, model, project)
+	if err != nil {
+		return nil, err
+	}
 	report := &DoctorReport{
 		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
 		From:           from.Format(time.RFC3339),
@@ -54,11 +59,13 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 		Stats:          *stats,
 		Ingestion:      health,
 		Quality:        quality,
+		Projection:     projection,
 		PricingSources: pricingSources,
 	}
 	report.Checks = append(report.Checks, usageDoctorChecks(*stats, source, model, project)...)
 	report.Checks = append(report.Checks, ingestionDoctorChecks(health, source)...)
 	report.Checks = append(report.Checks, pricingDoctorChecks(pricingSources, quality)...)
+	report.Checks = append(report.Checks, projectionDoctorChecks(projection)...)
 	report.Summary = doctorSummary(report.Checks)
 	if len(report.Checks) == 0 {
 		report.Checks = append(report.Checks, DoctorCheck{
@@ -69,6 +76,39 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 		report.Summary = "ok"
 	}
 	return report, nil
+}
+
+func projectionDoctorChecks(projection *ProjectionQuality) []DoctorCheck {
+	if projection == nil {
+		return []DoctorCheck{{
+			Name: "projection.unavailable", Status: "warning", Severity: "warning",
+			Message: "ledger projection quality could not be calculated",
+			Action:  "run doctor again and inspect database access errors if this persists",
+		}}
+	}
+	var checks []DoctorCheck
+	if projection.MissingUsageProjection > 0 {
+		checks = append(checks, DoctorCheck{
+			Name: "projection.missing_usage", Status: "warning", Severity: "warning",
+			Message: fmt.Sprintf("%d canonical model calls do not have matching usage_records rows", projection.MissingUsageProjection),
+			Action:  "run pricing recalculation or re-ingest affected canonical events after backing up the database",
+		})
+	}
+	if projection.CostMismatchRecords > 0 {
+		checks = append(checks, DoctorCheck{
+			Name: "projection.cost_mismatch", Status: "warning", Severity: "warning",
+			Message: fmt.Sprintf("%d canonical model calls disagree with projected usage cost by $%.4f total", projection.CostMismatchRecords, projection.CostDeltaUSD),
+			Action:  "run POST /api/pricing/recalculate?mode=all or agent-ledger pricing sync followed by recalculation",
+		})
+	}
+	if projection.DuplicateSessionOwners > 0 {
+		checks = append(checks, DoctorCheck{
+			Name: "projection.duplicate_owners", Status: "warning", Severity: "warning",
+			Message: fmt.Sprintf("%d sessions have both legacy and canonical workload owners", projection.DuplicateSessionOwners),
+			Action:  "inspect workload detail for the sessions; legacy backfill no longer creates new duplicates",
+		})
+	}
+	return checks
 }
 
 func usageDoctorChecks(stats DashboardStats, source, model, project string) []DoctorCheck {
@@ -175,6 +215,9 @@ func FormatDoctorMarkdown(report *DoctorReport) string {
 	b.WriteString(fmt.Sprintf("- Summary: `%s`\n", report.Summary))
 	b.WriteString(fmt.Sprintf("- Window: `%s` to `%s`\n", report.From, report.To))
 	b.WriteString(fmt.Sprintf("- Calls: `%d`\n- Tokens: `%d`\n- Cost: `$%.4f`\n\n", report.Stats.TotalCalls, report.Stats.TotalTokens, report.Stats.TotalCost))
+	if report.Projection != nil {
+		b.WriteString(fmt.Sprintf("- Projection: `%s` (`%.2f` confidence)\n\n", sanitizeMarkdownCell(report.Projection.Message), report.Projection.Confidence))
+	}
 	b.WriteString("## Checks\n\n| Severity | Check | Source | Message | Action |\n|---|---|---|---|---|\n")
 	for _, check := range report.Checks {
 		b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s |\n", check.Severity, check.Name, firstDoctorValue(check.Source, "-"), sanitizeMarkdownCell(check.Message), sanitizeMarkdownCell(check.Action)))

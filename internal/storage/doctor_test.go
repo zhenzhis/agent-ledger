@@ -53,6 +53,55 @@ func TestGetDoctorReportPathAndPricingIssues(t *testing.T) {
 	}
 }
 
+func TestGetDoctorReportProjectionIssues(t *testing.T) {
+	db := tempDB(t)
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	for _, item := range []struct {
+		eventID   string
+		sessionID string
+		cost      float64
+	}{
+		{"evt-doctor-missing", "doctor-missing", 1},
+		{"evt-doctor-mismatch", "doctor-mismatch", 2},
+	} {
+		if _, err := db.IngestCanonicalEvent(CanonicalEvent{
+			EventID:   item.eventID,
+			Source:    "gateway",
+			EventType: "model.call",
+			SessionID: item.sessionID,
+			Model:     "gpt-5",
+			Project:   "agent-ledger",
+			Timestamp: ts,
+			Payload: rawJSON(t, map[string]interface{}{
+				"goal":          "doctor projection quality",
+				"call_id":       item.eventID + "-call",
+				"input_tokens":  10,
+				"output_tokens": 5,
+				"cost_usd":      item.cost,
+			}),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.db.Exec(`DELETE FROM usage_records WHERE source='gateway' AND session_id='doctor-missing'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.Exec(`UPDATE usage_records SET cost_usd=9 WHERE source='gateway' AND session_id='doctor-mismatch'`); err != nil {
+		t.Fatal(err)
+	}
+	report, err := db.GetDoctorReport(ts.Add(-time.Hour), ts.Add(time.Hour), time.Hour, "gateway", "", "agent-ledger")
+	if err != nil {
+		t.Fatalf("GetDoctorReport: %v", err)
+	}
+	if !hasDoctorCheck(report.Checks, "projection.missing_usage") || !hasDoctorCheck(report.Checks, "projection.cost_mismatch") {
+		t.Fatalf("missing projection checks: %+v", report.Checks)
+	}
+	md := FormatDoctorMarkdown(report)
+	if !strings.Contains(md, "Projection:") || !strings.Contains(md, "cost mismatch") {
+		t.Fatalf("projection markdown missing: %s", md)
+	}
+}
+
 func hasDoctorCheck(checks []DoctorCheck, name string) bool {
 	for _, check := range checks {
 		if check.Name == name {

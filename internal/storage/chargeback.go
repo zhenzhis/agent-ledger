@@ -25,9 +25,9 @@ type ChargebackRow struct {
 	Confidence    float64 `json:"confidence"`
 }
 
-// GetChargeback returns team/project/model showback data. Raw usage_records are
-// authoritative. Canonical model_calls are used only when no raw usage records
-// exist in the requested window, avoiding double counting after backfill.
+// GetChargeback returns team/project/model showback data. usage_records are the
+// authoritative token/cost source; canonical model calls are projected there
+// during ingest and joined with workload ownership metadata for showback.
 func (d *DB) GetChargeback(from, to time.Time, source, model, project string, groups map[string]string, machineName, gitAuthor string, limit int) ([]ChargebackRow, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200

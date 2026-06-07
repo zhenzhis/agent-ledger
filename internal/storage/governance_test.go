@@ -134,6 +134,59 @@ func TestRecalcCostsDetailedUpdatesCanonicalModelCalls(t *testing.T) {
 	}
 }
 
+func TestProjectionQualityDetectsMissingAndCostMismatch(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	for _, item := range []struct {
+		eventID   string
+		sessionID string
+		cost      float64
+	}{
+		{"evt-projection-ok", "sess-ok", 1},
+		{"evt-projection-missing", "sess-missing", 2},
+		{"evt-projection-mismatch", "sess-mismatch", 3},
+	} {
+		if _, err := db.IngestCanonicalEvent(CanonicalEvent{
+			EventID:   item.eventID,
+			Source:    "gateway",
+			EventType: "model.call",
+			SessionID: item.sessionID,
+			Model:     "gpt-5",
+			Project:   "agent-ledger",
+			Timestamp: ts,
+			Payload: rawJSON(t, map[string]interface{}{
+				"goal":          "projection quality",
+				"call_id":       item.eventID + "-call",
+				"input_tokens":  10,
+				"output_tokens": 5,
+				"cost_usd":      item.cost,
+			}),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.db.Exec(`DELETE FROM usage_records WHERE source='gateway' AND session_id='sess-missing'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.Exec(`UPDATE usage_records SET cost_usd=9 WHERE source='gateway' AND session_id='sess-mismatch'`); err != nil {
+		t.Fatal(err)
+	}
+	q, err := db.GetProjectionQuality(ts.Add(-time.Hour), ts.Add(time.Hour), "gateway", "", "agent-ledger")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.ModelCalls != 3 || q.ProjectedUsageRecords != 2 || q.MissingUsageProjection != 1 || q.CostMismatchRecords != 1 {
+		t.Fatalf("unexpected projection quality: %+v", q)
+	}
+	if q.Confidence >= 1 || q.Message == "" {
+		t.Fatalf("expected degraded projection quality: %+v", q)
+	}
+}
+
 func TestApprovalRequestLifecycle(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {

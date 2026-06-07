@@ -37,7 +37,20 @@ type DataQualityReport struct {
 	SourceQuality  []QualitySource       `json:"source_quality"`
 	UnpricedModels []UnpricedModel       `json:"unpriced_models"`
 	ConfidenceMix  map[string]int        `json:"confidence_mix"`
+	Projection     *ProjectionQuality    `json:"projection"`
 	Issues         []InsightEvent        `json:"issues"`
+}
+
+// ProjectionQuality explains whether canonical model calls and usage records stay aligned.
+type ProjectionQuality struct {
+	ModelCalls             int     `json:"model_calls"`
+	ProjectedUsageRecords  int     `json:"projected_usage_records"`
+	MissingUsageProjection int     `json:"missing_usage_projection"`
+	CostMismatchRecords    int     `json:"cost_mismatch_records"`
+	CostDeltaUSD           float64 `json:"cost_delta_usd"`
+	DuplicateSessionOwners int     `json:"duplicate_session_owners"`
+	Confidence             float64 `json:"confidence"`
+	Message                string  `json:"message"`
 }
 
 // ModelCallRow summarizes model call counts and cost.
@@ -260,6 +273,11 @@ func (d *DB) GetDataQuality(staleAfter time.Duration) (*DataQualityReport, error
 		return nil, err
 	}
 	report.PricingSources = sources
+	projection, err := d.GetProjectionQuality(time.Time{}, time.Now().UTC().AddDate(10, 0, 0), "", "", "")
+	if err != nil {
+		return nil, err
+	}
+	report.Projection = projection
 
 	rows, err := d.db.Query(`SELECT source, model, COUNT(*) FROM usage_records
 		WHERE COALESCE(pricing_confidence,'')='unpriced'
@@ -331,6 +349,120 @@ func (d *DB) GetDataQuality(staleAfter time.Duration) (*DataQualityReport, error
 	}
 	report.Issues = issues
 	return report, nil
+}
+
+// GetProjectionQuality checks canonical model-call projection consistency for one scope.
+func (d *DB) GetProjectionQuality(from, to time.Time, source, model, project string) (*ProjectionQuality, error) {
+	if to.IsZero() {
+		to = time.Now().UTC().AddDate(10, 0, 0)
+	}
+	where := []string{"mc.timestamp >= ?", "mc.timestamp < ?"}
+	args := []interface{}{from, to}
+	if source != "" {
+		where = append(where, "mc.source=?")
+		args = append(args, source)
+	}
+	if model != "" {
+		where = append(where, "mc.model=?")
+		args = append(args, model)
+	}
+	if project != "" {
+		where = append(where, "COALESCE(w.project,'')=?")
+		args = append(args, project)
+	}
+	sql := `WITH matched AS (
+		SELECT mc.call_id, mc.cost_usd AS model_cost, u.id AS usage_id, u.cost_usd AS usage_cost
+		FROM model_calls mc
+		LEFT JOIN workloads w ON w.workload_id=mc.workload_id
+		LEFT JOIN usage_records u ON u.source=mc.source
+			AND u.session_id=mc.session_id
+			AND u.model=mc.model
+			AND u.timestamp=mc.timestamp
+			AND u.input_tokens=mc.input_tokens
+			AND u.output_tokens=mc.output_tokens
+			AND u.cache_creation_input_tokens=mc.cache_creation_input_tokens
+			AND u.cache_read_input_tokens=mc.cache_read_input_tokens
+			AND u.reasoning_output_tokens=mc.reasoning_output_tokens
+		WHERE ` + strings.Join(where, " AND ") + `
+	)
+	SELECT COUNT(*),
+		COALESCE(SUM(CASE WHEN usage_id IS NOT NULL THEN 1 ELSE 0 END),0),
+		COALESCE(SUM(CASE WHEN usage_id IS NULL THEN 1 ELSE 0 END),0),
+		COALESCE(SUM(CASE WHEN usage_id IS NOT NULL AND ABS(COALESCE(model_cost,0)-COALESCE(usage_cost,0)) > 0.000001 THEN 1 ELSE 0 END),0),
+		COALESCE(SUM(CASE WHEN usage_id IS NOT NULL THEN ABS(COALESCE(model_cost,0)-COALESCE(usage_cost,0)) ELSE 0 END),0)
+	FROM matched`
+	q := &ProjectionQuality{}
+	if err := d.db.QueryRow(sql, args...).Scan(&q.ModelCalls, &q.ProjectedUsageRecords, &q.MissingUsageProjection, &q.CostMismatchRecords, &q.CostDeltaUSD); err != nil {
+		return nil, err
+	}
+	usageFilter, usageArgs := buildUsageFilterAlias("u", source, model, project)
+	dupArgs := append([]interface{}{from, to}, usageArgs...)
+	dupSQL := `WITH scoped_sessions AS (
+		SELECT DISTINCT u.source,u.session_id FROM usage_records u
+		WHERE u.timestamp >= ? AND u.timestamp < ?` + usageFilter + `
+	)
+	SELECT COUNT(*) FROM (
+		SELECT ws.source,ws.session_id
+		FROM workload_sessions ws
+		JOIN scoped_sessions ss ON ss.source=ws.source AND ss.session_id=ws.session_id
+		JOIN workloads w ON w.workload_id=ws.workload_id
+		GROUP BY ws.source,ws.session_id
+		HAVING COUNT(DISTINCT ws.workload_id)>1
+			AND SUM(CASE WHEN COALESCE(w.outcome,'')='legacy-session-derived' THEN 1 ELSE 0 END)>0
+			AND SUM(CASE WHEN COALESCE(w.outcome,'')<>'legacy-session-derived' THEN 1 ELSE 0 END)>0
+	)`
+	if err := d.db.QueryRow(dupSQL, dupArgs...).Scan(&q.DuplicateSessionOwners); err != nil {
+		return nil, err
+	}
+	q.CostDeltaUSD = math.Round(q.CostDeltaUSD*10000) / 10000
+	q.Confidence = projectionConfidence(q)
+	q.Message = projectionMessage(q)
+	return q, nil
+}
+
+func projectionConfidence(q *ProjectionQuality) float64 {
+	if q == nil {
+		return 0
+	}
+	if q.ModelCalls == 0 {
+		if q.DuplicateSessionOwners > 0 {
+			return 0.7
+		}
+		return 1
+	}
+	score := 1.0
+	score -= float64(q.MissingUsageProjection) / float64(q.ModelCalls) * 0.55
+	score -= float64(q.CostMismatchRecords) / float64(q.ModelCalls) * 0.35
+	if q.DuplicateSessionOwners > 0 {
+		score -= 0.1
+	}
+	if score < 0 {
+		score = 0
+	}
+	return math.Round(score*100) / 100
+}
+
+func projectionMessage(q *ProjectionQuality) string {
+	if q == nil {
+		return "projection quality unavailable"
+	}
+	if q.ModelCalls == 0 && q.DuplicateSessionOwners == 0 {
+		return "no canonical model calls in scope"
+	}
+	var parts []string
+	if q.MissingUsageProjection > 0 {
+		parts = append(parts, fmt.Sprintf("%d canonical model calls are missing usage projection", q.MissingUsageProjection))
+	}
+	if q.CostMismatchRecords > 0 {
+		parts = append(parts, fmt.Sprintf("%d projected usage records have cost mismatch", q.CostMismatchRecords))
+	}
+	if q.DuplicateSessionOwners > 0 {
+		parts = append(parts, fmt.Sprintf("%d sessions have both legacy and canonical workload owners", q.DuplicateSessionOwners))
+	}
+	if len(parts) == 0 {
+		return "canonical model calls and usage projections are consistent"
+	}
+	return strings.Join(parts, "; ")
 }
 
 // GetModelCalls returns call analytics grouped by model/source/project.

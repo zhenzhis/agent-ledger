@@ -280,7 +280,7 @@ Canonical event ingest 支持 workload、run、model call、tool call、context 
 agent-ledger doctor --format markdown
 ```
 
-也可以打开 `GET /api/doctor?format=markdown&privacy=1`。诊断报告会检查当前时间窗口、collector health、路径是否存在/可读、最近扫描错误、价格新鲜度、未计价模型和空 usage 窗口。
+也可以打开 `GET /api/doctor?format=markdown&privacy=1`。诊断报告会检查当前时间窗口、collector health、路径是否存在/可读、最近扫描错误、价格新鲜度、未计价模型、空 usage 窗口，以及 canonical-to-usage projection 一致性。
 
 如果 Codex、OpenCode 或其他来源没有数据：
 
@@ -293,7 +293,7 @@ agent-ledger doctor --format markdown
 
 - Web UI 使用 `GET /api/dashboard` 作为 KPI、token、费用、模型面板的一致性读取入口。
 - 价格变更后执行 `POST /api/recalculate-costs?mode=zero`。
-- 如果差异持续，运行 `agent-ledger doctor --format markdown`，查看 dashboard consistency 或 pricing warning。
+- 如果差异持续，运行 `agent-ledger doctor --format markdown`，查看 projection、dashboard consistency 或 pricing warning。
 
 如果费用与 provider 账单不一致：
 
