@@ -398,8 +398,11 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 }
 
 func runEventCLI(args []string, db *storage.DB) error {
+	if len(args) > 0 && args[0] == "schema" {
+		return json.NewEncoder(os.Stdout).Encode(storage.CanonicalEventSchema())
+	}
 	if len(args) == 0 || args[0] != "ingest" {
-		return fmt.Errorf("usage: agent-ledger event ingest [--file event.json]")
+		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event ingest [--file event.json]")
 	}
 	var raw []byte
 	var err error

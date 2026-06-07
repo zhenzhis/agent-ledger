@@ -11,6 +11,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger version                     # print version info
 ./agent-ledger doctor                      # local diagnostics
 ./agent-ledger today                       # CLI summary
+./agent-ledger event schema                # print canonical event schema
 ./agent-ledger event ingest < event.json   # ingest metadata-only canonical event(s)
 ./agent-ledger mcp                         # local stdio JSON-RPC tool surface
 ```

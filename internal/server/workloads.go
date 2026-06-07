@@ -145,6 +145,14 @@ func (s *Server) handleModelRegistry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, rows)
 }
 
+func (s *Server) handleCanonicalEventSchema(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, storage.CanonicalEventSchema())
+}
+
 func (s *Server) handleCanonicalEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -164,6 +164,7 @@ func tools() []map[string]interface{} {
 			"timestamp":       stringSchema(),
 			"payload":         objectSchema(),
 		}),
+		tool("ledger.event_schema", "Return the canonical metadata-only event schema and supported event types.", map[string]interface{}{}),
 		tool("ledger.get_policy", "Evaluate local advisory policy rules for a proposed agent action.", map[string]interface{}{
 			"workload_id": stringSchema(),
 			"run_id":      stringSchema(),
@@ -235,6 +236,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolRecordArtifact(args)
 	case "ledger.record_event":
 		return s.toolRecordEvent(args)
+	case "ledger.event_schema":
+		return storage.CanonicalEventSchema(), nil
 	case "ledger.get_policy":
 		return s.toolGetPolicy(args)
 	case "ledger.explain_cost":

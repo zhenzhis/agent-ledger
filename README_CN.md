@@ -49,6 +49,7 @@ CLI：
 ./agent-ledger workload list
 ./agent-ledger workload create --goal "review strategy engine" --source codex --project quant
 ./agent-ledger run --goal "debug ingestion" --agent codex -- codex
+./agent-ledger event schema
 ./agent-ledger event ingest --file event.json
 ./agent-ledger pricing sync
 ./agent-ledger wrapped
@@ -157,6 +158,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `POST /api/workloads/close` | 关闭 workload 并记录结果 |
 | `GET /api/workload-detail` | workload 的 run、model call、tool、session、policy 明细 |
 | `GET /api/workload-graph` | workload 图谱 |
+| `GET /api/event-schema` | Canonical event schema 与支持的事件类型 |
 | `POST /api/events` | 写入 metadata-only canonical events |
 | `GET /api/sessions` | 服务端分页会话账本 |
 | `GET /api/model-registry` | 模型与价格治理注册表 |
@@ -186,6 +188,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `ledger.close_workload`
 - `ledger.record_artifact`
 - `ledger.record_event`
+- `ledger.event_schema`
 - `ledger.get_policy`
 - `ledger.explain_cost`
 - `ledger.find_similar_workloads`

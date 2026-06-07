@@ -49,6 +49,7 @@ CLI:
 ./agent-ledger workload list
 ./agent-ledger workload create --goal "review strategy engine" --source codex --project quant
 ./agent-ledger run --goal "debug ingestion" --agent codex -- codex
+./agent-ledger event schema
 ./agent-ledger event ingest --file event.json
 ./agent-ledger pricing sync
 ./agent-ledger wrapped
@@ -157,6 +158,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `POST /api/workloads/close` | Close a workload with status/outcome |
 | `GET /api/workload-detail` | Workload runs, model calls, tools, sessions, policies |
 | `GET /api/workload-graph` | Compact workload graph |
+| `GET /api/event-schema` | Canonical event schema and supported event types |
 | `POST /api/events` | Ingest metadata-only canonical events |
 | `GET /api/sessions` | Server-side paginated session ledger |
 | `GET /api/model-registry` | Pricing and model governance registry |
@@ -186,6 +188,7 @@ Current tools:
 - `ledger.close_workload`
 - `ledger.record_artifact`
 - `ledger.record_event`
+- `ledger.event_schema`
 - `ledger.get_policy`
 - `ledger.explain_cost`
 - `ledger.find_similar_workloads`

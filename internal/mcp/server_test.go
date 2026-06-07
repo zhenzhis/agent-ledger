@@ -31,7 +31,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 2", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.record_event") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	payload := toolTextPayload(t, out[1])

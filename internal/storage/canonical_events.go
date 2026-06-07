@@ -40,6 +40,184 @@ type CanonicalEventResult struct {
 	Derived    []string `json:"derived,omitempty"`
 }
 
+// CanonicalEventTypeInfo describes one supported canonical event type.
+type CanonicalEventTypeInfo struct {
+	EventType     string            `json:"event_type"`
+	Description   string            `json:"description"`
+	Required      []string          `json:"required"`
+	PayloadFields map[string]string `json:"payload_fields"`
+}
+
+// CanonicalEventSchema returns the public metadata-only event contract.
+func CanonicalEventSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"version": "v1",
+		"privacy": map[string]interface{}{
+			"payload_policy": "metadata-only",
+			"rejected_payload_keys": []string{
+				"prompt", "prompts", "messages", "content", "input_text", "output_text", "completion", "transcript",
+			},
+		},
+		"envelope_fields": map[string]string{
+			"event_id":        "Optional stable idempotency key. Deterministic hash is generated when omitted.",
+			"source":          "Required source name such as codex, claude, opencode, gateway, or local.",
+			"event_type":      "Required canonical event type.",
+			"source_event_id": "Optional native upstream event id.",
+			"workload_id":     "Optional Agent Ledger workload id. Required for most child events unless payload.goal is provided.",
+			"agent_run_id":    "Optional Agent Ledger run id.",
+			"session_id":      "Optional source-scoped local session id.",
+			"model":           "Optional model name; required for model.call unless payload.model is provided.",
+			"project":         "Optional project/workspace name.",
+			"git_branch":      "Optional normalized branch name.",
+			"timestamp":       "Optional RFC3339 timestamp; current UTC time is used when omitted.",
+			"payload_hash":    "Optional sha256 payload hash. Generated when omitted.",
+			"payload":         "Required JSON object for event-specific metadata. Raw prompt/model output is rejected.",
+			"confidence":      "Optional parser confidence in [0,1]. Defaults to 1.",
+		},
+		"event_types": CanonicalEventTypes(),
+	}
+}
+
+// CanonicalEventTypes lists event types that are projected into the workload ledger.
+func CanonicalEventTypes() []CanonicalEventTypeInfo {
+	return []CanonicalEventTypeInfo{
+		{
+			EventType:   "workload.started",
+			Description: "Create or upsert a goal-level workload.",
+			Required:    []string{"source", "event_type", "payload.goal"},
+			PayloadFields: map[string]string{
+				"goal":       "Human-readable goal or workload objective.",
+				"project":    "Project/workspace name.",
+				"repo":       "Repository slug or local repo alias.",
+				"git_branch": "Branch name; empty values normalize to unknown.",
+				"owner":      "Optional owner or user alias.",
+				"team":       "Optional team/showback group.",
+				"budget_usd": "Optional local budget for this workload.",
+			},
+		},
+		{
+			EventType:   "workload.closed",
+			Description: "Close an existing workload.",
+			Required:    []string{"source", "event_type", "workload_id"},
+			PayloadFields: map[string]string{
+				"status":  "completed, failed, partial, or abandoned.",
+				"outcome": "Short outcome summary without prompt content.",
+			},
+		},
+		{
+			EventType:   "agent.run.started",
+			Description: "Attach an agent execution to a workload.",
+			Required:    []string{"source", "event_type", "workload_id or payload.goal"},
+			PayloadFields: map[string]string{
+				"run_id":        "Optional stable run id.",
+				"parent_run_id": "Optional parent run for sub-agent/fleet attribution.",
+				"agent_name":    "Agent name, e.g. codex, claude-code, opencode.",
+				"agent_version": "Agent version if available.",
+				"command":       "Optional command string; redact when sensitive.",
+				"cwd":           "Optional working directory; privacy modes can redact it.",
+				"status":        "Usually running.",
+			},
+		},
+		{
+			EventType:   "agent.run.finished",
+			Description: "Mark an agent run complete or failed.",
+			Required:    []string{"source", "event_type", "agent_run_id"},
+			PayloadFields: map[string]string{
+				"status":      "completed or failed.",
+				"exit_code":   "Process exit code when applicable.",
+				"error":       "Short error class/message without secrets.",
+				"duration_ms": "Run duration in milliseconds.",
+			},
+		},
+		{
+			EventType:   "model.call",
+			Description: "Record one model call with non-overlapping token components.",
+			Required:    []string{"source", "event_type", "workload_id or payload.goal", "model or payload.model"},
+			PayloadFields: map[string]string{
+				"call_id":                     "Optional stable call id.",
+				"provider":                    "Model provider.",
+				"model":                       "Model name when envelope.model is omitted.",
+				"model_alias":                 "Provider or gateway alias.",
+				"input_tokens":                "Non-cached input tokens.",
+				"cache_read_input_tokens":     "Input tokens served from cache.",
+				"cache_creation_input_tokens": "Input tokens written to cache.",
+				"output_tokens":               "Output tokens.",
+				"reasoning_output_tokens":     "Reasoning tokens, informational subset of output.",
+				"cost_usd":                    "Local or provider-reported cost.",
+				"latency_ms":                  "Model call latency.",
+				"finish_reason":               "Stop reason.",
+				"pricing_source":              "official, fallback, override, source-reported, or unpriced.",
+				"pricing_confidence":          "exact, fuzzy, stale, fallback, source-reported, or unpriced.",
+			},
+		},
+		{
+			EventType:   "tool.call",
+			Description: "Record one tool invocation without raw parameters.",
+			Required:    []string{"source", "event_type", "workload_id or payload.goal"},
+			PayloadFields: map[string]string{
+				"tool_call_id": "Optional stable tool call id.",
+				"tool_name":    "Tool name.",
+				"tool_type":    "shell, file, browser, mcp, api, or other.",
+				"status":       "ok, failed, skipped, or blocked.",
+				"error_class":  "Short error class.",
+				"duration_ms":  "Tool duration.",
+				"params_hash":  "Hash of parameters; do not send raw params.",
+			},
+		},
+		{
+			EventType:   "context.ref",
+			Description: "Attach a hashed or metadata-only context reference.",
+			Required:    []string{"source", "event_type", "workload_id or payload.goal"},
+			PayloadFields: map[string]string{
+				"ref_type":      "repo, file, diff, issue, pr, doc, memory, or other.",
+				"ref_hash":      "Stable hash of the referenced context.",
+				"label":         "Short non-sensitive label.",
+				"repo":          "Repository alias.",
+				"git_branch":    "Branch name.",
+				"commit_sha":    "Commit SHA if relevant.",
+				"privacy_label": "local, team-share, strict, or public.",
+			},
+		},
+		{
+			EventType:   "artifact.created",
+			Description: "Record a privacy-safe output artifact reference.",
+			Required:    []string{"source", "event_type", "workload_id or payload.goal"},
+			PayloadFields: map[string]string{
+				"artifact_id":   "Optional stable artifact id.",
+				"artifact_type": "patch, report, bundle, screenshot, metric, or other.",
+				"label":         "Short label.",
+				"path_hash":     "Hash of local path.",
+				"sha256":        "Artifact content hash.",
+				"metadata":      "Small JSON metadata object without raw content.",
+			},
+		},
+		{
+			EventType:   "evaluation.recorded",
+			Description: "Record local quality or outcome signal.",
+			Required:    []string{"source", "event_type", "workload_id or payload.goal"},
+			PayloadFields: map[string]string{
+				"evaluator": "local evaluator name.",
+				"status":    "pass, fail, unknown, or skipped.",
+				"score":     "Numeric score.",
+				"signal":    "tests, review, lint, user, perf, or custom signal.",
+				"notes":     "Short metadata-only note.",
+			},
+		},
+		{
+			EventType:   "policy.decision",
+			Description: "Record advisory or enforced local policy decision.",
+			Required:    []string{"source", "event_type", "workload_id or payload.goal"},
+			PayloadFields: map[string]string{
+				"decision_id": "Optional stable decision id.",
+				"rule_id":     "Policy rule id.",
+				"action":      "allow, warn, require_approval, or block.",
+				"reason":      "Short policy reason.",
+				"actor_role":  "viewer, operator, admin, agent, or gateway.",
+			},
+		},
+	}
+}
+
 // IngestCanonicalEvent stores one canonical event and applies supported ledger projections.
 func (d *DB) IngestCanonicalEvent(event CanonicalEvent) (*CanonicalEventResult, error) {
 	event.Source = strings.TrimSpace(event.Source)

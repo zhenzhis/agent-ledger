@@ -85,6 +85,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/workloads/close", s.handleWorkloadClose)
 	mux.HandleFunc("/api/workload-detail", s.handleWorkloadDetail)
 	mux.HandleFunc("/api/workload-graph", s.handleWorkloadGraph)
+	mux.HandleFunc("/api/event-schema", s.handleCanonicalEventSchema)
 	mux.HandleFunc("/api/events", s.handleCanonicalEvents)
 	mux.HandleFunc("/api/health/ingestion", s.handleIngestionHealth)
 	mux.HandleFunc("/api/scan", s.handleScan)

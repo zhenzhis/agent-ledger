@@ -172,6 +172,26 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 	}
 }
 
+func TestCanonicalEventSchemaListsCoreTypes(t *testing.T) {
+	schema := CanonicalEventSchema()
+	if schema["version"] != "v1" {
+		t.Fatalf("schema version=%#v", schema["version"])
+	}
+	types, ok := schema["event_types"].([]CanonicalEventTypeInfo)
+	if !ok || len(types) == 0 {
+		t.Fatalf("missing event types: %#v", schema["event_types"])
+	}
+	seen := map[string]bool{}
+	for _, info := range types {
+		seen[info.EventType] = true
+	}
+	for _, eventType := range []string{"workload.started", "agent.run.started", "model.call", "tool.call", "policy.decision"} {
+		if !seen[eventType] {
+			t.Fatalf("schema missing %s", eventType)
+		}
+	}
+}
+
 func TestIngestCanonicalEventRejectsPromptContent(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {
