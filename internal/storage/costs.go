@@ -44,11 +44,11 @@ func (d *DB) RecalcCostsDetailed(allPrices map[string]PricingAuditRow, calcFn Co
 	if !forceSourceReported {
 		where += " AND COALESCE(pricing_confidence,'') != 'source-reported'"
 	}
-	rows, err := d.db.Query(`SELECT id, model, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, cost_usd FROM usage_records ` + where)
+	usageRows, err := d.db.Query(`SELECT id, model, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, cost_usd FROM usage_records ` + where)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer usageRows.Close()
 
 	type rec struct {
 		id                    int64
@@ -57,19 +57,43 @@ func (d *DB) RecalcCostsDetailed(allPrices map[string]PricingAuditRow, calcFn Co
 		cost                  float64
 	}
 	var recs []rec
-	for rows.Next() {
+	for usageRows.Next() {
 		var r rec
-		if err := rows.Scan(&r.id, &r.model, &r.input, &r.output, &r.cc, &r.cr, &r.cost); err != nil {
+		if err := usageRows.Scan(&r.id, &r.model, &r.input, &r.output, &r.cc, &r.cr, &r.cost); err != nil {
 			return err
 		}
 		recs = append(recs, r)
 	}
-	if err := rows.Err(); err != nil {
+	if err := usageRows.Err(); err != nil {
 		return err
 	}
-	rows.Close()
+	usageRows.Close()
 
-	if len(recs) == 0 {
+	modelRows, err := d.db.Query(`SELECT call_id, model, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, cost_usd FROM model_calls ` + where)
+	if err != nil {
+		return err
+	}
+	defer modelRows.Close()
+	type modelRec struct {
+		callID                string
+		model                 string
+		input, output, cc, cr int64
+		cost                  float64
+	}
+	var modelRecs []modelRec
+	for modelRows.Next() {
+		var r modelRec
+		if err := modelRows.Scan(&r.callID, &r.model, &r.input, &r.output, &r.cc, &r.cr, &r.cost); err != nil {
+			return err
+		}
+		modelRecs = append(modelRecs, r)
+	}
+	if err := modelRows.Err(); err != nil {
+		return err
+	}
+	modelRows.Close()
+
+	if len(recs) == 0 && len(modelRecs) == 0 {
 		return nil
 	}
 
@@ -84,6 +108,11 @@ func (d *DB) RecalcCostsDetailed(allPrices map[string]PricingAuditRow, calcFn Co
 		return err
 	}
 	defer stmt.Close()
+	modelStmt, err := tx.Prepare("UPDATE model_calls SET cost_usd=?, pricing_source=?, pricing_confidence=? WHERE call_id=?")
+	if err != nil {
+		return err
+	}
+	defer modelStmt.Close()
 
 	updated := 0
 	touched := 0
@@ -108,6 +137,34 @@ func (d *DB) RecalcCostsDetailed(allPrices map[string]PricingAuditRow, calcFn Co
 		prices := [4]float64{match.InputCostPerToken, match.OutputCostPerToken, match.CacheReadCostPerToken, match.CacheWriteCostPerToken}
 		cost := calcFn(r.input, r.output, r.cc, r.cr, prices)
 		if _, err := stmt.Exec(cost, match.PricingSource, match.MatchedModel, match.Confidence, match.MatchType, r.id); err != nil {
+			return err
+		}
+		if cost > 0 {
+			updated++
+		}
+		touched++
+	}
+	for _, r := range modelRecs {
+		match, ok := matchPricingDetailed(r.model, allPrices)
+		if !ok {
+			if r.cost > 0 {
+				if _, err := tx.Exec(`UPDATE model_calls
+					SET pricing_source=?, pricing_confidence=?
+					WHERE call_id=?`, "source-reported", "source-reported", r.callID); err != nil {
+					return err
+				}
+				touched++
+				continue
+			}
+			if _, err := tx.Exec("UPDATE model_calls SET pricing_confidence=? WHERE call_id=?", "unpriced", r.callID); err != nil {
+				return err
+			}
+			touched++
+			continue
+		}
+		prices := [4]float64{match.InputCostPerToken, match.OutputCostPerToken, match.CacheReadCostPerToken, match.CacheWriteCostPerToken}
+		cost := calcFn(r.input, r.output, r.cc, r.cr, prices)
+		if _, err := modelStmt.Exec(cost, match.PricingSource, match.Confidence, r.callID); err != nil {
 			return err
 		}
 		if cost > 0 {

@@ -24,6 +24,7 @@
 - One-click Doctor through `GET /api/doctor` and `agent-ledger doctor`, combining usage, ingestion health, pricing freshness, and data-quality checks into actionable JSON/Markdown diagnostics.
 - Consistent dashboard bundle through `GET /api/dashboard`, so KPI, token, cost, and model panels read one storage snapshot and avoid mixed old/new states during scans.
 - Canonical `model.call` events now project into `usage_records`, while legacy session backfill skips sessions already owned by canonical workloads to avoid duplicate workload rows.
+- Pricing recalculation now updates canonical `model_calls` as well as `usage_records`, keeping workload detail costs aligned with dashboard and export totals.
 - Quota/Battery forecasts now include reset time, projected window usage, and estimated time-to-limit based on local burn rate.
 - Session Cost Replay through `GET /api/session-replay` and `agent-ledger replay`, returning chronological per-call token/cost accumulation without reading prompt content.
 - Repo AI Cost Badge through `GET /api/badge/repo.svg` and `agent-ledger badge`, rendering local black/white SVG cost, token, session, or cache badges.

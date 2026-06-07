@@ -70,6 +70,70 @@ func TestRebuildUsageAggregates(t *testing.T) {
 	}
 }
 
+func TestRecalcCostsDetailedUpdatesCanonicalModelCalls(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	start, err := db.IngestCanonicalEvent(CanonicalEvent{
+		EventID:   "evt-priced-workload",
+		Source:    "gateway",
+		EventType: "workload.started",
+		Timestamp: ts,
+		Payload:   rawJSON(t, map[string]interface{}{"goal": "price canonical call", "project": "agent-ledger"}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.IngestCanonicalEvent(CanonicalEvent{
+		EventID:    "evt-priced-call",
+		Source:     "gateway",
+		EventType:  "model.call",
+		WorkloadID: start.WorkloadID,
+		SessionID:  "sess-priced-call",
+		Model:      "gpt-5",
+		Timestamp:  ts.Add(time.Minute),
+		Payload: rawJSON(t, map[string]interface{}{
+			"call_id":                     "call-priced",
+			"input_tokens":                100,
+			"cache_read_input_tokens":     50,
+			"cache_creation_input_tokens": 20,
+			"output_tokens":               10,
+			"pricing_confidence":          "needs-local-pricing",
+		}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prices := map[string]PricingAuditRow{
+		"gpt-5": {
+			Model: "gpt-5", PricingSource: "openai-official", MatchedModel: "gpt-5", MatchType: "official-seed", Priority: 20,
+			InputCostPerToken: 1, OutputCostPerToken: 2, CacheReadCostPerToken: 0.5, CacheWriteCostPerToken: 0.25, Confidence: "official",
+		},
+	}
+	if err := db.RecalcCostsDetailed(prices, func(inputTokens, outputTokens, cacheCreation, cacheRead int64, prices [4]float64) float64 {
+		return float64(inputTokens)*prices[0] + float64(outputTokens)*prices[1] + float64(cacheCreation)*prices[3] + float64(cacheRead)*prices[2]
+	}, "zero", false); err != nil {
+		t.Fatal(err)
+	}
+	wantCost := 150.0
+	usage, err := db.GetModelCalls(ts.Add(-time.Hour), ts.Add(time.Hour), "gateway", "gpt-5", "agent-ledger", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(usage) != 1 || usage[0].CostUSD != wantCost {
+		t.Fatalf("usage projection cost not recalculated: %+v", usage)
+	}
+	detail, err := db.GetWorkloadDetail(start.WorkloadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.ModelCalls) != 1 || detail.ModelCalls[0].CostUSD != wantCost || detail.ModelCalls[0].PricingConfidence != "official" {
+		t.Fatalf("model call cost not recalculated: %+v", detail.ModelCalls)
+	}
+}
+
 func TestApprovalRequestLifecycle(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {
