@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -53,10 +54,6 @@ func (s *Server) handleOpenAIChatGateway(w http.ResponseWriter, r *http.Request)
 		badRequest(w, fmt.Errorf("model is required"))
 		return
 	}
-	if payload.Stream {
-		http.Error(w, "streaming requests are not supported by the local gateway yet", http.StatusNotImplemented)
-		return
-	}
 	project := firstNonEmpty(r.URL.Query().Get("project"), gatewayMetadataString(payload.Metadata, "agent_ledger.project", "project"))
 	goal := firstNonEmpty(r.URL.Query().Get("goal"), gatewayMetadataString(payload.Metadata, "agent_ledger.goal", "goal"), "Gateway model call "+model)
 	if !s.evaluateOperationPolicy(w, r, "model.call", "gateway", model, project, "openai-chat-completions") {
@@ -87,6 +84,10 @@ func (s *Server) handleOpenAIChatGateway(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer resp.Body.Close()
+	if payload.Stream {
+		s.handleOpenAIChatGatewayStream(w, resp, cfg, model, project, goal, started)
+		return
+	}
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, cfg.MaxResponseBytes+1))
 	if err != nil {
@@ -168,6 +169,96 @@ func (s *Server) recordOpenAIChatGatewayUsage(raw []byte, model, project, goal s
 	}
 	_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.chat", model, map[string]string{"calls": fmt.Sprint(len(calls)), "events": fmt.Sprint(len(events)), "inserted": fmt.Sprint(inserted), "project": project})
 	return len(events) > 0, len(events)
+}
+
+func (s *Server) handleOpenAIChatGatewayStream(w http.ResponseWriter, resp *http.Response, cfg config.GatewayConfig, model, project, goal string, started time.Time) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming is not supported by this response writer", http.StatusInternalServerError)
+		return
+	}
+	contentType := firstNonEmpty(resp.Header.Get("Content-Type"), "text/event-stream")
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", firstNonEmpty(resp.Header.Get("Cache-Control"), "no-cache"))
+	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
+	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events")
+	w.WriteHeader(resp.StatusCode)
+
+	var usage json.RawMessage
+	responseID := ""
+	responseModel := model
+	var streamed int64
+	reader := bufio.NewReader(io.LimitReader(resp.Body, cfg.MaxResponseBytes+1))
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			streamed += int64(len(line))
+			if streamed > cfg.MaxResponseBytes {
+				_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.chat.stream_too_large", model, map[string]string{"status": fmt.Sprint(resp.StatusCode), "project": project})
+				break
+			}
+			_, _ = w.Write(line)
+			flusher.Flush()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				if id, chunkModel, chunkUsage := openAIStreamUsage(line); len(chunkUsage) > 0 {
+					usage = chunkUsage
+					responseID = firstNonEmpty(id, responseID)
+					responseModel = firstNonEmpty(chunkModel, responseModel)
+				}
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.chat.stream_read_error", model, map[string]string{"error": err.Error(), "status": fmt.Sprint(resp.StatusCode), "project": project})
+			break
+		}
+	}
+
+	recorded := false
+	eventCount := 0
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if len(usage) > 0 {
+			body, err := json.Marshal(map[string]interface{}{
+				"id":    firstNonEmpty(responseID, "stream-"+started.Format("20060102T150405.000000000Z")),
+				"model": responseModel,
+				"usage": json.RawMessage(usage),
+			})
+			if err == nil {
+				recorded, eventCount = s.recordOpenAIChatGatewayUsage(body, responseModel, project, goal, started)
+			}
+		} else {
+			_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.chat.stream_usage_missing", model, map[string]string{"project": project})
+		}
+	} else {
+		_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.chat.upstream_status", model, map[string]string{"status": fmt.Sprint(resp.StatusCode), "project": project})
+	}
+	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
+	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
+}
+
+func openAIStreamUsage(line []byte) (id, model string, usage json.RawMessage) {
+	text := strings.TrimSpace(string(line))
+	if !strings.HasPrefix(text, "data:") {
+		return "", "", nil
+	}
+	data := strings.TrimSpace(strings.TrimPrefix(text, "data:"))
+	if data == "" || data == "[DONE]" {
+		return "", "", nil
+	}
+	var chunk struct {
+		ID    string          `json:"id"`
+		Model string          `json:"model"`
+		Usage json.RawMessage `json:"usage"`
+	}
+	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+		return "", "", nil
+	}
+	if len(chunk.Usage) == 0 || string(chunk.Usage) == "null" {
+		return "", "", nil
+	}
+	return chunk.ID, chunk.Model, chunk.Usage
 }
 
 func normalizedGatewayConfig(cfg config.GatewayConfig) config.GatewayConfig {

@@ -23,16 +23,41 @@ func TestGatewayDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestGatewayRejectsStreamingRequest(t *testing.T) {
+func TestGatewayStreamsAndRecordsUsage(t *testing.T) {
 	db := testServerDB(t)
 	t.Setenv("AGENT_LEDGER_TEST_OPENAI_KEY", "sk-test")
-	srv := New(db, "", Options{Gateway: testGatewayConfig("http://127.0.0.1:1")})
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","stream":true}`))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream_test\",\"model\":\"gpt-5.5\",\"choices\":[{\"delta\":{\"content\":\"secret streamed response must not persist\"}}],\"usage\":null}\n\n"))
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream_test\",\"model\":\"gpt-5.5\",\"choices\":[],\"usage\":{\"prompt_tokens\":30,\"completion_tokens\":7,\"prompt_tokens_details\":{\"cached_tokens\":5}}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer upstream.Close()
+	srv := New(db, "", Options{Gateway: testGatewayConfig(upstream.URL)})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","stream":true,"messages":[{"role":"user","content":"secret streamed prompt must not persist"}],"metadata":{"agent_ledger.project":"gateway-project","agent_ledger.goal":"gateway stream"}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.handleOpenAIChatGateway(rr, req)
-	if rr.Code != http.StatusNotImplemented {
-		t.Fatalf("expected 501, got %d body=%s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "secret streamed response must not persist") {
+		t.Fatalf("stream body was not proxied: %s", rr.Body.String())
+	}
+	usageRows, err := db.GetModelCalls(time.Now().Add(-time.Hour), time.Now().Add(time.Hour), "gateway", "gpt-5.5", "gateway-project", 10)
+	if err != nil {
+		t.Fatalf("GetModelCalls: %v", err)
+	}
+	if len(usageRows) != 1 || usageRows[0].Calls != 1 || usageRows[0].Tokens != 37 {
+		t.Fatalf("unexpected streamed usage projection: %+v", usageRows)
+	}
+	audit, err := db.GetAuditLog(20)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if strings.Contains(string(rawAudit), "secret streamed prompt") || strings.Contains(string(rawAudit), "secret streamed response") || strings.Contains(string(rawAudit), "sk-test") {
+		t.Fatalf("sensitive streamed gateway data leaked into audit log: %s", string(rawAudit))
 	}
 }
 
