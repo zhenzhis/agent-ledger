@@ -391,6 +391,7 @@ func migrate(db *sql.DB) error {
 
 		CREATE TABLE IF NOT EXISTS insight_events (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			event_key TEXT,
 			kind TEXT NOT NULL,
 			severity TEXT NOT NULL,
 			source TEXT DEFAULT '',
@@ -497,6 +498,8 @@ func migrate(db *sql.DB) error {
 	db.Exec("ALTER TABLE agent_runs ADD COLUMN phase TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE agent_runs ADD COLUMN progress REAL DEFAULT 0")
 	db.Exec("ALTER TABLE agent_runs ADD COLUMN status_message TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE insight_events ADD COLUMN event_key TEXT")
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_insight_event_key ON insight_events(event_key)")
 
 	// Versioned migrations: each runs once, tracked via meta table.
 	migrations := []struct {

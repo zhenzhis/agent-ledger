@@ -292,24 +292,59 @@ func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err)
 		return
 	}
-	if err := s.db.DetectAnomalies(from, to, s.options.Watchdog.TokenSpikeMultiplier, s.options.Watchdog.NightStartHour, s.options.Watchdog.NightEndHour); err != nil {
+	source := r.URL.Query().Get("source")
+	model := r.URL.Query().Get("model")
+	project := r.URL.Query().Get("project")
+	if err := s.db.DetectAnomaliesFiltered(from, to, source, model, project, s.options.Watchdog.TokenSpikeMultiplier, s.options.Watchdog.NightStartHour, s.options.Watchdog.NightEndHour); err != nil {
 		serverError(w, err)
 		return
 	}
-	rows, err := s.db.GetInsightEvents("anomaly", parseLimit(r, 100))
+	rows, err := s.db.GetInsightEventsFiltered(storage.InsightEventFilter{
+		Kind:    "anomaly",
+		Source:  source,
+		Model:   model,
+		Project: project,
+		From:    from,
+		To:      to,
+		Limit:   parseLimit(r, 100),
+	})
 	if err != nil {
 		serverError(w, err)
 		return
 	}
+	applyInsightEventPrivacy(rows, s.privacyFor(r))
 	writeJSON(w, rows)
 }
 
 func (s *Server) handleWatchdogEvents(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.GetInsightEvents("watchdog", parseLimit(r, 100))
+	from, to, _, err := s.parseTimeRange(r)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	source := r.URL.Query().Get("source")
+	model := r.URL.Query().Get("model")
+	project := r.URL.Query().Get("project")
+	if s.options.Watchdog.Enabled {
+		if err := s.db.DetectWatchdogEvents(from, to, source, model, project, s.options.Watchdog.TokenSpikeMultiplier, s.options.Watchdog.MinCalls, s.options.Watchdog.NightStartHour, s.options.Watchdog.NightEndHour); err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+	rows, err := s.db.GetInsightEventsFiltered(storage.InsightEventFilter{
+		Kind:    "watchdog",
+		Source:  source,
+		Model:   model,
+		Project: project,
+		From:    from,
+		To:      to,
+		Limit:   parseLimit(r, 100),
+	})
 	if err != nil {
 		serverError(w, err)
 		return
 	}
+	applyInsightEventPrivacy(rows, s.privacyFor(r))
 	writeJSON(w, rows)
 }
 

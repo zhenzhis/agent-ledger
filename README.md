@@ -265,6 +265,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/model-calls` | Calls by model/source/project |
 | `GET /api/quota/status` | Local quota and burn-rate estimates |
 | `GET /api/anomalies` | Robust-statistics anomaly events |
+| `GET /api/watchdog/events` | Scoped runaway, call-density, cache-miss-risk, and non-working-hour watchdog events |
 | `GET /api/evidence-bundle` | Redacted support/audit bundle |
 | `GET /api/offline-bundle/export` | Export signed/hashed offline bundle |
 | `POST /api/offline-bundle/import` | Import offline bundle canonical events |

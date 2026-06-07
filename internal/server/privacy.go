@@ -110,6 +110,20 @@ func applyAuditEventPrivacy(rows []storage.AuditEvent, privacy config.PrivacyCon
 	}
 }
 
+func applyInsightEventPrivacy(rows []storage.InsightEvent, privacy config.PrivacyConfig) {
+	if !(privacy.RedactPaths || privacy.HideProjectNames || privacy.HashSessionIDs || privacy.ScreenshotMode) {
+		return
+	}
+	for i := range rows {
+		if privacy.HashSessionIDs || privacy.ScreenshotMode {
+			rows[i].SessionID = hashValue(rows[i].SessionID)
+		}
+		if privacy.HideProjectNames || privacy.RedactPaths || privacy.ScreenshotMode {
+			rows[i].Project = "<redacted>"
+		}
+	}
+}
+
 func hashValue(value string) string {
 	if value == "" {
 		return ""

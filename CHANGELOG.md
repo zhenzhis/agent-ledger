@@ -7,6 +7,7 @@
 - Official Agent Ledger naming across module path, binary, Docker, release metadata, and documentation.
 - Pricing governance with local override, official OpenAI/Anthropic seed rows, LiteLLM fallback, pricing source health, snapshots, audit events, and per-record pricing confidence.
 - Cost Intelligence, Cache Doctor, Data Quality Center, Model Call Analytics, Quota Status, Watchdog events, evidence bundles, reconciliation imports, audit log, policy status, and expanded export types.
+- Scoped Watchdog detection for runaway token/call density, calls per prompt, low output ratio, cache-miss risk, cost spikes, and non-working-hour usage, with stable insight-event upsert keys to avoid duplicate rows during dashboard refresh.
 - Canonical Workload Ledger foundation with `canonical_events`, `workloads`, `agent_runs`, `model_calls`, `tool_calls`, `context_refs`, `artifacts`, `evaluations`, and `policy_decisions`.
 - Async run start, heartbeat, and liveness ledger with `agent_run_events`, run snapshot fields, `agent.run.heartbeat` canonical events, `POST /api/agent-runs`, `POST /api/agent-runs/heartbeat`, `GET /api/agent-runs/liveness`, `agent-ledger workload start-run|heartbeat|liveness`, and MCP `ledger.start_run` / `ledger.heartbeat_run` / `ledger.run_liveness`.
 - Metadata-only canonical event schema and ingest through storage, `GET /api/event-schema`, `POST /api/events`, `agent-ledger event schema/ingest`, and `ledger.event_schema` / `ledger.record_event`.

@@ -769,24 +769,77 @@ func (d *DB) GetCacheDoctor(from, to time.Time, source, model, project string, l
 	return out, rows.Err()
 }
 
-// UpsertInsightEvent inserts an insight event.
+// UpsertInsightEvent stores a stable insight event. Repeated dashboard refreshes
+// update the same event instead of growing duplicate anomaly/watchdog rows.
 func (d *DB) UpsertInsightEvent(e InsightEvent) error {
-	_, err := d.db.Exec(`INSERT INTO insight_events(kind,severity,source,model,project,session_id,metric,value,baseline,message,created_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-		e.Kind, e.Severity, e.Source, e.Model, e.Project, e.SessionID, e.Metric, e.Value, e.Baseline, e.Message, time.Now().UTC())
+	key := insightEventKey(e)
+	createdAt := time.Now().UTC()
+	if t, ok := parseDBTime(e.CreatedAt); ok {
+		createdAt = t.UTC()
+	}
+	_, err := d.db.Exec(`INSERT INTO insight_events(event_key,kind,severity,source,model,project,session_id,metric,value,baseline,message,created_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(event_key) DO UPDATE SET
+			severity=excluded.severity,
+			value=excluded.value,
+			baseline=excluded.baseline,
+			message=excluded.message,
+			created_at=excluded.created_at`,
+		key, e.Kind, e.Severity, e.Source, e.Model, e.Project, e.SessionID, e.Metric, e.Value, e.Baseline, e.Message, createdAt)
 	return err
 }
 
 // GetInsightEvents returns recent insight events.
 func (d *DB) GetInsightEvents(kind string, limit int) ([]InsightEvent, error) {
+	return d.GetInsightEventsFiltered(InsightEventFilter{Kind: kind, Limit: limit})
+}
+
+// InsightEventFilter scopes local anomaly, watchdog, or quality signals.
+type InsightEventFilter struct {
+	Kind    string
+	Source  string
+	Model   string
+	Project string
+	From    time.Time
+	To      time.Time
+	Limit   int
+}
+
+// GetInsightEventsFiltered returns recent insight events in a scoped window.
+func (d *DB) GetInsightEventsFiltered(filter InsightEventFilter) ([]InsightEvent, error) {
+	limit := filter.Limit
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
 	q := `SELECT id,kind,severity,source,model,project,session_id,metric,value,baseline,message,created_at FROM insight_events`
 	args := []interface{}{}
-	if kind != "" {
-		q += ` WHERE kind=?`
-		args = append(args, kind)
+	clauses := []string{}
+	if filter.Kind != "" {
+		clauses = append(clauses, `kind=?`)
+		args = append(args, filter.Kind)
+	}
+	if filter.Source != "" {
+		clauses = append(clauses, `source=?`)
+		args = append(args, filter.Source)
+	}
+	if filter.Model != "" {
+		clauses = append(clauses, `model=?`)
+		args = append(args, filter.Model)
+	}
+	if filter.Project != "" {
+		clauses = append(clauses, `project=?`)
+		args = append(args, filter.Project)
+	}
+	if !filter.From.IsZero() {
+		clauses = append(clauses, `created_at >= ?`)
+		args = append(args, filter.From)
+	}
+	if !filter.To.IsZero() {
+		clauses = append(clauses, `created_at < ?`)
+		args = append(args, filter.To)
+	}
+	if len(clauses) > 0 {
+		q += ` WHERE ` + strings.Join(clauses, ` AND `)
 	}
 	q += ` ORDER BY created_at DESC LIMIT ?`
 	args = append(args, limit)
@@ -808,11 +861,18 @@ func (d *DB) GetInsightEvents(kind string, limit int) ([]InsightEvent, error) {
 
 // DetectAnomalies stores simple robust-statistics anomaly events for a window.
 func (d *DB) DetectAnomalies(from, to time.Time, multiplier float64, nightStart, nightEnd int) error {
-	rows, err := d.db.Query(`SELECT source,model,project,session_id,
+	return d.DetectAnomaliesFiltered(from, to, "", "", "", multiplier, nightStart, nightEnd)
+}
+
+// DetectAnomaliesFiltered stores simple robust-statistics anomaly events for a scoped window.
+func (d *DB) DetectAnomaliesFiltered(from, to time.Time, source, model, project string, multiplier float64, nightStart, nightEnd int) error {
+	filter, fa := buildUsageFilterAlias("u", source, model, project)
+	args := append([]interface{}{from, to}, fa...)
+	rows, err := d.db.Query(`SELECT u.source,u.model,u.project,u.session_id,
 		SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens) as tokens,
 		SUM(cost_usd), MAX(timestamp)
-		FROM usage_records WHERE timestamp >= ? AND timestamp < ?
-		GROUP BY source,model,project,session_id`, from, to)
+		FROM usage_records u WHERE u.timestamp >= ? AND u.timestamp < ?`+filter+`
+		GROUP BY u.source,u.model,u.project,u.session_id`, args...)
 	if err != nil {
 		return err
 	}
@@ -849,14 +909,139 @@ func (d *DB) DetectAnomalies(from, to time.Time, multiplier float64, nightStart,
 			_ = d.UpsertInsightEvent(InsightEvent{
 				Kind: "anomaly", Severity: "warning", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
 				Metric: "tokens", Value: s.tokens, Baseline: threshold,
-				Message: "session token volume is above rolling median/MAD threshold",
+				Message: "session token volume is above rolling median/MAD threshold", CreatedAt: s.ts,
 			})
 		}
 		if t, ok := parseDBTime(s.ts); ok && isNightHour(t.Hour(), nightStart, nightEnd) {
 			_ = d.UpsertInsightEvent(InsightEvent{
 				Kind: "watchdog", Severity: "info", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
 				Metric: "night_usage", Value: s.tokens, Baseline: 0,
-				Message: "usage occurred during configured non-working hours",
+				Message: "usage occurred during configured non-working hours", CreatedAt: s.ts,
+			})
+		}
+	}
+	return nil
+}
+
+// DetectWatchdogEvents stores local runaway/watchdog events for scoped usage.
+// It uses metadata-only signals: token volume, output ratio, call density,
+// prompt density, cost spikes, cache hit rate, and configured non-working hours.
+func (d *DB) DetectWatchdogEvents(from, to time.Time, source, model, project string, multiplier float64, minCalls, nightStart, nightEnd int) error {
+	if minCalls <= 0 {
+		minCalls = 8
+	}
+	if multiplier <= 0 {
+		multiplier = 4
+	}
+	filter, fa := buildUsageFilterAlias("u", source, model, project)
+	args := []interface{}{from, to, from, to}
+	args = append(args, fa...)
+	rows, err := d.db.Query(`SELECT u.source,u.model,u.project,u.session_id,
+		COUNT(*) calls,
+		COALESCE(SUM(u.input_tokens+u.cache_read_input_tokens+u.cache_creation_input_tokens+u.output_tokens),0) tokens,
+		COALESCE(SUM(u.input_tokens+u.cache_read_input_tokens+u.cache_creation_input_tokens),0) input_tokens,
+		COALESCE(SUM(u.output_tokens),0) output_tokens,
+		COALESCE(SUM(u.cache_read_input_tokens),0) cache_read_tokens,
+		COALESCE(SUM(u.cost_usd),0) cost_usd,
+		COALESCE(p.prompts,0) prompts,
+		MAX(u.timestamp) last_activity
+		FROM usage_records u
+		LEFT JOIN (
+			SELECT source,session_id,COUNT(*) prompts
+			FROM prompt_events
+			WHERE timestamp >= ? AND timestamp < ?
+			GROUP BY source,session_id
+		) p ON p.source=u.source AND p.session_id=u.session_id
+		WHERE u.timestamp >= ? AND u.timestamp < ?`+filter+`
+		GROUP BY u.source,u.model,u.project,u.session_id`, args...)
+	if err != nil {
+		return err
+	}
+	type sample struct {
+		source, model, project, session, ts string
+		calls, prompts                      int
+		tokens, input, output, cacheRead    float64
+		cost                                float64
+	}
+	var samples []sample
+	for rows.Next() {
+		var s sample
+		if err := rows.Scan(&s.source, &s.model, &s.project, &s.session, &s.calls, &s.tokens, &s.input, &s.output, &s.cacheRead, &s.cost, &s.prompts, &s.ts); err != nil {
+			rows.Close()
+			return err
+		}
+		samples = append(samples, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(samples) == 0 {
+		return nil
+	}
+	costValues := make([]float64, len(samples))
+	tokenValues := make([]float64, len(samples))
+	for i, s := range samples {
+		costValues[i] = s.cost
+		tokenValues[i] = s.tokens
+	}
+	costThreshold := robustThreshold(costValues, multiplier)
+	tokenThreshold := robustThreshold(tokenValues, multiplier)
+	for _, s := range samples {
+		if s.calls >= minCalls {
+			_ = d.UpsertInsightEvent(InsightEvent{
+				Kind: "watchdog", Severity: "warning", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
+				Metric: "call_density", Value: float64(s.calls), Baseline: float64(minCalls),
+				Message: "many model calls in one session; check for loops, retries, or sub-agent fanout", CreatedAt: s.ts,
+			})
+		}
+		if s.prompts > 0 {
+			callsPerPrompt := float64(s.calls) / float64(s.prompts)
+			if callsPerPrompt >= 10 {
+				_ = d.UpsertInsightEvent(InsightEvent{
+					Kind: "watchdog", Severity: "warning", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
+					Metric: "calls_per_prompt", Value: callsPerPrompt, Baseline: 10,
+					Message: "high model calls per prompt; possible agent loop or overly broad task", CreatedAt: s.ts,
+				})
+			}
+		}
+		if s.input > 0 && s.tokens > 100000 {
+			outputRatio := s.output / s.input
+			if outputRatio < 0.02 {
+				_ = d.UpsertInsightEvent(InsightEvent{
+					Kind: "watchdog", Severity: "warning", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
+					Metric: "low_output_ratio", Value: outputRatio, Baseline: 0.02,
+					Message: "large context with very low output; possible runaway retries or context bloat", CreatedAt: s.ts,
+				})
+			}
+			cacheHitRate := s.cacheRead / s.input
+			if cacheHitRate < 0.05 {
+				_ = d.UpsertInsightEvent(InsightEvent{
+					Kind: "watchdog", Severity: "warning", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
+					Metric: "cache_miss_risk", Value: cacheHitRate, Baseline: 0.05,
+					Message: "large context with low cache reuse; check cwd, resume/compact, tool, or model churn", CreatedAt: s.ts,
+				})
+			}
+		}
+		if len(samples) >= 8 && s.cost > math.Max(1, costThreshold) {
+			_ = d.UpsertInsightEvent(InsightEvent{
+				Kind: "watchdog", Severity: "warning", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
+				Metric: "cost_spike", Value: s.cost, Baseline: costThreshold,
+				Message: "session cost is above robust median/MAD watchdog threshold", CreatedAt: s.ts,
+			})
+		}
+		if len(samples) >= 8 && s.tokens > math.Max(100000, tokenThreshold) && s.calls >= minCalls {
+			_ = d.UpsertInsightEvent(InsightEvent{
+				Kind: "watchdog", Severity: "critical", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
+				Metric: "runaway_tokens", Value: s.tokens, Baseline: tokenThreshold,
+				Message: "token volume and call count both indicate a possible runaway agent session", CreatedAt: s.ts,
+			})
+		}
+		if t, ok := parseDBTime(s.ts); ok && isNightHour(t.Hour(), nightStart, nightEnd) {
+			_ = d.UpsertInsightEvent(InsightEvent{
+				Kind: "watchdog", Severity: "info", Source: s.source, Model: s.model, Project: s.project, SessionID: s.session,
+				Metric: "night_usage", Value: s.tokens, Baseline: 0,
+				Message: "usage occurred during configured non-working hours", CreatedAt: s.ts,
 			})
 		}
 	}
@@ -992,6 +1177,32 @@ func sessionQualityScore(r CostInsightRow) float64 {
 		score = 0
 	}
 	return math.Round(score*100) / 100
+}
+
+func insightEventKey(e InsightEvent) string {
+	parts := []string{
+		strings.ToLower(strings.TrimSpace(e.Kind)),
+		strings.ToLower(strings.TrimSpace(e.Source)),
+		strings.ToLower(strings.TrimSpace(e.Model)),
+		strings.ToLower(strings.TrimSpace(e.Project)),
+		strings.TrimSpace(e.SessionID),
+		strings.ToLower(strings.TrimSpace(e.Metric)),
+		strings.ToLower(strings.TrimSpace(e.Message)),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func robustThreshold(values []float64, multiplier float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	med := median(values)
+	mad := medianAbsDeviation(values, med)
+	if mad <= 0 {
+		mad = 1
+	}
+	return med + multiplier*mad*1.4826
 }
 
 func median(values []float64) float64 {

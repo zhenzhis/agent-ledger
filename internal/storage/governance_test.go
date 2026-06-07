@@ -71,6 +71,66 @@ func TestRebuildUsageAggregates(t *testing.T) {
 	}
 }
 
+func TestDetectWatchdogEventsUsesObservedTimeAndUpserts(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	var records []*UsageRecord
+	for i := 0; i < 8; i++ {
+		records = append(records, &UsageRecord{
+			Source: "codex", SessionID: "baseline-" + string(rune('a'+i)), Model: "gpt-5",
+			InputTokens: 1000, OutputTokens: 500, CostUSD: 0.01, Timestamp: ts.Add(time.Duration(-i-1) * time.Minute), Project: "private-project",
+		})
+	}
+	for i := 0; i < 12; i++ {
+		records = append(records, &UsageRecord{
+			Source: "codex", SessionID: "runaway-session", Model: "gpt-5",
+			InputTokens: 20000, OutputTokens: 100, CostUSD: 0.5, Timestamp: ts.Add(time.Duration(i) * time.Minute), Project: "private-project",
+		})
+	}
+	if err := db.InsertUsageBatch(records); err != nil {
+		t.Fatalf("InsertUsageBatch: %v", err)
+	}
+	if err := db.InsertPromptBatch([]*PromptEvent{{Source: "codex", SessionID: "runaway-session", Model: "gpt-5", Project: "private-project", Timestamp: ts}}); err != nil {
+		t.Fatalf("InsertPromptBatch: %v", err)
+	}
+	from, to := ts.Add(-time.Hour), ts.Add(time.Hour)
+	if err := db.DetectWatchdogEvents(from, to, "codex", "", "private-project", 4, 8, 22, 6); err != nil {
+		t.Fatalf("DetectWatchdogEvents: %v", err)
+	}
+	rows, err := db.GetInsightEventsFiltered(InsightEventFilter{Kind: "watchdog", Source: "codex", Project: "private-project", From: from, To: to, Limit: 100})
+	if err != nil {
+		t.Fatalf("GetInsightEventsFiltered: %v", err)
+	}
+	metrics := map[string]bool{}
+	for _, row := range rows {
+		if row.SessionID == "runaway-session" {
+			metrics[row.Metric] = true
+			if !strings.HasPrefix(row.CreatedAt, "2026-06-07") {
+				t.Fatalf("watchdog event did not use observed time: %+v", row)
+			}
+		}
+	}
+	for _, metric := range []string{"call_density", "calls_per_prompt", "low_output_ratio", "cache_miss_risk"} {
+		if !metrics[metric] {
+			t.Fatalf("missing watchdog metric %s in %+v", metric, rows)
+		}
+	}
+	if err := db.DetectWatchdogEvents(from, to, "codex", "", "private-project", 4, 8, 22, 6); err != nil {
+		t.Fatalf("DetectWatchdogEvents duplicate: %v", err)
+	}
+	rowsAgain, err := db.GetInsightEventsFiltered(InsightEventFilter{Kind: "watchdog", Source: "codex", Project: "private-project", From: from, To: to, Limit: 100})
+	if err != nil {
+		t.Fatalf("GetInsightEventsFiltered duplicate: %v", err)
+	}
+	if len(rowsAgain) != len(rows) {
+		t.Fatalf("watchdog upsert grew duplicate rows: before=%d after=%d rows=%+v", len(rows), len(rowsAgain), rowsAgain)
+	}
+}
+
 func TestRecalcCostsDetailedUpdatesCanonicalModelCalls(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {
