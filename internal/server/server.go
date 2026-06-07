@@ -337,7 +337,7 @@ func isReadOnlyAllowedRequest(r *http.Request) bool {
 		return false
 	}
 	switch r.URL.Path {
-	case "/api/events/validate", "/api/integrations/conformance":
+	case "/api/events/validate", "/api/integrations/conformance", "/api/policy/evaluate":
 		return true
 	case "/api/notifications/webhook":
 		return r.URL.Query().Get("dry_run") == "1" || r.URL.Query().Get("dry_run") == "true"

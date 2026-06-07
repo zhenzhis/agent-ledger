@@ -36,6 +36,10 @@ func (s *Server) handlePolicyEvaluate(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, fmt.Errorf("record=true requires workload_id"))
 		return
 	}
+	if shouldRecord && !s.canWriteDerivedData() {
+		http.Error(w, "read-only mode: policy decision recording is disabled", http.StatusForbidden)
+		return
+	}
 	if shouldRecord {
 		for i := range result.Decisions {
 			id, err := s.db.RecordPolicyDecision(payload.WorkloadID, payload.RunID, result.Decisions[i].Rule, result.Decisions[i].Action, result.Decisions[i].Message, s.roleFor(r))

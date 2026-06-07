@@ -74,6 +74,7 @@
 - Disabled-by-default redacted webhook notifications through `POST /api/notifications/webhook` and `agent-ledger notify webhook`, with dry-run support, bounded event and pending-approval counts, audit logging, hashed request/workload/run ids, and forced redaction of goals, projects, repos, branches, teams, approval targets, approval reasons, and request payloads.
 - `agent-ledger notify webhook --dry-run` is treated as a read-only CLI operation, allowing observer deployments to inspect redacted notification payloads without sending webhooks or mutating state.
 - Read-only HTTP observer mode now allows notification dry-runs while still rejecting real webhook sends, and notification audit writes now respect the read-only guard.
+- Read-only HTTP observer mode now allows policy evaluation without recording decisions, while `record=true` remains explicitly forbidden.
 - Workload detail UI now shows the recent audit timeline while isolating timeline API failures from the core detail view.
 - Explicit tool-call entrypoints through `agent-ledger workload tool` and MCP `ledger.record_tool_call`, recording tool metadata without command parameters or tool input content.
 - Explicit context-reference entrypoints through `agent-ledger workload context` and MCP `ledger.record_context`, both backed by canonical `context.ref` events.

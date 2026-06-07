@@ -240,6 +240,53 @@ func TestReadOnlyAllowsAdapterConformanceWithoutWrites(t *testing.T) {
 	}
 }
 
+func TestReadOnlyAllowsPolicyEvaluateWithoutRecording(t *testing.T) {
+	db := testServerDB(t)
+	workloadID, err := db.CreateWorkload("read only policy eval", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	srv := New(db, "", Options{
+		RBAC: config.RBACConfig{ReadOnly: true},
+		Policies: config.PolicyConfig{
+			Enabled: true,
+			Rules: []config.PolicyRule{{
+				Name: "warn-model", Scope: "model", Match: "gpt-5.5", Action: "warn", Message: "review spend",
+			}},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/policy/evaluate", strings.NewReader(`{
+		"model":"gpt-5.5",
+		"action":"model.call",
+		"record":false
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handlePolicyEvaluate(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("policy evaluate status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	report, err := db.GetPolicyEnforcementReport(10)
+	if err != nil {
+		t.Fatalf("GetPolicyEnforcementReport: %v", err)
+	}
+	if report.Summary.Decisions != 0 {
+		t.Fatalf("read-only policy evaluate should not write decisions: %+v", report)
+	}
+	recordReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/policy/evaluate", strings.NewReader(`{
+		"workload_id":"`+workloadID+`",
+		"model":"gpt-5.5",
+		"action":"model.call",
+		"record":true
+	}`))
+	recordReq.Header.Set("Content-Type", "application/json")
+	recordRR := httptest.NewRecorder()
+	srv.handlePolicyEvaluate(recordRR, recordReq)
+	if recordRR.Code != http.StatusForbidden || !strings.Contains(recordRR.Body.String(), "read-only mode") {
+		t.Fatalf("recording policy evaluate should be forbidden, status=%d body=%s", recordRR.Code, recordRR.Body.String())
+	}
+}
+
 func TestCanonicalEventExamplesEndpointFiltersType(t *testing.T) {
 	db := testServerDB(t)
 	srv := New(db, "", Options{})
