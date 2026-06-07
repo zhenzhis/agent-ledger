@@ -13,6 +13,7 @@ import (
 
 	"github.com/zhenzhis/agent-ledger/internal/collector"
 	"github.com/zhenzhis/agent-ledger/internal/config"
+	"github.com/zhenzhis/agent-ledger/internal/mcp"
 	"github.com/zhenzhis/agent-ledger/internal/pricing"
 	"github.com/zhenzhis/agent-ledger/internal/server"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
@@ -385,6 +386,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runWorkloadCLI(args[1:], db)
 	case "run":
 		return runWrappedCLI(args[1:], db)
+	case "mcp":
+		return mcp.New(db, cfg).Serve(os.Stdin, os.Stdout)
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}

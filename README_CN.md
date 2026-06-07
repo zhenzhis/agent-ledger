@@ -51,6 +51,7 @@ CLI：
 ./agent-ledger run --goal "debug ingestion" --agent codex -- codex
 ./agent-ledger pricing sync
 ./agent-ledger wrapped
+./agent-ledger mcp
 ```
 
 ## 配置
@@ -125,9 +126,9 @@ cost = input_tokens * input_price
 ## 架构
 
 ```text
-collectors / CLI wrapper -> canonical events -> workload ledger
-                         -> raw usage + pricing governance -> aggregates
-                         -> REST API -> embedded dashboard / CLI
+collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
+                                     -> raw usage + pricing governance -> aggregates
+                                     -> REST API -> embedded dashboard / CLI
 ```
 
 核心表：
@@ -172,6 +173,20 @@ collectors / CLI wrapper -> canonical events -> workload ledger
 
 手动扫描、清理重扫、价格同步、导入和费用重算默认只允许本机访问；暴露到网络前必须配置 auth token 或反向代理访问控制。
 
+## MCP 工具接口
+
+`agent-ledger mcp` 会启动本地 stdio JSON-RPC 工具服务，供 agent 框架或 wrapper 接入。当前实现保持本地优先和隐私优先：工具可以创建或关闭 workload、记录 hash 后的 artifact、查询本地策略建议、查询预算状态、解释成本、查找相似 workload。它不会读取 prompt 内容，也不会主动把数据发送到远程 MCP host。
+
+当前工具：
+
+- `ledger.current_budget`
+- `ledger.start_workload`
+- `ledger.close_workload`
+- `ledger.record_artifact`
+- `ledger.get_policy`
+- `ledger.explain_cost`
+- `ledger.find_similar_workloads`
+
 ## 安全模型
 
 - 默认绑定 `127.0.0.1`。
@@ -199,9 +214,9 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . &
 
 ## Roadmap
 
-已落地基础：canonical workload schema、旧 session 自动 backfill、workload API、workload CSV 导出、CLI workload 命令和 CLI run wrapper。
+已落地基础：canonical workload schema、旧 session 自动 backfill、workload API、workload CSV 导出、CLI workload 命令、CLI run wrapper 和本地 MCP stdio tools。
 
-后续路线：MCP server tools、A2A task telemetry、OpenTelemetry GenAI mapping、可选 provider/API gateway、Postgres 团队模式、signed offline bundle import、OIDC/SSO、企业策略审批流。
+后续路线：A2A task telemetry、OpenTelemetry GenAI mapping、可选 provider/API gateway、Postgres 团队模式、signed offline bundle import、OIDC/SSO、更完整的 MCP resources/prompts、企业策略审批流。
 
 ## License
 

@@ -42,6 +42,7 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . &
 
 - Keep collector changes source-scoped and covered by fixtures.
 - New collectors, wrappers, MCP/A2A bridges, or gateways should normalize into canonical workload events before adding product-specific analytics.
+- MCP tools must remain local-first, avoid prompt-content access, return explicit JSON-RPC errors, and add tests under `internal/mcp`.
 - Preserve compatibility for existing `usage_records`, `sessions`, and `/api/sessions`; Workload Ledger is an additive layer, not a breaking replacement.
 - Do not read, store, or analyze prompt content for insights.
 - Do not hide pricing failures. Mark records as `unpriced`, `stale`, `fallback`, `fuzzy`, or `source-reported`.

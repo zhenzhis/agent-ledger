@@ -574,6 +574,39 @@ func (d *DB) GetPolicyDecisions(workloadID string, limit int) ([]PolicyDecisionR
 	return out, rows.Err()
 }
 
+// RecordArtifact stores a privacy-safe artifact reference for a workload.
+func (d *DB) RecordArtifact(workloadID, runID, artifactType, label, pathHash, sha, metadata string, confidence float64) (string, error) {
+	if workloadID == "" {
+		return "", fmt.Errorf("workload_id is required")
+	}
+	if confidence <= 0 {
+		confidence = 1
+	}
+	id := generatedID("art")
+	now := time.Now().UTC()
+	_, err := d.db.Exec(`INSERT INTO artifacts(artifact_id,workload_id,run_id,artifact_type,label,path_hash,sha256,metadata,created_at,confidence)
+		VALUES(?,?,?,?,?,?,?,?,?,?)`, id, workloadID, runID, artifactType, label, pathHash, sha, metadata, now, confidence)
+	if err != nil {
+		return "", err
+	}
+	_, _ = d.db.Exec(`UPDATE workloads SET updated_at=? WHERE workload_id=?`, now, workloadID)
+	return id, nil
+}
+
+// RecordPolicyDecision stores a local policy decision.
+func (d *DB) RecordPolicyDecision(workloadID, runID, ruleID, action, reason, actorRole string) (string, error) {
+	if action == "" {
+		action = "allow"
+	}
+	id := generatedID("pol")
+	_, err := d.db.Exec(`INSERT INTO policy_decisions(decision_id,workload_id,run_id,rule_id,action,reason,actor_role,created_at)
+		VALUES(?,?,?,?,?,?,?,?)`, id, workloadID, runID, ruleID, action, reason, actorRole, time.Now().UTC())
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 func (d *DB) getAgentRuns(workloadID string) ([]AgentRunRow, error) {
 	rows, err := d.db.Query(`SELECT run_id,workload_id,parent_run_id,source,agent_name,agent_version,command,cwd,status,exit_code,error,
 		started_at,COALESCE(ended_at,''),duration_ms,confidence FROM agent_runs WHERE workload_id=? ORDER BY started_at`, workloadID)

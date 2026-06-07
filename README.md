@@ -51,6 +51,7 @@ CLI:
 ./agent-ledger run --goal "debug ingestion" --agent codex -- codex
 ./agent-ledger pricing sync
 ./agent-ledger wrapped
+./agent-ledger mcp
 ```
 
 ## Configuration
@@ -125,9 +126,9 @@ References:
 ## Architecture
 
 ```text
-collectors / CLI wrapper -> canonical events -> workload ledger
-                         -> raw usage + pricing governance -> aggregates
-                         -> REST API -> embedded dashboard / CLI
+collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
+                                     -> raw usage + pricing governance -> aggregates
+                                     -> REST API -> embedded dashboard / CLI
 ```
 
 Core tables:
@@ -172,6 +173,20 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 
 Manual scan, reset, pricing sync, imports, and recalculation require localhost access unless auth tokens are configured.
 
+## MCP Tool Surface
+
+`agent-ledger mcp` starts a local stdio JSON-RPC tool server for agent frameworks and wrappers. The first implementation is intentionally local and privacy-preserving: tools can create or close workloads, record hashed artifacts, ask for advisory policy decisions, query local budget state, explain cost, and find similar workloads. It does not read prompt content and does not send data to a remote MCP host by itself.
+
+Current tools:
+
+- `ledger.current_budget`
+- `ledger.start_workload`
+- `ledger.close_workload`
+- `ledger.record_artifact`
+- `ledger.get_policy`
+- `ledger.explain_cost`
+- `ledger.find_similar_workloads`
+
 ## Security Model
 
 - Binds to `127.0.0.1` by default.
@@ -199,9 +214,9 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . &
 
 ## Roadmap
 
-Implemented foundation: canonical workload schema, legacy session backfill, workload API, workload CSV export, CLI workload commands, and CLI run wrapper.
+Implemented foundation: canonical workload schema, legacy session backfill, workload API, workload CSV export, CLI workload commands, CLI run wrapper, and local MCP stdio tools.
 
-Planned integrations: MCP server tools, A2A task telemetry, OpenTelemetry GenAI mapping, optional provider/API gateway, Postgres team mode, signed offline bundle import, OIDC/SSO, and enterprise policy approval flows.
+Planned integrations: A2A task telemetry, OpenTelemetry GenAI mapping, optional provider/API gateway, Postgres team mode, signed offline bundle import, OIDC/SSO, richer MCP resources/prompts, and enterprise policy approval flows.
 
 ## License
 

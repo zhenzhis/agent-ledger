@@ -12,6 +12,7 @@ go vet ./...
 node --check internal/server/static/app.js
 git diff --check
 docker compose up -d --build
+printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | ./agent-ledger mcp
 ```
 
 If available, also run:

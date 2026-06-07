@@ -10,6 +10,7 @@
 - Canonical Workload Ledger foundation with `canonical_events`, `workloads`, `agent_runs`, `model_calls`, `tool_calls`, `context_refs`, `artifacts`, `evaluations`, and `policy_decisions`.
 - Legacy session backfill into workload/run/model-call records for immediate compatibility with existing local data.
 - Workload APIs: list/create/close/detail/graph, model registry, policy decisions, and workload CSV/JSON export.
+- Local MCP stdio JSON-RPC tools for budget lookup, workload lifecycle, privacy-safe artifacts, advisory policy decisions, cost explanation, and similar workload search.
 - Hourly and daily usage aggregate tables with dashboard aggregate fallback.
 - CLI commands: `today`, `top`, `doctor`, `battery`, `workload list/create/show/close`, `run --goal ... -- <command>`, `export`, `pricing sync`, and `wrapped`.
 - Cursor-compatible session pagination via `next_cursor`.
