@@ -263,16 +263,48 @@ func TestOpenAIResponsesGatewayProxiesAndRecordsUsage(t *testing.T) {
 	}
 }
 
-func TestOpenAIResponsesGatewayRejectsStreamingExplicitly(t *testing.T) {
+func TestOpenAIResponsesGatewayStreamsAndRecordsUsage(t *testing.T) {
 	db := testServerDB(t)
 	t.Setenv("AGENT_LEDGER_TEST_OPENAI_KEY", "sk-test")
-	srv := New(db, "", Options{Gateway: testGatewayConfig("http://127.0.0.1:1")})
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":"smoke"}`))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("unexpected upstream path %s", r.URL.Path)
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("gateway did not request event stream: %q", r.Header.Get("Accept"))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.output_text.delta\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"secret streamed responses output must not persist\"}\n\n"))
+		_, _ = w.Write([]byte("event: response.completed\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_stream_gateway_test\",\"model\":\"gpt-5.5\",\"usage\":{\"input_tokens\":30,\"input_tokens_details\":{\"cached_tokens\":3},\"output_tokens\":9}}}\n\n"))
+	}))
+	defer upstream.Close()
+	srv := New(db, "", Options{Gateway: testGatewayConfig(upstream.URL)})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":"secret streamed responses prompt must not persist","metadata":{"agent_ledger.project":"responses-stream-project","agent_ledger.goal":"responses stream"}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.handleOpenAIResponsesGateway(rr, req)
-	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "streaming gateway is not supported") {
-		t.Fatalf("expected explicit streaming rejection, got %d body=%s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "secret streamed responses output must not persist") {
+		t.Fatalf("stream body was not proxied: %s", rr.Body.String())
+	}
+	usageRows, err := db.GetModelCalls(time.Now().Add(-time.Hour), time.Now().Add(time.Hour), "gateway", "gpt-5.5", "responses-stream-project", 10)
+	if err != nil {
+		t.Fatalf("GetModelCalls: %v", err)
+	}
+	if len(usageRows) != 1 || usageRows[0].Calls != 1 || usageRows[0].Tokens != 39 {
+		t.Fatalf("unexpected responses stream usage projection: %+v", usageRows)
+	}
+	audit, err := db.GetAuditLog(20)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if strings.Contains(string(rawAudit), "secret streamed responses prompt") || strings.Contains(string(rawAudit), "secret streamed responses output") || strings.Contains(string(rawAudit), "sk-test") {
+		t.Fatalf("sensitive responses stream data leaked into audit log: %s", string(rawAudit))
 	}
 }
 
