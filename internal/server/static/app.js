@@ -83,6 +83,11 @@ const I18N = {
     readOnlyActionDisabled: "Read-only observer mode: write operations are disabled",
     outcome: "Outcome",
     runs: "runs",
+    workloadLinks: "links",
+    relation: "Relation",
+    endpoint: "Endpoint",
+    reason: "Reason",
+    createdBy: "Created By",
     toolCalls: "tool calls",
     contextRefs: "context refs",
     refType: "Type",
@@ -275,6 +280,11 @@ const I18N = {
     readOnlyActionDisabled: "只读观测模式：写操作已禁用",
     outcome: "结果",
     runs: "次运行",
+    workloadLinks: "依赖",
+    relation: "关系",
+    endpoint: "端点",
+    reason: "原因",
+    createdBy: "创建者",
     toolCalls: "工具调用",
     contextRefs: "上下文引用",
     refType: "类型",
@@ -1631,6 +1641,7 @@ function buildWorkloadDetail(data, timelineRows = [], workloadState = null) {
     [t("modelCalls"), summary.model_calls || 0],
     [t("toolCalls"), summary.tool_calls || 0],
     [t("contextRefs"), Array.isArray(data.context_refs) ? data.context_refs.length : 0],
+    [t("workloadLinks"), Array.isArray(data.links) ? data.links.length : 0],
     [t("tokens"), fmt(summary.tokens || 0)],
     [t("cost"), fmtCost(summary.cost_usd || 0)],
     [t("confidence"), `${Math.round(Number(summary.confidence || 0) * 100)}%`],
@@ -1692,6 +1703,19 @@ function buildWorkloadDetail(data, timelineRows = [], workloadState = null) {
     tr.appendChild(createCell(row.git_branch || "-", "muted-cell"));
     tr.appendChild(createCell(row.privacy_label || "-", "muted-cell"));
     tr.appendChild(createCell(row.ref_hash || "-", "muted-cell"));
+    return tr;
+  }));
+  const links = Array.isArray(data.links) ? data.links.slice(0, 8) : [];
+  appendDetailTable([t("workloadLinks"), t("relation"), t("endpoint"), t("reason"), t("createdBy")], links.map((row) => {
+    const tr = document.createElement("tr");
+    const source = row.source_workload_id || "-";
+    const target = row.target_workload_id || "-";
+    const endpoint = source === summary.workload_id ? `out: ${target}` : `in: ${source}`;
+    tr.appendChild(createCell(row.link_id || "-", "muted-cell"));
+    tr.appendChild(createCell(row.relation || "-", "muted-cell"));
+    tr.appendChild(createCell(endpoint, "project-cell"));
+    tr.appendChild(createCell(row.reason || "-", "project-cell"));
+    tr.appendChild(createCell(row.created_by || "-", "muted-cell"));
     return tr;
   }));
   const timeline = Array.isArray(timelineRows) ? timelineRows.slice(-12) : [];
