@@ -402,6 +402,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runRouterCLI(args[1:], db)
 	case "replay":
 		return runReplayCLI(args[1:], db)
+	case "badge":
+		return runBadgeCLI(args[1:], db)
 	case "integrations":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "otel":
@@ -538,6 +540,31 @@ func runReplayCLI(args []string, db *storage.DB) error {
 		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(report)
+}
+
+func runBadgeCLI(args []string, db *storage.DB) error {
+	now := time.Now()
+	from, to, err := cliDateRange(args, now)
+	if err != nil {
+		return err
+	}
+	project := cliValue(args, "--project")
+	stats, err := db.GetDashboardStatsFiltered(from, to, cliValue(args, "--source"), cliValue(args, "--model"), project)
+	if err != nil {
+		return err
+	}
+	metric := firstNonEmptyCLI(cliValue(args, "--metric"), "cost")
+	value, err := server.BadgeValue(metric, stats)
+	if err != nil {
+		return err
+	}
+	label := firstNonEmptyCLI(cliValue(args, "--label"), project, "Agent Ledger")
+	svg := server.RenderBadgeSVG(label, value)
+	if out := cliValue(args, "--out"); out != "" {
+		return os.WriteFile(out, []byte(svg), 0o644)
+	}
+	_, err = os.Stdout.Write([]byte(svg + "\n"))
+	return err
 }
 
 func runProviderCLI(args []string, db *storage.DB) error {
