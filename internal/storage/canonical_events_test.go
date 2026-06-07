@@ -264,6 +264,10 @@ func TestCanonicalEventSchemaListsCoreTypes(t *testing.T) {
 	if schema["version"] != "v1" {
 		t.Fatalf("schema version=%#v", schema["version"])
 	}
+	versions, ok := schema["supported_versions"].([]string)
+	if !ok || len(versions) != 1 || versions[0] != "v1" {
+		t.Fatalf("supported_versions=%#v", schema["supported_versions"])
+	}
 	types, ok := schema["event_types"].([]CanonicalEventTypeInfo)
 	if !ok || len(types) == 0 {
 		t.Fatalf("missing event types: %#v", schema["event_types"])
@@ -458,6 +462,14 @@ func TestValidateCanonicalEventDryRun(t *testing.T) {
 		Payload:   rawJSON(t, map[string]interface{}{}),
 	}); err == nil {
 		t.Fatal("expected unsupported event type error")
+	}
+	if _, err := ValidateCanonicalEvent(CanonicalEvent{
+		Source:        "codex",
+		EventType:     "workload.started",
+		SchemaVersion: "v2",
+		Payload:       rawJSON(t, map[string]interface{}{"goal": "unsupported version"}),
+	}); err == nil {
+		t.Fatal("expected unsupported schema version error")
 	}
 }
 

@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+// CanonicalEventSchemaVersion is the only event-envelope version accepted by
+// this binary. Future versions should add explicit migration/conformance tests
+// before being accepted.
+const CanonicalEventSchemaVersion = "v1"
+
 // CanonicalEvent is the stable event contract for wrappers, gateways, MCP tools,
 // and future agent protocols. Payload must contain metadata only, never prompt text.
 type CanonicalEvent struct {
@@ -74,7 +79,8 @@ type CanonicalEventExample struct {
 // CanonicalEventSchema returns the public metadata-only event contract.
 func CanonicalEventSchema() map[string]interface{} {
 	return map[string]interface{}{
-		"version": "v1",
+		"version":            CanonicalEventSchemaVersion,
+		"supported_versions": []string{CanonicalEventSchemaVersion},
 		"privacy": map[string]interface{}{
 			"payload_policy": "metadata-only",
 			"rejected_payload_keys": []string{
@@ -370,7 +376,7 @@ func canonicalExample(eventType, name, description, workloadID, runID string, pa
 		EventID:       "example:" + eventIDType,
 		Source:        "example-adapter",
 		EventType:     eventType,
-		SchemaVersion: "v1",
+		SchemaVersion: CanonicalEventSchemaVersion,
 		SourceVersion: "example-agent@1.0.0",
 		ParserVersion: "example-adapter@v1",
 		SourceEventID: "native:" + eventIDType,
@@ -878,9 +884,12 @@ func containsPromptContentKey(v interface{}) bool {
 }
 
 func normalizeCanonicalEventProvenance(event *CanonicalEvent) error {
-	event.SchemaVersion = strings.TrimSpace(event.SchemaVersion)
+	event.SchemaVersion = strings.ToLower(strings.TrimSpace(event.SchemaVersion))
 	if event.SchemaVersion == "" {
-		event.SchemaVersion = "v1"
+		event.SchemaVersion = CanonicalEventSchemaVersion
+	}
+	if event.SchemaVersion != CanonicalEventSchemaVersion {
+		return fmt.Errorf("unsupported schema_version %q: supported versions: %s", event.SchemaVersion, CanonicalEventSchemaVersion)
 	}
 	event.SourceVersion = strings.TrimSpace(event.SourceVersion)
 	event.ParserVersion = strings.TrimSpace(event.ParserVersion)
