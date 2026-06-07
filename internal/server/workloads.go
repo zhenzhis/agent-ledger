@@ -442,6 +442,22 @@ func (s *Server) handleCanonicalEventSchema(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, storage.CanonicalEventSchema())
 }
 
+func (s *Server) handleCanonicalEventExamples(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	eventType := r.URL.Query().Get("type")
+	if eventType == "" {
+		eventType = r.URL.Query().Get("event_type")
+	}
+	writeJSON(w, map[string]interface{}{
+		"contract": "agent-ledger.canonical-event-examples",
+		"version":  "v1",
+		"examples": storage.CanonicalEventExamples(eventType),
+	})
+}
+
 func (s *Server) handleCanonicalEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

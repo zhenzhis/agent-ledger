@@ -63,6 +63,14 @@ type CanonicalEventTypeInfo struct {
 	PayloadFields map[string]string `json:"payload_fields"`
 }
 
+// CanonicalEventExample is a privacy-safe template for adapter authors.
+type CanonicalEventExample struct {
+	EventType   string         `json:"event_type"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Event       CanonicalEvent `json:"event"`
+}
+
 // CanonicalEventSchema returns the public metadata-only event contract.
 func CanonicalEventSchema() map[string]interface{} {
 	return map[string]interface{}{
@@ -94,7 +102,8 @@ func CanonicalEventSchema() map[string]interface{} {
 			"payload":         "Required JSON object for event-specific metadata. Raw prompt/model output is rejected.",
 			"confidence":      "Optional parser confidence in [0,1]. Defaults to 1.",
 		},
-		"event_types": CanonicalEventTypes(),
+		"event_types":  CanonicalEventTypes(),
+		"examples_uri": "/api/event-examples",
 	}
 }
 
@@ -249,6 +258,146 @@ func CanonicalEventTypes() []CanonicalEventTypeInfo {
 			},
 		},
 	}
+}
+
+// CanonicalEventExamples returns stable metadata-only templates for adapter
+// authors. eventType is optional and uses the same normalized names as ingest.
+func CanonicalEventExamples(eventType string) []CanonicalEventExample {
+	filter := normalizeCanonicalEventType(eventType)
+	examples := []CanonicalEventExample{
+		canonicalExample("workload.started", "Start a workload", "Create a goal-level workload before runs and calls.", "", "", examplePayload(map[string]interface{}{
+			"goal":       "Ship metadata-only adapter integration",
+			"project":    "agent-ledger",
+			"repo":       "zhenzhis/agent-ledger",
+			"git_branch": "main",
+			"team":       "platform",
+		})),
+		canonicalExample("agent.run.started", "Start an agent run", "Attach one agent execution to a workload.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"run_id":        "run_example_001",
+			"agent_name":    "example-agent",
+			"agent_version": "1.0.0",
+			"status":        "running",
+			"phase":         "planning",
+		})),
+		canonicalExample("agent.run.heartbeat", "Run heartbeat", "Append async liveness and progress metadata.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"status":   "working",
+			"phase":    "testing",
+			"progress": 0.6,
+			"message":  "metadata-only status",
+			"metrics": map[string]interface{}{
+				"files_changed": 2,
+				"tests_seen":    18,
+			},
+		})),
+		canonicalExample("model.call", "Model call usage", "Record one non-overlapping token usage event.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"call_id":                     "call_example_001",
+			"provider":                    "openai",
+			"model":                       "gpt-5.5",
+			"input_tokens":                1200,
+			"cache_read_input_tokens":     400,
+			"cache_creation_input_tokens": 100,
+			"output_tokens":               300,
+			"reasoning_output_tokens":     80,
+			"latency_ms":                  2400,
+			"pricing_source":              "official",
+			"pricing_confidence":          "exact",
+		})),
+		canonicalExample("tool.call", "Tool call metadata", "Record one tool invocation without raw params.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"tool_call_id": "tool_example_001",
+			"tool_name":    "shell",
+			"tool_type":    "shell",
+			"status":       "ok",
+			"duration_ms":  180,
+			"params_hash":  "sha256:examplehash",
+		})),
+		canonicalExample("context.ref", "Context reference", "Attach hashed context metadata.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"context_ref_id": "ctx_example_001",
+			"ref_type":       "repo",
+			"ref_hash":       "sha256:examplerepohash",
+			"label":          "repo alias",
+			"repo":           "zhenzhis/agent-ledger",
+			"git_branch":     "main",
+			"privacy_label":  "team-share",
+		})),
+		canonicalExample("artifact.created", "Artifact reference", "Record output artifact identity without content.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"artifact_id":   "artifact_example_001",
+			"artifact_type": "patch",
+			"label":         "adapter patch",
+			"path_hash":     "sha256:examplepathhash",
+			"sha256":        "sha256:exampleartifacthash",
+		})),
+		canonicalExample("evaluation.recorded", "Evaluation signal", "Record a local quality or outcome signal.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"evaluation_id": "eval_example_001",
+			"evaluator":     "local-ci",
+			"status":        "pass",
+			"score":         0.98,
+			"signal":        "unit-tests",
+			"notes":         "metadata-only summary",
+		})),
+		canonicalExample("policy.decision", "Policy decision", "Record advisory policy metadata.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"decision_id": "policy_example_001",
+			"rule_id":     "budget.warn",
+			"action":      "warn",
+			"reason":      "budget threshold near limit",
+			"actor_role":  "agent",
+		})),
+		canonicalExample("agent.run.finished", "Finish an agent run", "Mark one agent run complete or failed.", "wl_example_adapter", "run_example_001", examplePayload(map[string]interface{}{
+			"run_id":      "run_example_001",
+			"status":      "completed",
+			"exit_code":   0,
+			"duration_ms": 125000,
+		})),
+		canonicalExample("workload.closed", "Close workload", "Close a workload with a short outcome.", "wl_example_adapter", "", examplePayload(map[string]interface{}{
+			"status":  "completed",
+			"outcome": "adapter integration validated",
+		})),
+	}
+	if filter == "" {
+		return examples
+	}
+	filtered := make([]CanonicalEventExample, 0, 1)
+	for _, example := range examples {
+		if example.EventType == filter {
+			filtered = append(filtered, example)
+		}
+	}
+	return filtered
+}
+
+func canonicalExample(eventType, name, description, workloadID, runID string, payload json.RawMessage) CanonicalEventExample {
+	eventIDType := strings.ReplaceAll(eventType, ".", "_")
+	event := CanonicalEvent{
+		EventID:       "example:" + eventIDType,
+		Source:        "example-adapter",
+		EventType:     eventType,
+		SchemaVersion: "v1",
+		SourceVersion: "example-agent@1.0.0",
+		ParserVersion: "example-adapter@v1",
+		SourceEventID: "native:" + eventIDType,
+		RawRef:        "example:" + eventIDType + ":row:1",
+		MatchType:     "source_reported",
+		WorkloadID:    workloadID,
+		AgentRunID:    runID,
+		SessionID:     "session_example_001",
+		Model:         "",
+		Project:       "agent-ledger",
+		GitBranch:     "main",
+		Timestamp:     time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
+		Payload:       payload,
+		Confidence:    0.95,
+	}
+	if eventType == "model.call" {
+		event.Model = "gpt-5.5"
+	}
+	return CanonicalEventExample{EventType: eventType, Name: name, Description: description, Event: event}
+}
+
+func examplePayload(v map[string]interface{}) json.RawMessage {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }
 
 // IngestCanonicalEvent stores one canonical event and applies supported ledger projections.

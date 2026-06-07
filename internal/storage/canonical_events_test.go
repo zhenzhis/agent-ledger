@@ -279,6 +279,26 @@ func TestCanonicalEventSchemaListsCoreTypes(t *testing.T) {
 	}
 }
 
+func TestCanonicalEventExamplesValidate(t *testing.T) {
+	examples := CanonicalEventExamples("")
+	if len(examples) < 10 {
+		t.Fatalf("expected examples for core event types, got %d", len(examples))
+	}
+	for _, example := range examples {
+		result, err := ValidateCanonicalEvent(example.Event)
+		if err != nil {
+			t.Fatalf("%s example failed validation: %v", example.EventType, err)
+		}
+		if result.Status != "valid" {
+			t.Fatalf("%s example should have full provenance: %#v", example.EventType, result)
+		}
+	}
+	filtered := CanonicalEventExamples("model.call")
+	if len(filtered) != 1 || filtered[0].EventType != "model.call" {
+		t.Fatalf("model.call filter failed: %#v", filtered)
+	}
+}
+
 func TestIngestCanonicalEventRejectsPromptContent(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {

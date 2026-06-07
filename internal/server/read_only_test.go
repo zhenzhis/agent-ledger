@@ -219,3 +219,23 @@ func TestReadOnlyAllowsAdapterConformanceWithoutWrites(t *testing.T) {
 		t.Fatalf("conformance wrote canonical events: %#v", quality.Provenance)
 	}
 }
+
+func TestCanonicalEventExamplesEndpointFiltersType(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/event-examples?type=model.call", nil)
+	rr := httptest.NewRecorder()
+	srv.handleCanonicalEventExamples(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("examples status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Examples []storage.CanonicalEventExample `json:"examples"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode examples response: %v", err)
+	}
+	if len(body.Examples) != 1 || body.Examples[0].EventType != "model.call" || body.Examples[0].Event.Model == "" {
+		t.Fatalf("unexpected examples response: %+v", body.Examples)
+	}
+}

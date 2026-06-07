@@ -12,6 +12,7 @@
 - Canonical Workload Ledger foundation with `canonical_events`, `workloads`, `agent_runs`, `model_calls`, `tool_calls`, `context_refs`, `artifacts`, `evaluations`, and `policy_decisions`.
 - Async run start, heartbeat, and liveness ledger with `agent_run_events`, run snapshot fields, `agent.run.heartbeat` canonical events, `POST /api/agent-runs`, `POST /api/agent-runs/heartbeat`, `GET /api/agent-runs/liveness`, `agent-ledger workload start-run|heartbeat|liveness`, and MCP `ledger.start_run` / `ledger.heartbeat_run` / `ledger.run_liveness`.
 - Metadata-only canonical event schema and ingest through storage, `GET /api/event-schema`, `POST /api/events`, `agent-ledger event schema/ingest`, and `ledger.event_schema` / `ledger.record_event`.
+- Privacy-safe canonical event templates through `GET /api/event-examples`, `agent-ledger event examples`, MCP `ledger.event_examples`, and `agent-ledger://schema/canonical-event-examples`.
 - Canonical event dry-run validation through `POST /api/events/validate` and `agent-ledger event validate`, sharing ingest validation without mutating SQLite.
 - Adapter conformance validation through `POST /api/integrations/conformance` and `agent-ledger adapter conformance`, covering canonical, provider, OpenTelemetry GenAI, and A2A fixtures without writing SQLite.
 - Canonical event provenance fields for future adapters: `schema_version`, `source_version`, `parser_version`, `raw_ref`, and `match_type`, persisted locally and included in offline bundle exports.

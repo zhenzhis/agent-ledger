@@ -1292,8 +1292,15 @@ func runEventCLI(args []string, db *storage.DB) error {
 	if len(args) > 0 && args[0] == "schema" {
 		return json.NewEncoder(os.Stdout).Encode(storage.CanonicalEventSchema())
 	}
+	if len(args) > 0 && (args[0] == "examples" || args[0] == "example") {
+		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{
+			"contract": "agent-ledger.canonical-event-examples",
+			"version":  "v1",
+			"examples": storage.CanonicalEventExamples(firstNonEmptyCLI(cliValue(args[1:], "--type"), cliValue(args[1:], "--event-type"))),
+		})
+	}
 	if len(args) == 0 || (args[0] != "ingest" && args[0] != "validate") {
-		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event validate [--file event.json] | agent-ledger event ingest [--file event.json]")
+		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event examples [--type model.call] | agent-ledger event validate [--file event.json] | agent-ledger event ingest [--file event.json]")
 	}
 	raw, err := readCLIInput(args[1:], "--file", 4<<20)
 	if err != nil {

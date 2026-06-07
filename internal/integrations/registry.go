@@ -112,7 +112,7 @@ func Registry(opts Options) Catalog {
 			Enabled:    true,
 			Privacy:    "metadata-only payloads; raw prompt and content keys are rejected",
 			EventTypes: eventTypes,
-			Endpoints:  []string{"GET /api/event-schema", "POST /api/events/validate", "POST /api/events"},
+			Endpoints:  []string{"GET /api/event-schema", "GET /api/event-examples", "POST /api/events/validate", "POST /api/events"},
 			DataClasses: []string{
 				"workload metadata", "adapter provenance", "model call usage", "tool call metadata", "context references", "artifact hashes", "evaluation signals", "policy decisions",
 			},
@@ -128,7 +128,7 @@ func Registry(opts Options) Catalog {
 			Enabled:    true,
 			Privacy:    "metadata-only payloads; stdin and file inputs are size limited; provenance fields should use hashes, row ids, or offsets instead of raw prompt content",
 			EventTypes: eventTypes,
-			Commands:   []string{"agent-ledger event schema", "agent-ledger event validate --file event.json", "agent-ledger event ingest --file event.json"},
+			Commands:   []string{"agent-ledger event schema", "agent-ledger event examples --type model.call", "agent-ledger event validate --file event.json", "agent-ledger event ingest --file event.json"},
 		},
 		{
 			ID:          "protocol.adapter_conformance",
@@ -155,8 +155,8 @@ func Registry(opts Options) Catalog {
 			Maturity:  "local-preview",
 			Enabled:   true,
 			Privacy:   "local stdio only; does not connect to remote MCP hosts by itself",
-			Tools:     []string{"ledger.current_budget", "ledger.start_workload", "ledger.start_run", "ledger.close_workload", "ledger.heartbeat_run", "ledger.run_liveness", "ledger.workload_timeline", "ledger.workload_state", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_evaluation", "ledger.record_event", "ledger.event_schema", "ledger.integrations", "ledger.get_policy", "ledger.policy_audit", "ledger.audit_log", "ledger.explain_cost", "ledger.find_similar_workloads"},
-			Resources: []string{"agent-ledger://schema/canonical-events", "agent-ledger://integrations/catalog", "agent-ledger://budget/current", "agent-ledger://workloads/recent", "agent-ledger://policies/status"},
+			Tools:     []string{"ledger.current_budget", "ledger.start_workload", "ledger.start_run", "ledger.close_workload", "ledger.heartbeat_run", "ledger.run_liveness", "ledger.workload_timeline", "ledger.workload_state", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_evaluation", "ledger.record_event", "ledger.event_schema", "ledger.event_examples", "ledger.integrations", "ledger.get_policy", "ledger.policy_audit", "ledger.audit_log", "ledger.explain_cost", "ledger.find_similar_workloads"},
+			Resources: []string{"agent-ledger://schema/canonical-events", "agent-ledger://schema/canonical-event-examples", "agent-ledger://integrations/catalog", "agent-ledger://budget/current", "agent-ledger://workloads/recent", "agent-ledger://policies/status"},
 			Prompts:   []string{"agent-ledger/workload-brief", "agent-ledger/cost-review", "agent-ledger/incident-evidence"},
 		},
 		{

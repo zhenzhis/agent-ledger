@@ -103,6 +103,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/integrations/conformance", s.handleAdapterConformance)
 	mux.HandleFunc("/api/runtime/status", s.handleRuntimeStatus)
 	mux.HandleFunc("/api/event-schema", s.handleCanonicalEventSchema)
+	mux.HandleFunc("/api/event-examples", s.handleCanonicalEventExamples)
 	mux.HandleFunc("/api/events/validate", s.handleCanonicalEventValidate)
 	mux.HandleFunc("/api/events", s.handleCanonicalEvents)
 	mux.HandleFunc("/api/otel/genai", s.handleOTelGenAI)

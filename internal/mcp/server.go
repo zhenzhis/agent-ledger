@@ -272,6 +272,9 @@ func tools() []map[string]interface{} {
 			"payload":         objectSchema(),
 		}),
 		tool("ledger.event_schema", "Return the canonical metadata-only event schema and supported event types.", map[string]interface{}{}),
+		tool("ledger.event_examples", "Return privacy-safe canonical event examples for adapter authors.", map[string]interface{}{
+			"event_type": stringSchema(),
+		}),
 		tool("ledger.integrations", "Return the Agent Ledger integration capability catalog.", map[string]interface{}{}),
 		tool("ledger.get_policy", "Evaluate local advisory policy rules for a proposed agent action.", map[string]interface{}{
 			"workload_id": stringSchema(),
@@ -357,6 +360,7 @@ func enumSchema(values []string) map[string]interface{} {
 func resources() []map[string]interface{} {
 	return []map[string]interface{}{
 		resource("agent-ledger://schema/canonical-events", "Canonical Event Schema", "Metadata-only event contract for workload, run, model-call, tool-call, artifact, evaluation, and policy events.", "application/json"),
+		resource("agent-ledger://schema/canonical-event-examples", "Canonical Event Examples", "Privacy-safe templates for all supported canonical event types.", "application/json"),
 		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
 		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows.", "application/json"),
 		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries and terminal-state snapshots from the local ledger.", "application/json"),
@@ -431,6 +435,16 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolRecordEvent(args)
 	case "ledger.event_schema":
 		return storage.CanonicalEventSchema(), nil
+	case "ledger.event_examples":
+		var req struct {
+			EventType string `json:"event_type"`
+		}
+		_ = json.Unmarshal(args, &req)
+		return map[string]interface{}{
+			"contract": "agent-ledger.canonical-event-examples",
+			"version":  "v1",
+			"examples": storage.CanonicalEventExamples(req.EventType),
+		}, nil
 	case "ledger.integrations":
 		return integrations.Registry(integrations.OptionsFromConfig(s.cfg)), nil
 	case "ledger.get_policy":
@@ -470,6 +484,12 @@ func (s *Server) readResource(uri string) (interface{}, error) {
 	switch uri {
 	case "agent-ledger://schema/canonical-events":
 		payload = storage.CanonicalEventSchema()
+	case "agent-ledger://schema/canonical-event-examples":
+		payload = map[string]interface{}{
+			"contract": "agent-ledger.canonical-event-examples",
+			"version":  "v1",
+			"examples": storage.CanonicalEventExamples(""),
+		}
 	case "agent-ledger://integrations/catalog":
 		payload = integrations.Registry(integrations.OptionsFromConfig(s.cfg))
 	case "agent-ledger://budget/current":
