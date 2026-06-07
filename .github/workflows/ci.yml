@@ -29,6 +29,19 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Build
+        run: go build -o agent-ledger .
+
+      - name: Frontend syntax
+        run: node --check internal/server/static/app.js
+
+      - name: Adapter fixture conformance
+        run: |
+          ./agent-ledger adapter conformance --kind canonical --strict --file examples/adapter-fixtures/canonical-workload.json
+          ./agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-openai-response.json
+          ./agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otel-genai-span.json
+          ./agent-ledger adapter conformance --kind a2a --strict --file examples/adapter-fixtures/a2a-task.json
+
       - name: Govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.3.0

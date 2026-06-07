@@ -19,6 +19,7 @@ Brief description of the changes.
 - [ ] `go build ./...` passes
 - [ ] `go vet ./...` passes
 - [ ] `go test ./...` passes
+- [ ] Adapter fixture conformance passes when changing integrations or canonical events
 - [ ] Tested against real session data (if modifying collectors)
 
 ## Checklist
