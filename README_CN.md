@@ -59,7 +59,7 @@ CLI：
 ./agent-ledger event examples --type model.call
 ./agent-ledger event validate --file event.json
 ./agent-ledger event ingest --file event.json
-./agent-ledger adapter conformance --kind provider --file fixture.json
+./agent-ledger adapter conformance --kind provider --strict --file fixture.json
 ./agent-ledger discovery
 ./agent-ledger integrations
 ./agent-ledger runtime
@@ -238,7 +238,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/workload-events/stream` | 面向本地轮询 monitor 与 router subscription 的 SSE workload 状态流 |
 | `POST /api/notifications/webhook` | 显式发送脱敏 workload-event 摘要到配置的 webhook |
 | `GET /api/integrations` | 隐私安全的集成能力目录 |
-| `POST /api/integrations/conformance` | 校验 canonical、provider、OpenTelemetry GenAI 或 A2A adapter fixture，但不写入 SQLite |
+| `POST /api/integrations/conformance` | 校验 canonical、provider、OpenTelemetry GenAI 或 A2A adapter fixture，但不写入 SQLite；`strict=true` 会把 provenance warning 视为失败 |
 | `GET /api/event-schema` | Canonical event schema 与支持的事件类型 |
 | `GET /api/event-examples` | 隐私安全的 canonical event 模板，可用 `type` 或 `event_type` 过滤 |
 | `POST /api/events/validate` | 校验 canonical metadata-only events，但不写入 SQLite |

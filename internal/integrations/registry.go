@@ -141,8 +141,8 @@ func Registry(opts Options) Catalog {
 			Enabled:     true,
 			Privacy:     "dry-run only; validates converted metadata-only events without writing SQLite",
 			EventTypes:  eventTypes,
-			Endpoints:   []string{"POST /api/integrations/conformance?kind=canonical|provider|otel|a2a"},
-			Commands:    []string{"agent-ledger adapter conformance --kind provider --file fixture.json"},
+			Endpoints:   []string{"POST /api/integrations/conformance?kind=canonical|provider|otel|a2a&strict=true"},
+			Commands:    []string{"agent-ledger adapter conformance --kind provider --strict --file fixture.json"},
 			DataClasses: []string{"adapter fixture metadata", "canonical event validation result", "provenance warnings"},
 		},
 		{

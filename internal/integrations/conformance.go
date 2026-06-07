@@ -38,10 +38,22 @@ type AdapterConformanceReport struct {
 	Results         []AdapterConformanceResult `json:"results"`
 }
 
+// AdapterConformanceOptions controls dry-run validation behavior.
+type AdapterConformanceOptions struct {
+	Kind   string `json:"kind"`
+	Strict bool   `json:"strict"`
+}
+
 // RunAdapterConformance converts a supported adapter input into canonical events
 // and dry-runs the same validation used by ingest without writing local state.
 func RunAdapterConformance(kind string, raw []byte) (AdapterConformanceReport, error) {
-	normalized, events, err := DecodeAdapterConformanceEvents(kind, raw)
+	return RunAdapterConformanceWithOptions(AdapterConformanceOptions{Kind: kind}, raw)
+}
+
+// RunAdapterConformanceWithOptions runs adapter conformance with optional CI
+// strictness. Strict mode treats provenance warnings as failures.
+func RunAdapterConformanceWithOptions(opts AdapterConformanceOptions, raw []byte) (AdapterConformanceReport, error) {
+	normalized, events, err := DecodeAdapterConformanceEvents(opts.Kind, raw)
 	report := AdapterConformanceReport{
 		Contract:      "agent-ledger.adapter-conformance",
 		Version:       "v1",
@@ -94,6 +106,11 @@ func RunAdapterConformance(kind string, raw []byte) (AdapterConformanceReport, e
 	} else if report.WarningEvents > 0 {
 		report.Status = "pass_with_warnings"
 		report.Recommendations = append(report.Recommendations, "add source_version, parser_version, raw_ref, and match_type for stronger provenance quality")
+	}
+	if opts.Strict && report.WarningEvents > 0 {
+		report.Status = "fail"
+		report.OK = false
+		report.Recommendations = append(report.Recommendations, "strict mode treats provenance warnings as failures")
 	}
 	return report, nil
 }

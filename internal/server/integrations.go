@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"net/http"
+	"strconv"
 
 	"github.com/zhenzhis/agent-ledger/internal/integrations"
 )
@@ -44,7 +45,19 @@ func (s *Server) handleAdapterConformance(w http.ResponseWriter, r *http.Request
 		badRequest(w, err)
 		return
 	}
-	report, err := integrations.RunAdapterConformance(r.URL.Query().Get("kind"), raw.Bytes())
+	strict, err := strconv.ParseBool(r.URL.Query().Get("strict"))
+	if r.URL.Query().Get("strict") == "" {
+		strict = false
+		err = nil
+	}
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	report, err := integrations.RunAdapterConformanceWithOptions(integrations.AdapterConformanceOptions{
+		Kind:   r.URL.Query().Get("kind"),
+		Strict: strict,
+	}, raw.Bytes())
 	if err != nil {
 		badRequest(w, err)
 		return

@@ -211,6 +211,26 @@ func TestReadOnlyAllowsAdapterConformanceWithoutWrites(t *testing.T) {
 	if !body.OK || body.DecodedEvents != 1 {
 		t.Fatalf("unexpected conformance response: %+v", body)
 	}
+	strictReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/integrations/conformance?kind=canonical&strict=true", strings.NewReader(`{
+		"source":"codex",
+		"event_type":"workload.started",
+		"payload":{"goal":"adapter conformance only"}
+	}`))
+	strictRR := httptest.NewRecorder()
+	srv.handleAdapterConformance(strictRR, strictReq)
+	if strictRR.Code != http.StatusOK {
+		t.Fatalf("strict conformance status=%d body=%s", strictRR.Code, strictRR.Body.String())
+	}
+	var strictBody struct {
+		OK     bool   `json:"ok"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(strictRR.Body.Bytes(), &strictBody); err != nil {
+		t.Fatalf("decode strict conformance response: %v", err)
+	}
+	if strictBody.OK || strictBody.Status != "fail" {
+		t.Fatalf("expected strict conformance failure: %+v", strictBody)
+	}
 	quality, err := db.GetDataQuality(time.Hour)
 	if err != nil {
 		t.Fatalf("GetDataQuality: %v", err)

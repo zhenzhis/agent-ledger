@@ -16,6 +16,7 @@
 - Canonical event schema version gating now accepts only `v1`; unknown event-envelope versions fail validation explicitly.
 - Canonical event dry-run validation through `POST /api/events/validate` and `agent-ledger event validate`, sharing ingest validation without mutating SQLite.
 - Adapter conformance validation through `POST /api/integrations/conformance` and `agent-ledger adapter conformance`, covering canonical, provider, OpenTelemetry GenAI, and A2A fixtures without writing SQLite.
+- Adapter conformance strict mode via `strict=true` or `--strict` treats provenance warnings as CI failures.
 - Canonical event provenance fields for future adapters: `schema_version`, `source_version`, `parser_version`, `raw_ref`, and `match_type`, persisted locally and included in offline bundle exports.
 - Data Quality and Doctor provenance checks for canonical events, including schema/source/parser coverage, raw reference coverage, match-type mix, confidence, and UI panel visibility.
 - Provenance metadata is now populated by OpenTelemetry, A2A, provider usage, and gateway adapters so downstream quality checks can distinguish source-reported data from reconstructed references.

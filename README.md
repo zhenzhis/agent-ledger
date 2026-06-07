@@ -59,7 +59,7 @@ CLI:
 ./agent-ledger event examples --type model.call
 ./agent-ledger event validate --file event.json
 ./agent-ledger event ingest --file event.json
-./agent-ledger adapter conformance --kind provider --file fixture.json
+./agent-ledger adapter conformance --kind provider --strict --file fixture.json
 ./agent-ledger discovery
 ./agent-ledger integrations
 ./agent-ledger runtime
@@ -238,7 +238,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/workload-events/stream` | Local SSE workload state stream for polling monitors and router subscriptions |
 | `POST /api/notifications/webhook` | Explicitly send a redacted workload-event summary to the configured webhook |
 | `GET /api/integrations` | Privacy-safe integration capability catalog |
-| `POST /api/integrations/conformance` | Validate adapter fixtures for canonical, provider, OpenTelemetry GenAI, or A2A compatibility without writing SQLite |
+| `POST /api/integrations/conformance` | Validate adapter fixtures for canonical, provider, OpenTelemetry GenAI, or A2A compatibility without writing SQLite; `strict=true` turns provenance warnings into failures |
 | `GET /api/event-schema` | Canonical event schema and supported event types |
 | `GET /api/event-examples` | Privacy-safe canonical event templates, filterable by `type` or `event_type` |
 | `POST /api/events/validate` | Validate canonical metadata-only events without writing to SQLite |

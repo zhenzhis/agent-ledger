@@ -53,4 +53,15 @@ func TestRunAdapterConformanceCanonicalWarnings(t *testing.T) {
 	if !report.OK || report.Status != "pass_with_warnings" || report.WarningEvents != 1 || len(report.Recommendations) == 0 {
 		t.Fatalf("expected provenance warning report: %#v", report)
 	}
+	strict, err := RunAdapterConformanceWithOptions(AdapterConformanceOptions{Kind: "canonical", Strict: true}, []byte(`{
+		"source":"test-adapter",
+		"event_type":"workload.started",
+		"payload":{"goal":"missing provenance"}
+	}`))
+	if err != nil {
+		t.Fatalf("strict conformance: %v", err)
+	}
+	if strict.OK || strict.Status != "fail" || strict.WarningEvents != 1 || strict.FailedEvents != 0 {
+		t.Fatalf("expected strict warning failure: %#v", strict)
+	}
 }

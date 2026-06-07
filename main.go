@@ -886,13 +886,16 @@ func runProviderCLI(args []string, db *storage.DB) error {
 
 func runAdapterCLI(args []string) error {
 	if len(args) == 0 || args[0] != "conformance" {
-		return fmt.Errorf("usage: agent-ledger adapter conformance [--kind auto|canonical|provider|otel|a2a] [--file fixture.json]")
+		return fmt.Errorf("usage: agent-ledger adapter conformance [--kind auto|canonical|provider|otel|a2a] [--strict] [--file fixture.json]")
 	}
 	raw, err := readCLIInput(args[1:], "--file", 4<<20)
 	if err != nil {
 		return err
 	}
-	report, err := integrations.RunAdapterConformance(cliValue(args[1:], "--kind"), raw)
+	report, err := integrations.RunAdapterConformanceWithOptions(integrations.AdapterConformanceOptions{
+		Kind:   cliValue(args[1:], "--kind"),
+		Strict: cliBool(args[1:], "--strict"),
+	}, raw)
 	if err != nil {
 		return err
 	}
