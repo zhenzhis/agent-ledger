@@ -63,6 +63,10 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	if caps["resources"] == nil || caps["prompts"] == nil {
 		t.Fatalf("missing resource/prompt capabilities: %#v", caps)
 	}
+	resourceCaps := caps["resources"].(map[string]interface{})
+	if resourceCaps["subscribe"] != true {
+		t.Fatalf("resource subscriptions should be advertised: %#v", resourceCaps)
+	}
 	resources := out[1]["result"].(map[string]interface{})["resources"].([]interface{})
 	if !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://budget/current") || !hasResource(resources, "agent-ledger://workloads/feed") {
 		t.Fatalf("expected core resources, got %#v", resources)
@@ -153,6 +157,32 @@ func TestMCPWorkloadFeedToolAndResource(t *testing.T) {
 	resourceRows, ok := resourcePayload["rows"].([]interface{})
 	if !ok || len(resourceRows) == 0 || !strings.HasPrefix(resourcePayload["cursor"].(string), "sha256:") {
 		t.Fatalf("resource feed missing rows/cursor: %#v", resourcePayload)
+	}
+}
+
+func TestMCPResourceSubscribeUnsubscribe(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	srv := New(db, cfg)
+	if _, err := db.CreateWorkload("subscribe workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0); err != nil {
+		t.Fatalf("create workload: %v", err)
+	}
+
+	out := serveRawLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"resources/subscribe","params":{"uri":"agent-ledger://workloads/feed"}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/unsubscribe","params":{"uri":"agent-ledger://workloads/feed"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"resources/subscribe","params":{"uri":"agent-ledger://unknown"}}`,
+	)
+	subscribe := out[0]["result"].(map[string]interface{})
+	if subscribe["ok"] != true || subscribe["uri"] != "agent-ledger://workloads/feed" || !strings.HasPrefix(subscribe["cursor"].(string), "sha256:") {
+		t.Fatalf("unexpected subscribe result: %#v", subscribe)
+	}
+	unsubscribe := out[1]["result"].(map[string]interface{})
+	if unsubscribe["ok"] != true || unsubscribe["subscribed"] != true {
+		t.Fatalf("unexpected unsubscribe result: %#v", unsubscribe)
+	}
+	if out[2]["error"] == nil {
+		t.Fatalf("unknown resource subscribe should fail: %#v", out[2])
 	}
 }
 

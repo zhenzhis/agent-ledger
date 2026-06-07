@@ -81,7 +81,7 @@
 - Explicit context-reference entrypoints through `agent-ledger workload context` and MCP `ledger.record_context`, both backed by canonical `context.ref` events.
 - Explicit evaluation entrypoints through `agent-ledger workload evaluation` and MCP `ledger.record_evaluation`, recording test, review, quality, or acceptance signals without prompt or artifact content.
 - Local MCP stdio JSON-RPC tools for budget lookup, workload lifecycle, run start/heartbeat/liveness, cursor-stable workload feed access, privacy-safe artifacts, advisory policy decisions, cost explanation, and similar workload search.
-- Local MCP resources and prompts for metadata-only schema/catalog/budget/workload/feed/policy context plus workload, cost-review, and incident-evidence templates.
+- Local MCP resources, resource subscriptions, and prompts for metadata-only schema/catalog/budget/workload/feed/policy context plus workload, cost-review, and incident-evidence templates.
 - Hourly and daily usage aggregate tables with dashboard aggregate fallback.
 - CLI commands: `today`, `top`, `doctor`, `battery`, `discovery`, `notify webhook`, `workload list/create/show/timeline/state/feed/close/start-run/heartbeat/liveness/tool/context/evaluation`, `run --goal ... -- <command>`, `export`, `pricing sync`, `policy enforcement`, `router simulate`, `preflight`, `replay`, `badge`, and `wrapped`.
 - Cursor-compatible session pagination via `next_cursor`.

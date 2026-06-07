@@ -2,11 +2,14 @@ package mcp
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zhenzhis/agent-ledger/internal/config"
@@ -17,14 +20,15 @@ import (
 
 // Server implements a small MCP-compatible stdio JSON-RPC tool surface.
 type Server struct {
-	db  *storage.DB
-	cfg *config.Config
-	now func() time.Time
+	db                   *storage.DB
+	cfg                  *config.Config
+	now                  func() time.Time
+	subscriptionInterval time.Duration
 }
 
 // New creates a stdio MCP server.
 func New(db *storage.DB, cfg *config.Config) *Server {
-	return &Server{db: db, cfg: cfg, now: time.Now}
+	return &Server{db: db, cfg: cfg, now: time.Now, subscriptionInterval: 5 * time.Second}
 }
 
 type request struct {
@@ -60,11 +64,121 @@ type promptGetParams struct {
 	Arguments map[string]string `json:"arguments"`
 }
 
+type subscriptionState struct {
+	server      *Server
+	enc         *json.Encoder
+	mu          sync.Mutex
+	done        chan struct{}
+	subscribed  map[string]string
+	pollStarted bool
+}
+
+func newSubscriptionState(server *Server, enc *json.Encoder) *subscriptionState {
+	return &subscriptionState{
+		server:     server,
+		enc:        enc,
+		done:       make(chan struct{}),
+		subscribed: map[string]string{},
+	}
+}
+
+func (s *subscriptionState) encode(v interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.enc.Encode(v)
+}
+
+func (s *subscriptionState) subscribe(uri string) (map[string]interface{}, error) {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return nil, fmt.Errorf("uri is required")
+	}
+	cursor, err := s.server.resourceCursor(uri)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	s.subscribed[uri] = cursor
+	if !s.pollStarted {
+		s.pollStarted = true
+		go s.poll()
+	}
+	s.mu.Unlock()
+	return map[string]interface{}{"ok": true, "uri": uri, "cursor": cursor, "mode": "local-poll"}, nil
+}
+
+func (s *subscriptionState) unsubscribe(uri string) map[string]interface{} {
+	uri = strings.TrimSpace(uri)
+	s.mu.Lock()
+	_, existed := s.subscribed[uri]
+	delete(s.subscribed, uri)
+	s.mu.Unlock()
+	return map[string]interface{}{"ok": true, "uri": uri, "subscribed": existed}
+}
+
+func (s *subscriptionState) stop() {
+	select {
+	case <-s.done:
+	default:
+		close(s.done)
+	}
+}
+
+func (s *subscriptionState) poll() {
+	interval := s.server.subscriptionInterval
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.pollOnce()
+		case <-s.done:
+			return
+		}
+	}
+}
+
+func (s *subscriptionState) pollOnce() {
+	s.mu.Lock()
+	uris := make([]string, 0, len(s.subscribed))
+	for uri := range s.subscribed {
+		uris = append(uris, uri)
+	}
+	s.mu.Unlock()
+	for _, uri := range uris {
+		cursor, err := s.server.resourceCursor(uri)
+		if err != nil {
+			continue
+		}
+		s.mu.Lock()
+		previous, ok := s.subscribed[uri]
+		if !ok || previous == cursor {
+			s.mu.Unlock()
+			continue
+		}
+		s.subscribed[uri] = cursor
+		s.mu.Unlock()
+		_ = s.encode(map[string]interface{}{
+			"jsonrpc": "2.0",
+			"method":  "notifications/resources/updated",
+			"params": map[string]string{
+				"uri":    uri,
+				"cursor": cursor,
+			},
+		})
+	}
+}
+
 // Serve reads newline-delimited JSON-RPC requests from r and writes responses to w.
 func (s *Server) Serve(r io.Reader, w io.Writer) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	enc := json.NewEncoder(w)
+	subscriptions := newSubscriptionState(s, enc)
+	defer subscriptions.stop()
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -72,21 +186,21 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 		}
 		var req request
 		if err := json.Unmarshal([]byte(line), &req); err != nil {
-			_ = enc.Encode(response{JSONRPC: "2.0", Error: &rpcError{Code: -32700, Message: err.Error()}})
+			_ = subscriptions.encode(response{JSONRPC: "2.0", Error: &rpcError{Code: -32700, Message: err.Error()}})
 			continue
 		}
 		if len(req.ID) == 0 && strings.HasPrefix(req.Method, "notifications/") {
 			continue
 		}
 		resp := response{JSONRPC: "2.0", ID: req.ID}
-		result, err := s.handle(req)
+		result, err := s.handle(req, subscriptions)
 		if err != nil {
 			resp.Error = &rpcError{Code: -32000, Message: err.Error()}
 		} else {
 			resp.Result = result
 		}
 		if len(req.ID) != 0 {
-			if err := enc.Encode(resp); err != nil {
+			if err := subscriptions.encode(resp); err != nil {
 				return err
 			}
 		}
@@ -94,14 +208,14 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 	return scanner.Err()
 }
 
-func (s *Server) handle(req request) (interface{}, error) {
+func (s *Server) handle(req request, subscriptions *subscriptionState) (interface{}, error) {
 	switch req.Method {
 	case "initialize":
 		return map[string]interface{}{
 			"protocolVersion": "2024-11-05",
 			"capabilities": map[string]interface{}{
 				"tools":     map[string]interface{}{"listChanged": false},
-				"resources": map[string]interface{}{"subscribe": false, "listChanged": false},
+				"resources": map[string]interface{}{"subscribe": true, "listChanged": false},
 				"prompts":   map[string]interface{}{"listChanged": false},
 			},
 			"serverInfo": map[string]string{"name": "agent-ledger", "version": "dev"},
@@ -129,6 +243,18 @@ func (s *Server) handle(req request) (interface{}, error) {
 			return nil, err
 		}
 		return s.readResource(params.URI)
+	case "resources/subscribe":
+		var params resourceReadParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, err
+		}
+		return subscriptions.subscribe(params.URI)
+	case "resources/unsubscribe":
+		var params resourceReadParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, err
+		}
+		return subscriptions.unsubscribe(params.URI), nil
 	case "prompts/list":
 		return map[string]interface{}{"prompts": prompts()}, nil
 	case "prompts/get":
@@ -537,60 +663,9 @@ func mcpToolRequiresWrite(name string) bool {
 }
 
 func (s *Server) readResource(uri string) (interface{}, error) {
-	var payload interface{}
-	switch uri {
-	case "agent-ledger://schema/canonical-events":
-		payload = storage.CanonicalEventSchema()
-	case "agent-ledger://schema/canonical-event-examples":
-		payload = map[string]interface{}{
-			"contract": "agent-ledger.canonical-event-examples",
-			"version":  "v1",
-			"examples": storage.CanonicalEventExamples(""),
-		}
-	case "agent-ledger://integrations/catalog":
-		payload = integrations.Registry(integrations.OptionsFromConfig(s.cfg))
-	case "agent-ledger://integrations/adapter-contract":
-		payload = integrations.AdapterContractSpec()
-	case "agent-ledger://budget/current":
-		budget, err := s.toolCurrentBudget([]byte(`{"window":"all"}`))
-		if err != nil {
-			return nil, err
-		}
-		payload = budget
-	case "agent-ledger://workloads/recent":
-		now := s.now()
-		page, err := s.db.GetWorkloadsPage(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", "", "", 20, 0)
-		if err != nil {
-			return nil, err
-		}
-		staleAfter := 10 * time.Minute
-		states, err := s.db.GetWorkloadStates(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", 20, staleAfter)
-		if err != nil {
-			return nil, err
-		}
-		payload = map[string]interface{}{
-			"rows":                page.Rows,
-			"total":               page.Total,
-			"limit":               page.Limit,
-			"offset":              page.Offset,
-			"next_cursor":         page.NextCursor,
-			"states":              states,
-			"stale_after_seconds": int64(staleAfter / time.Second),
-		}
-	case "agent-ledger://workloads/feed":
-		feed, err := s.defaultWorkloadFeed()
-		if err != nil {
-			return nil, err
-		}
-		payload = feed
-	case "agent-ledger://policies/status":
-		payload = map[string]interface{}{
-			"enabled":                s.cfg.Policies.Enabled,
-			"require_privacy_export": s.cfg.Policies.RequirePrivacyExport,
-			"rules":                  s.cfg.Policies.Rules,
-		}
-	default:
-		return nil, fmt.Errorf("unknown resource %q", uri)
+	payload, err := s.resourcePayload(uri)
+	if err != nil {
+		return nil, err
 	}
 	raw, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -603,6 +678,71 @@ func (s *Server) readResource(uri string) (interface{}, error) {
 			"text":     string(raw),
 		}},
 	}, nil
+}
+
+func (s *Server) resourcePayload(uri string) (interface{}, error) {
+	switch uri {
+	case "agent-ledger://schema/canonical-events":
+		return storage.CanonicalEventSchema(), nil
+	case "agent-ledger://schema/canonical-event-examples":
+		return map[string]interface{}{
+			"contract": "agent-ledger.canonical-event-examples",
+			"version":  "v1",
+			"examples": storage.CanonicalEventExamples(""),
+		}, nil
+	case "agent-ledger://integrations/catalog":
+		return integrations.Registry(integrations.OptionsFromConfig(s.cfg)), nil
+	case "agent-ledger://integrations/adapter-contract":
+		return integrations.AdapterContractSpec(), nil
+	case "agent-ledger://budget/current":
+		return s.toolCurrentBudget([]byte(`{"window":"all"}`))
+	case "agent-ledger://workloads/recent":
+		now := s.now()
+		page, err := s.db.GetWorkloadsPage(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", "", "", 20, 0)
+		if err != nil {
+			return nil, err
+		}
+		staleAfter := 10 * time.Minute
+		states, err := s.db.GetWorkloadStates(now.AddDate(0, 0, -30), now.AddDate(0, 0, 1), "", "", "", 20, staleAfter)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{
+			"rows":                page.Rows,
+			"total":               page.Total,
+			"limit":               page.Limit,
+			"offset":              page.Offset,
+			"next_cursor":         page.NextCursor,
+			"states":              states,
+			"stale_after_seconds": int64(staleAfter / time.Second),
+		}, nil
+	case "agent-ledger://workloads/feed":
+		return s.defaultWorkloadFeed()
+	case "agent-ledger://policies/status":
+		return map[string]interface{}{
+			"enabled":                s.cfg.Policies.Enabled,
+			"require_privacy_export": s.cfg.Policies.RequirePrivacyExport,
+			"rules":                  s.cfg.Policies.Rules,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown resource %q", uri)
+	}
+}
+
+func (s *Server) resourceCursor(uri string) (string, error) {
+	payload, err := s.resourcePayload(uri)
+	if err != nil {
+		return "", err
+	}
+	if feed, ok := payload.(*storage.WorkloadEventFeed); ok {
+		return feed.Cursor, nil
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func getPrompt(name string, args map[string]string) (interface{}, error) {
