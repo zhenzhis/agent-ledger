@@ -144,6 +144,10 @@ const I18N = {
     kiro: "kiro",
     pi: "Pi",
     calls: "calls",
+    effectiveRules: "Effective Rules",
+    overrideRules: "overrides",
+    officialRules: "official",
+    fallbackRules: "fallback",
     sourcesLabel: "sources",
     cache: "cache",
     perCall: "per call",
@@ -328,6 +332,10 @@ const I18N = {
     kiro: "kiro",
     pi: "Pi",
     calls: "次调用",
+    effectiveRules: "有效规则",
+    overrideRules: "override",
+    officialRules: "官方",
+    fallbackRules: "fallback",
     sourcesLabel: "来源",
     cache: "缓存",
     perCall: "每次调用",
@@ -831,18 +839,25 @@ function renderPricing(payload) {
   if (!list) return;
   const fragment = document.createDocumentFragment();
   const sources = (payload && payload.sources) || [];
+  const rules = (payload && payload.rules) || {};
   const stale = sources.filter((s) => s.stale).length;
+  const sourceErrors = sources.filter((s) => s.status === "error").length;
   const unpriced = ((payload && payload.unpriced_models) || []).reduce((sum, row) => sum + Number(row.records || 0), 0);
-  if (sources.length === 0) {
+  const totalRules = Number(rules.total_rules || 0);
+  if (totalRules > 0) {
+    const detail = `${fmt(rules.override_rules || 0)} ${t("overrideRules")} · ${fmt(rules.official_rules || 0)} ${t("officialRules")} · ${fmt(rules.fallback_rules || 0)} ${t("fallbackRules")}`;
+    addOpsRow(fragment, t("effectiveRules"), detail, fmt(totalRules), sourceErrors || unpriced ? "warning" : "ok");
+  }
+  if (sources.length === 0 && totalRules === 0) {
     fragment.appendChild(createMessage(t("noData"), "ops-empty"));
   } else {
     sources.forEach((src) => {
       addOpsRow(fragment, src.name, `${src.kind || "-"} · ${src.status || "-"} · ${src.model_count || 0} models`, src.stale ? t("stale") : "ok", src.stale || src.status === "error" ? "warning" : "ok");
     });
   }
-  setText("s-pricing", stale ? `${stale} ${t("stale")}` : "OK");
+  setText("s-pricing", sourceErrors ? `${sourceErrors} ${t("warning")}` : stale ? `${stale} ${t("stale")}` : "OK");
   setText("s-pricing-sub", unpriced ? `${fmt(unpriced)} ${t("unpriced")}` : payload ? payload.mode : "-");
-  setText("pricing-meta", `${sources.length} ${t("sourcesLabel")}`);
+  setText("pricing-meta", `${sources.length} ${t("sourcesLabel")} · ${fmt(totalRules)} ${t("effectiveRules")}`);
   list.replaceChildren(fragment);
 }
 
