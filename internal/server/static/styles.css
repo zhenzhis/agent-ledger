@@ -351,11 +351,21 @@ input::placeholder {
 .icon-btn svg {
   width: 16px;
   height: 16px;
+  flex: 0 0 16px;
+  display: block;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.icon-btn span {
+  min-width: 0;
+  line-height: 1;
 }
 
 .icon-btn:hover,
@@ -1824,7 +1834,8 @@ select,
 
 .chart-grid > .panel:nth-child(9),
 .chart-grid > .panel:nth-child(12),
-.chart-grid > .panel:nth-child(13) {
+.chart-grid > .panel:nth-child(13),
+.chart-grid > .panel:nth-child(14) {
   grid-column: span 6;
 }
 
@@ -1836,7 +1847,8 @@ select,
   .chart-grid > .panel:nth-child(6),
   .chart-grid > .panel:nth-child(9),
   .chart-grid > .panel:nth-child(12),
-  .chart-grid > .panel:nth-child(13) {
+  .chart-grid > .panel:nth-child(13),
+  .chart-grid > .panel:nth-child(14) {
     grid-column: span 6;
   }
 
@@ -1856,7 +1868,8 @@ select,
   .chart-grid > .panel:nth-child(6),
   .chart-grid > .panel:nth-child(9),
   .chart-grid > .panel:nth-child(12),
-  .chart-grid > .panel:nth-child(13) {
+  .chart-grid > .panel:nth-child(13),
+  .chart-grid > .panel:nth-child(14) {
     grid-column: 1 / -1;
   }
 }

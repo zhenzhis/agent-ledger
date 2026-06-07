@@ -14,6 +14,13 @@ const fmtCost = (value) => {
   return n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`;
 };
 
+const fmtSignedCost = (value) => {
+  const n = Number(value || 0);
+  const sign = n > 0 ? "+" : "";
+  const minus = n < 0 ? "-" : "";
+  return `${sign}${minus}${fmtCost(Math.abs(n))}`;
+};
+
 function localDateStr(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -62,6 +69,7 @@ const I18N = {
     cacheDoctor: "Cache Doctor",
     dataQuality: "Data Quality",
     watchdog: "Watchdog",
+    reconciliation: "Reconciliation",
     workloadLedger: "Workload Ledger",
     goal: "Goal",
     status: "Status",
@@ -154,6 +162,9 @@ const I18N = {
     unitMin: "min",
     unitSec: "sec",
     noIssues: "No issues detected",
+    noReconciliation: "No provider statements imported",
+    providerBill: "provider bill",
+    localLedger: "local ledger",
     unpriced: "unpriced",
     stale: "stale",
     localEstimate: "local estimate",
@@ -198,6 +209,7 @@ const I18N = {
     cacheDoctor: "Cache Doctor",
     dataQuality: "数据质量",
     watchdog: "Watchdog",
+    reconciliation: "对账",
     workloadLedger: "工作负载账本",
     goal: "目标",
     status: "状态",
@@ -290,6 +302,9 @@ const I18N = {
     unitMin: "分钟",
     unitSec: "秒",
     noIssues: "未发现问题",
+    noReconciliation: "尚未导入 provider 账单",
+    providerBill: "provider 账单",
+    localLedger: "本地账本",
     unpriced: "未计价",
     stale: "过期",
     localEstimate: "本地估算",
@@ -816,6 +831,37 @@ function renderWatchdog(rows) {
   list.replaceChildren(fragment);
 }
 
+function renderReconciliation(rows) {
+  const list = $("reconciliation-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  const imports = rows || [];
+  if (imports.length === 0) {
+    fragment.appendChild(createMessage(t("noReconciliation"), "ops-empty"));
+    setText("s-reconciliation", "-");
+    setText("s-reconciliation-sub", t("noReconciliation"));
+    setText("reconciliation-meta", "0");
+    list.replaceChildren(fragment);
+    return;
+  }
+  const severityFor = (status) => {
+    if (status === "mismatch" || status === "empty") return "warning";
+    if (status === "warning") return "warning";
+    return "ok";
+  };
+  const latest = imports[0];
+  const mismatches = imports.filter((row) => row.status === "mismatch" || row.status === "empty").length;
+  imports.slice(0, 8).forEach((row) => {
+    const hash = row.payload_sha256 ? ` · ${String(row.payload_sha256).slice(0, 12)}` : "";
+    const detail = `${t("localLedger")} ${fmtCost(row.local_cost_usd)} · ${t("providerBill")} ${fmtCost(row.provider_cost_usd)}${hash}`;
+    addOpsRow(fragment, `${row.provider || "provider"} · ${row.format || "-"}`, detail, fmtSignedCost(row.diff_usd || 0), severityFor(row.status));
+  });
+  setText("s-reconciliation", latest.status ? latest.status.toUpperCase() : "OK");
+  setText("s-reconciliation-sub", `${latest.provider || "provider"} · ${fmtSignedCost(latest.diff_usd || 0)}`);
+  setText("reconciliation-meta", mismatches ? `${mismatches} mismatch` : `${imports.length} imports`);
+  list.replaceChildren(fragment);
+}
+
 function renderActivityMatrix(tokensTime) {
   const data = tokensTime || [];
   const labels = data.map((row) => row.date);
@@ -1066,6 +1112,7 @@ async function refresh(options = {}) {
       costIntel: api("cost-intelligence"),
       cacheDoctor: api("cache/doctor"),
       watchdog: api("watchdog/events", { skipModel: true }),
+      reconciliation: api("reconciliation/status", { skipModel: true, extra: { limit: 20 } }),
     };
     const settled = await Promise.allSettled(Object.entries(requests).map(async ([key, promise]) => [key, await promise]));
     const data = {};
@@ -1097,6 +1144,7 @@ async function refresh(options = {}) {
     if (data.costIntel) renderCostIntelligence(data.costIntel);
     if (data.cacheDoctor) renderCacheDoctor(data.cacheDoctor);
     if (data.watchdog) renderWatchdog(data.watchdog);
+    if (data.reconciliation) renderReconciliation(data.reconciliation);
     if (data.workloads) {
       allWorkloads = data.workloads.rows || [];
       workloadTotal = Number(data.workloads.total || allWorkloads.length);
