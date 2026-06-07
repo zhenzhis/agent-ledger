@@ -133,7 +133,7 @@ func Registry(opts Options) Catalog {
 			Maturity:  "local-preview",
 			Enabled:   true,
 			Privacy:   "local stdio only; does not connect to remote MCP hosts by itself",
-			Tools:     []string{"ledger.current_budget", "ledger.start_workload", "ledger.start_run", "ledger.close_workload", "ledger.heartbeat_run", "ledger.run_liveness", "ledger.workload_timeline", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_event", "ledger.event_schema", "ledger.integrations", "ledger.get_policy", "ledger.explain_cost", "ledger.find_similar_workloads"},
+			Tools:     []string{"ledger.current_budget", "ledger.start_workload", "ledger.start_run", "ledger.close_workload", "ledger.heartbeat_run", "ledger.run_liveness", "ledger.workload_timeline", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_event", "ledger.event_schema", "ledger.integrations", "ledger.get_policy", "ledger.policy_audit", "ledger.explain_cost", "ledger.find_similar_workloads"},
 			Resources: []string{"agent-ledger://schema/canonical-events", "agent-ledger://integrations/catalog", "agent-ledger://budget/current", "agent-ledger://workloads/recent", "agent-ledger://policies/status"},
 			Prompts:   []string{"agent-ledger/workload-brief", "agent-ledger/cost-review", "agent-ledger/incident-evidence"},
 		},

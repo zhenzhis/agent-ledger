@@ -37,6 +37,8 @@
 - Offline bundle export/import for air-gapped multi-machine aggregation, with metadata-only canonical event replay, payload SHA-256 integrity, optional HMAC-SHA256 signing, CLI commands, and REST endpoints.
 - Shared local policy evaluator across MCP, `POST /api/policy/evaluate`, and `agent-ledger policy evaluate`, with stable action severity and optional decision recording.
 - Policy-aware export/report governance, recording policy decisions for export/report/evidence/offline-bundle operations and blocking configured `block` or `require_approval` actions.
+- Historical policy audit through `GET /api/policy/audit`, `agent-ledger policy audit`, and MCP `ledger.policy_audit`, applying the same local evaluator to usage sessions, tool calls, and workloads.
+- Policy audit summary in the Data Quality panel so matched warnings, approvals, and blocks are visible during normal dashboard review.
 - Local policy approval requests with `GET/POST /api/policy/approvals`, `agent-ledger policy approvals`, and `agent-ledger policy resolve`, allowing approved action/target retries by `approval_id`.
 - Legacy session backfill into workload/run/model-call records for immediate compatibility with existing local data.
 - Workload APIs: list/create/close/start-run/heartbeat/liveness/detail/graph/timeline, model registry, policy decisions, and workload CSV/JSON export.

@@ -31,7 +31,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 2", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.integrations") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.integrations") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	payload := toolTextPayload(t, out[1])
@@ -196,6 +196,33 @@ func TestMCPPolicyDisabledDoesNotEvaluateRules(t *testing.T) {
 	decisions := payload["decisions"].([]interface{})
 	if len(decisions) != 0 {
 		t.Fatalf("disabled policy returned decisions: %#v", decisions)
+	}
+}
+
+func TestMCPPolicyAudit(t *testing.T) {
+	db := openTestDB(t)
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	if err := db.InsertUsage(&storage.UsageRecord{
+		Source:       "codex",
+		SessionID:    "sess-mcp-policy",
+		Model:        "gpt-5.5",
+		InputTokens:  100,
+		OutputTokens: 25,
+		CostUSD:      0.5,
+		Timestamp:    ts,
+		Project:      "agent-ledger",
+	}); err != nil {
+		t.Fatalf("InsertUsage: %v", err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.Policies.Enabled = true
+	cfg.Policies.Rules = []config.PolicyRule{{Name: "warn-gpt", Scope: "model", Match: "gpt-5.5", Action: "warn"}}
+	srv := New(db, cfg)
+
+	resp := serveLines(t, srv, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.policy_audit","arguments":{"from":"2026-06-07","to":"2026-06-08","limit":10}}}`)[0]
+	payload := toolTextPayload(t, resp)
+	if payload["matches"] != float64(1) {
+		t.Fatalf("unexpected policy audit payload: %#v", payload)
 	}
 }
 

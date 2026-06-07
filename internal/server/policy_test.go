@@ -97,6 +97,52 @@ func TestExportPolicyRequireApprovalCreatesRequestAndApprovedRequestAllows(t *te
 	}
 }
 
+func TestPolicyAuditAPIReportsAndRedactsMatches(t *testing.T) {
+	db := testServerDB(t)
+	ts := time.Date(2026, 6, 7, 13, 30, 0, 0, time.UTC)
+	if err := db.InsertUsage(&storage.UsageRecord{
+		Source:       "codex",
+		SessionID:    "sess-private",
+		Model:        "gpt-5.5",
+		InputTokens:  100,
+		OutputTokens: 25,
+		CostUSD:      0.5,
+		Timestamp:    ts,
+		Project:      "private-project",
+	}); err != nil {
+		t.Fatalf("InsertUsage: %v", err)
+	}
+	srv := New(db, "", Options{Policies: config.PolicyConfig{
+		Enabled: true,
+		Rules: []config.PolicyRule{{
+			Name: "warn-gpt", Scope: "model", Match: "gpt-5.5", Action: "warn", Message: "review model spend",
+		}},
+	}, Privacy: config.PrivacyConfig{ScreenshotMode: true}})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/policy/audit?from=2026-06-07&to=2026-06-07&privacy=1", nil)
+	rr := httptest.NewRecorder()
+	srv.handlePolicyAudit(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("policy audit status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var report struct {
+		Matches int `json:"matches"`
+		Rows    []struct {
+			Project   string `json:"project"`
+			SessionID string `json:"session_id"`
+			Evidence  string `json:"evidence"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if report.Matches != 1 || len(report.Rows) != 1 {
+		t.Fatalf("unexpected report: %+v", report)
+	}
+	if report.Rows[0].Project != "<redacted>" || report.Rows[0].SessionID == "sess-private" || report.Rows[0].Evidence != "<redacted>" {
+		t.Fatalf("privacy redaction failed: %+v", report.Rows[0])
+	}
+}
+
 func TestRepairProjectionAPI(t *testing.T) {
 	db := testServerDB(t)
 	ts := time.Date(2026, 6, 7, 13, 30, 0, 0, time.UTC)

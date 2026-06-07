@@ -224,6 +224,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/fleet-attribution` | sub-agent、parent run 与并行 run 成本归因 |
 | `GET /api/wrapped?period=monthly&format=markdown` | 月度/周度/年度 Agent Wrapped 摘要，不分析 prompt 内容 |
 | `POST /api/policy/evaluate` | 评估本地 advisory policy，并可选择写入 policy decision |
+| `GET /api/policy/audit` | 使用本地 policy rules 审计历史 usage、tool call 和 workload |
 | `GET /api/policy/approvals?status=pending` | 查看本地 pending、approved、rejected 或全部策略审批请求 |
 | `POST /api/policy/approvals` | 批准或拒绝本地策略审批请求 |
 | `GET /api/sessions` | 服务端分页会话账本 |
@@ -272,6 +273,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `ledger.event_schema`
 - `ledger.integrations`
 - `ledger.get_policy`
+- `ledger.policy_audit`
 - `ledger.explain_cost`
 - `ledger.find_similar_workloads`
 

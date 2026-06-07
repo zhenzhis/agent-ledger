@@ -185,6 +185,12 @@ const I18N = {
     providerBill: "provider bill",
     localLedger: "local ledger",
     ledgerProjection: "Ledger Projection",
+    policyAudit: "Policy Audit",
+    checked: "checked",
+    matches: "matches",
+    blocks: "blocks",
+    approvals: "approvals",
+    warnings: "warnings",
     projectionCalls: "model calls",
     projectionIssues: "projection issues",
     unpriced: "unpriced",
@@ -353,6 +359,12 @@ const I18N = {
     providerBill: "provider 账单",
     localLedger: "本地账本",
     ledgerProjection: "账本投影",
+    policyAudit: "策略审计",
+    checked: "已检查",
+    matches: "匹配",
+    blocks: "阻断",
+    approvals: "审批",
+    warnings: "警告",
     projectionCalls: "模型调用",
     projectionIssues: "投影问题",
     unpriced: "未计价",
@@ -814,7 +826,7 @@ function renderPricing(payload) {
   list.replaceChildren(fragment);
 }
 
-function renderQuality(payload) {
+function renderQuality(payload, policyAudit) {
   const list = $("quality-list");
   if (!list) return;
   const fragment = document.createDocumentFragment();
@@ -824,7 +836,13 @@ function renderQuality(payload) {
     ? Number(projection.missing_usage_projection || 0) + Number(projection.cost_mismatch_records || 0) + Number(projection.duplicate_session_owners || 0)
     : 0;
   const hasProjectionSignal = Boolean(projection && (Number(projection.model_calls || 0) > 0 || projectionIssues > 0));
-  if (rows.length === 0 && !hasProjectionSignal) {
+  const auditChecked = Number((policyAudit && policyAudit.checked) || 0);
+  const auditMatches = Number((policyAudit && policyAudit.matches) || 0);
+  const auditBlocks = Number((policyAudit && policyAudit.blocks) || 0);
+  const auditApprovals = Number((policyAudit && policyAudit.approvals) || 0);
+  const auditWarnings = Number((policyAudit && policyAudit.warnings) || 0);
+  const hasAuditSignal = Boolean(policyAudit && (auditChecked > 0 || auditMatches > 0));
+  if (rows.length === 0 && !hasProjectionSignal && !hasAuditSignal) {
     fragment.appendChild(createMessage(t("noData"), "ops-empty"));
     setText("s-quality", "-");
     setText("s-quality-sub", "-");
@@ -837,16 +855,25 @@ function renderQuality(payload) {
       const detail = `${projection.message || "-"} · ${fmt(projection.model_calls || 0)} ${t("projectionCalls")}`;
       addOpsRow(fragment, t("ledgerProjection"), detail, `${(projectionConfidence * 100).toFixed(0)}%`, severity);
     }
+    if (hasAuditSignal) {
+      const severity = auditBlocks > 0 ? "critical" : auditApprovals > 0 || auditWarnings > 0 ? "warning" : "ok";
+      const auditConfidence = auditBlocks > 0 ? 0.5 : auditApprovals > 0 || auditWarnings > 0 ? 0.75 : 1;
+      min = Math.min(min, auditConfidence);
+      const detail = `${fmt(auditChecked)} ${t("checked")} · ${fmt(auditBlocks)} ${t("blocks")} · ${fmt(auditApprovals)} ${t("approvals")} · ${fmt(auditWarnings)} ${t("warnings")}`;
+      addOpsRow(fragment, t("policyAudit"), detail, auditMatches ? `${fmt(auditMatches)} ${t("matches")}` : "OK", severity);
+    }
     rows.forEach((row) => {
       min = Math.min(min, Number(row.confidence || 0));
       const sev = row.confidence < 0.7 ? "warning" : "ok";
       addOpsRow(fragment, row.source, row.message || `${row.records || 0} ${t("records")}`, `${(Number(row.confidence || 0) * 100).toFixed(0)}%`, sev);
     });
     setText("s-quality", `${(min * 100).toFixed(0)}%`);
-    setText("s-quality-sub", projectionIssues ? `${rows.length} ${t("sourcesLabel")} · ${projectionIssues} ${t("projectionIssues")}` : `${rows.length} ${t("sourcesLabel")}`);
+    const qualityIssues = projectionIssues + auditMatches;
+    setText("s-quality-sub", qualityIssues ? `${rows.length} ${t("sourcesLabel")} · ${qualityIssues} ${t("issuesLabel")}` : `${rows.length} ${t("sourcesLabel")}`);
   }
   const projectionMeta = hasProjectionSignal ? ` · ${fmt(projection.model_calls || 0)} ${t("projectionCalls")}` : "";
-  setText("quality-meta", `${((payload && payload.unpriced_models) || []).length} ${t("unpriced")}${projectionMeta}`);
+  const policyMeta = hasAuditSignal ? ` · ${fmt(auditMatches)} ${t("matches")}` : "";
+  setText("quality-meta", `${((payload && payload.unpriced_models) || []).length} ${t("unpriced")}${projectionMeta}${policyMeta}`);
   list.replaceChildren(fragment);
 }
 
@@ -1243,6 +1270,7 @@ async function refresh(options = {}) {
       quota: api("quota/status"),
       pricing: api("pricing/status"),
       quality: api("data-quality"),
+      policyAudit: api("policy/audit", { extra: { limit: 20 } }),
       modelCalls: api("model-calls", { skipModel: true }),
       costIntel: api("cost-intelligence"),
       cacheDoctor: api("cache/doctor"),
@@ -1291,7 +1319,7 @@ async function refresh(options = {}) {
     if (data.budgets) renderBudgets(data.budgets);
     if (data.quota) renderQuota(data.quota);
     if (data.pricing) renderPricing(data.pricing);
-    if (data.quality) renderQuality(data.quality);
+    if (data.quality || data.policyAudit) renderQuality(data.quality, data.policyAudit);
     if (data.modelCalls) renderModelCalls(data.modelCalls);
     if (data.costIntel) renderCostIntelligence(data.costIntel);
     if (data.cacheDoctor) renderCacheDoctor(data.cacheDoctor);

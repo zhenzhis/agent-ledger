@@ -224,6 +224,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/fleet-attribution` | Sub-agent, parent run, and parallel-run cost attribution |
 | `GET /api/wrapped?period=monthly&format=markdown` | Monthly/weekly/yearly Agent Wrapped summary without prompt analysis |
 | `POST /api/policy/evaluate` | Evaluate local advisory policy rules and optionally record decisions |
+| `GET /api/policy/audit` | Audit historical usage, tool calls, and workloads against local policy rules |
 | `GET /api/policy/approvals?status=pending` | List local pending, approved, rejected, or all policy approval requests |
 | `POST /api/policy/approvals` | Approve or reject a local policy approval request |
 | `GET /api/sessions` | Server-side paginated session ledger |
@@ -272,6 +273,7 @@ Current tools:
 - `ledger.event_schema`
 - `ledger.integrations`
 - `ledger.get_policy`
+- `ledger.policy_audit`
 - `ledger.explain_cost`
 - `ledger.find_similar_workloads`
 

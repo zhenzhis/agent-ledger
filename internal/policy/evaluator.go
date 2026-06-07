@@ -36,6 +36,44 @@ type Result struct {
 	PrivacyExport bool       `json:"privacy_export"`
 }
 
+// AuditCandidate is one historical metadata row to evaluate against policy rules.
+type AuditCandidate struct {
+	Kind       string  `json:"kind"`
+	WorkloadID string  `json:"workload_id,omitempty"`
+	RunID      string  `json:"run_id,omitempty"`
+	SessionID  string  `json:"session_id,omitempty"`
+	Source     string  `json:"source,omitempty"`
+	Model      string  `json:"model,omitempty"`
+	Project    string  `json:"project,omitempty"`
+	Action     string  `json:"action"`
+	Role       string  `json:"role,omitempty"`
+	Tokens     int64   `json:"tokens,omitempty"`
+	CostUSD    float64 `json:"cost_usd,omitempty"`
+	Timestamp  string  `json:"timestamp,omitempty"`
+	Evidence   string  `json:"evidence,omitempty"`
+}
+
+// AuditRow is one historical policy match.
+type AuditRow struct {
+	AuditCandidate
+	EffectiveAction string     `json:"effective_action"`
+	Decisions       []Decision `json:"decisions"`
+}
+
+// AuditReport summarizes historical policy matches for a time window.
+type AuditReport struct {
+	Enabled    bool       `json:"enabled"`
+	Checked    int        `json:"checked"`
+	Matches    int        `json:"matches"`
+	Blocks     int        `json:"blocks"`
+	Approvals  int        `json:"approvals"`
+	Warnings   int        `json:"warnings"`
+	Rows       []AuditRow `json:"rows"`
+	Scope      string     `json:"scope"`
+	WindowFrom string     `json:"window_from,omitempty"`
+	WindowTo   string     `json:"window_to,omitempty"`
+}
+
 // Evaluate applies advisory local policy rules. It does not perform side effects.
 func Evaluate(cfg config.PolicyConfig, req Request) Result {
 	if !cfg.Enabled {
@@ -71,6 +109,46 @@ func Evaluate(cfg config.PolicyConfig, req Request) Result {
 		})
 	}
 	return result
+}
+
+// Audit applies the same policy evaluator to historical metadata candidates.
+func Audit(cfg config.PolicyConfig, candidates []AuditCandidate, limit int) AuditReport {
+	if limit <= 0 {
+		limit = 200
+	}
+	report := AuditReport{Enabled: cfg.Enabled, Checked: len(candidates), Rows: []AuditRow{}}
+	for _, c := range candidates {
+		result := Evaluate(cfg, Request{
+			WorkloadID: c.WorkloadID,
+			RunID:      c.RunID,
+			Source:     c.Source,
+			Model:      c.Model,
+			Project:    c.Project,
+			Action:     c.Action,
+			Role:       c.Role,
+		})
+		action := NormalizeAction(result.Action)
+		if !result.Enabled || Rank(action) == 0 || len(result.Decisions) == 0 {
+			continue
+		}
+		report.Matches++
+		switch action {
+		case "block":
+			report.Blocks++
+		case "require_approval":
+			report.Approvals++
+		case "warn":
+			report.Warnings++
+		}
+		if len(report.Rows) < limit {
+			report.Rows = append(report.Rows, AuditRow{
+				AuditCandidate:  c,
+				EffectiveAction: action,
+				Decisions:       result.Decisions,
+			})
+		}
+	}
+	return report
 }
 
 // Matches reports whether a policy rule applies to a request.

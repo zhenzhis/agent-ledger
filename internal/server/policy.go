@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/zhenzhis/agent-ledger/internal/config"
 	ledgerpolicy "github.com/zhenzhis/agent-ledger/internal/policy"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
@@ -53,6 +55,29 @@ func (s *Server) handlePolicyEvaluate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, result)
 }
 
+func (s *Server) handlePolicyAudit(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
+	from, to, _, err := s.parseTimeRange(r)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	limit := parseLimit(r, 200)
+	candidates, err := s.db.GetPolicyAuditCandidates(from, to, r.URL.Query().Get("source"), r.URL.Query().Get("model"), r.URL.Query().Get("project"), limit*5)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	report := ledgerpolicy.Audit(s.options.Policies, candidates, limit)
+	report.WindowFrom = from.Format(time.RFC3339)
+	report.WindowTo = to.Format(time.RFC3339)
+	report.Scope = "usage_records,tool_calls,workloads"
+	applyPolicyAuditPrivacy(&report, s.privacyFor(r))
+	writeJSON(w, report)
+}
+
 func (s *Server) evaluateOperationPolicy(w http.ResponseWriter, r *http.Request, action, source, model, project, target string) bool {
 	result := ledgerpolicy.Evaluate(s.options.Policies, ledgerpolicy.Request{
 		Source:  source,
@@ -99,6 +124,25 @@ func (s *Server) evaluateOperationPolicy(w http.ResponseWriter, r *http.Request,
 		return false
 	default:
 		return true
+	}
+}
+
+func applyPolicyAuditPrivacy(report *ledgerpolicy.AuditReport, privacy config.PrivacyConfig) {
+	if report == nil {
+		return
+	}
+	for i := range report.Rows {
+		if privacy.HashSessionIDs || privacy.ScreenshotMode {
+			report.Rows[i].SessionID = hashValue(report.Rows[i].SessionID)
+		}
+		if privacy.HideProjectNames || privacy.RedactPaths || privacy.ScreenshotMode {
+			report.Rows[i].Project = "<redacted>"
+		}
+		if privacy.ScreenshotMode {
+			report.Rows[i].WorkloadID = hashValue(report.Rows[i].WorkloadID)
+			report.Rows[i].RunID = hashValue(report.Rows[i].RunID)
+			report.Rows[i].Evidence = "<redacted>"
+		}
 	}
 }
 

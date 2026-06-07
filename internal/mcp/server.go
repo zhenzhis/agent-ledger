@@ -260,6 +260,14 @@ func tools() []map[string]interface{} {
 			"action":      stringSchema(),
 			"role":        stringSchema(),
 		}),
+		tool("ledger.policy_audit", "Audit historical usage, tool calls, and workloads against local policy rules.", map[string]interface{}{
+			"from":    stringSchema(),
+			"to":      stringSchema(),
+			"source":  stringSchema(),
+			"model":   stringSchema(),
+			"project": stringSchema(),
+			"limit":   integerSchema(),
+		}),
 		tool("ledger.explain_cost", "Explain expensive sessions without reading prompt content.", map[string]interface{}{
 			"from":    stringSchema(),
 			"to":      stringSchema(),
@@ -384,6 +392,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return integrations.Registry(integrations.OptionsFromConfig(s.cfg)), nil
 	case "ledger.get_policy":
 		return s.toolGetPolicy(args)
+	case "ledger.policy_audit":
+		return s.toolPolicyAudit(args)
 	case "ledger.explain_cost":
 		return s.toolExplainCost(args)
 	case "ledger.find_similar_workloads":
@@ -838,6 +848,35 @@ func (s *Server) toolGetPolicy(args json.RawMessage) (interface{}, error) {
 		}
 	}
 	return result, nil
+}
+
+func (s *Server) toolPolicyAudit(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		From    string `json:"from"`
+		To      string `json:"to"`
+		Source  string `json:"source"`
+		Model   string `json:"model"`
+		Project string `json:"project"`
+		Limit   int    `json:"limit"`
+	}
+	_ = json.Unmarshal(args, &in)
+	from, to, err := parseDateRange(in.From, in.To, s.now())
+	if err != nil {
+		return nil, err
+	}
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	candidates, err := s.db.GetPolicyAuditCandidates(from, to, in.Source, in.Model, in.Project, limit*5)
+	if err != nil {
+		return nil, err
+	}
+	report := ledgerpolicy.Audit(s.cfg.Policies, candidates, limit)
+	report.WindowFrom = from.Format(time.RFC3339)
+	report.WindowTo = to.Format(time.RFC3339)
+	report.Scope = "usage_records,tool_calls,workloads"
+	return report, nil
 }
 
 func (s *Server) toolExplainCost(args json.RawMessage) (interface{}, error) {

@@ -56,3 +56,21 @@ func TestUnknownScopeDoesNotMatch(t *testing.T) {
 		t.Fatalf("unknown scope matched: %#v", result)
 	}
 }
+
+func TestAuditReportsHistoricalMatches(t *testing.T) {
+	cfg := config.PolicyConfig{Enabled: true, Rules: []config.PolicyRule{
+		{Name: "warn-gpt", Scope: "model", Match: "gpt-5.5", Action: "warn", Message: "review model spend"},
+		{Name: "block-tool", Scope: "action", Match: "tool.call", Action: "block", Message: "tools require review"},
+	}}
+	report := Audit(cfg, []AuditCandidate{
+		{Kind: "usage_session", Source: "codex", Model: "gpt-5.5", Project: "agent-ledger", Action: "model.call", Tokens: 100, Evidence: "usage_records"},
+		{Kind: "tool_call", Source: "codex", Project: "agent-ledger", Action: "tool.call", Evidence: "tool_calls"},
+		{Kind: "usage_session", Source: "codex", Model: "gpt-4o-mini", Project: "agent-ledger", Action: "model.call"},
+	}, 10)
+	if report.Checked != 3 || report.Matches != 2 || report.Warnings != 1 || report.Blocks != 1 {
+		t.Fatalf("unexpected audit report: %+v", report)
+	}
+	if len(report.Rows) != 2 || report.Rows[0].EffectiveAction != "warn" || report.Rows[1].EffectiveAction != "block" {
+		t.Fatalf("unexpected rows: %+v", report.Rows)
+	}
+}
