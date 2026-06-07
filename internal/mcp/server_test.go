@@ -31,7 +31,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 2", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.link_workloads") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.validate_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.adapter_conformance") || !hasTool(tools, "ledger.integrations") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.link_workloads") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.validate_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.adapter_contract") || !hasTool(tools, "ledger.adapter_conformance") || !hasTool(tools, "ledger.integrations") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	payload := toolTextPayload(t, out[1])
@@ -55,26 +55,31 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"method":"initialize"}`,
 		`{"jsonrpc":"2.0","id":2,"method":"resources/list"}`,
 		`{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"agent-ledger://schema/canonical-events"}}`,
-		`{"jsonrpc":"2.0","id":4,"method":"prompts/list"}`,
-		`{"jsonrpc":"2.0","id":5,"method":"prompts/get","params":{"name":"agent-ledger/workload-brief","arguments":{"goal":"ship router","project":"quant","constraints":"privacy strict"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"agent-ledger://integrations/adapter-contract"}}`,
+		`{"jsonrpc":"2.0","id":5,"method":"prompts/list"}`,
+		`{"jsonrpc":"2.0","id":6,"method":"prompts/get","params":{"name":"agent-ledger/workload-brief","arguments":{"goal":"ship router","project":"quant","constraints":"privacy strict"}}}`,
 	)
 	caps := out[0]["result"].(map[string]interface{})["capabilities"].(map[string]interface{})
 	if caps["resources"] == nil || caps["prompts"] == nil {
 		t.Fatalf("missing resource/prompt capabilities: %#v", caps)
 	}
 	resources := out[1]["result"].(map[string]interface{})["resources"].([]interface{})
-	if !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://budget/current") {
+	if !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://budget/current") {
 		t.Fatalf("expected core resources, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
 		t.Fatalf("unexpected schema resource text: %s", resourceText)
 	}
-	prompts := out[3]["result"].(map[string]interface{})["prompts"].([]interface{})
+	adapterText := resourceTextPayload(t, out[3])
+	if !strings.Contains(adapterText, "agent-ledger.adapter-contract") || !strings.Contains(adapterText, "provider") || !strings.Contains(adapterText, "forbidden_payload_keys") {
+		t.Fatalf("unexpected adapter contract resource text: %s", adapterText)
+	}
+	prompts := out[4]["result"].(map[string]interface{})["prompts"].([]interface{})
 	if !hasPrompt(prompts, "agent-ledger/workload-brief") || !hasPrompt(prompts, "agent-ledger/cost-review") {
 		t.Fatalf("expected prompts, got %#v", prompts)
 	}
-	promptText := promptTextPayload(t, out[4])
+	promptText := promptTextPayload(t, out[5])
 	if !strings.Contains(promptText, "ship router") || !strings.Contains(promptText, "privacy strict") {
 		t.Fatalf("prompt did not interpolate arguments: %s", promptText)
 	}

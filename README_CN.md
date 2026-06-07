@@ -60,6 +60,7 @@ CLI：
 ./agent-ledger event examples --type model.call
 ./agent-ledger event validate --file event.json
 ./agent-ledger event ingest --file event.json
+./agent-ledger adapter spec
 ./agent-ledger adapter conformance --kind provider --strict --file fixture.json
 ./agent-ledger discovery
 ./agent-ledger integrations
@@ -242,6 +243,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/workload-events/stream` | 面向本地轮询 monitor 与 router subscription 的 SSE workload 状态流 |
 | `POST /api/notifications/webhook` | 显式发送脱敏 workload-event 摘要到配置的 webhook |
 | `GET /api/integrations` | 隐私安全的集成能力目录 |
+| `GET /api/integrations/adapter-spec` | 面向未来 Agent CLI、框架、gateway、OTel、A2A 与 provider 集成的机器可读 adapter 契约 |
 | `POST /api/integrations/conformance` | 校验 canonical、provider、OpenTelemetry GenAI 或 A2A adapter fixture，但不写入 SQLite；`strict=true` 会把 provenance warning 视为失败 |
 | `GET /api/event-schema` | Canonical event schema 与支持的事件类型 |
 | `GET /api/event-examples` | 隐私安全的 canonical event 模板，可用 `type` 或 `event_type` 过滤 |
@@ -297,7 +299,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 
 `agent-ledger mcp` 会启动本地 stdio JSON-RPC 工具服务，供 agent 框架或 wrapper 接入。当前实现保持本地优先和隐私优先：工具可以创建或关闭 workload、关联 workload 依赖、在已有 workload 下启动 run、写入 run heartbeat、查询 run liveness 与 terminal-state 快照、记录 tool-call 元数据、context ref、hash 后的 artifact 与质量/evaluation 信号、查询本地策略建议、查询预算状态、解释成本、查找相似 workload。Resources 提供 metadata-only 的 schema、integration、budget、workload、terminal-state、policy 上下文；prompts 提供可复用的 workload、成本复盘、证据包模板。它不会读取 prompt 内容，也不会主动把数据发送到远程 MCP host。MCP、REST 与 CLI 的 policy evaluation 共用同一个本地 evaluator，确保不同接入方式得到一致的 advisory 决策。
 
-`GET /api/integrations`、`GET /.well-known/agent-ledger.json`、`agent-ledger integrations` 和 MCP `ledger.integrations` 会暴露运行时能力字段：`writes_local_state`、`available_in_read_only`、`runtime_status`。Discovery manifest 还会以一等字段暴露 `runtime_status_uri`、`canonical_schema_uri`、`canonical_schema_hash`、`event_examples_uri`、`adapter_conformance_uri`，便于轻量 wrapper 自动接入。`GET /api/runtime/status` 与 `agent-ledger runtime` 提供同一个进程级 observer/control-plane 状态，适合探针使用。Agent router 和 wrapper 应读取这些字段，而不是硬编码 endpoint 假设，尤其是在启用 `rbac.read_only` 时。
+`GET /api/integrations`、`GET /.well-known/agent-ledger.json`、`agent-ledger integrations` 和 MCP `ledger.integrations` 会暴露运行时能力字段：`writes_local_state`、`available_in_read_only`、`runtime_status`。Discovery manifest 还会以一等字段暴露 `runtime_status_uri`、`canonical_schema_uri`、`canonical_schema_hash`、`event_examples_uri`、`adapter_spec_uri`、`adapter_conformance_uri`，便于轻量 wrapper 自动接入。`GET /api/integrations/adapter-spec`、`agent-ledger adapter spec`、MCP `ledger.adapter_contract` 和 `agent-ledger://integrations/adapter-contract` 会暴露同一份机器可读 adapter 契约。`GET /api/runtime/status` 与 `agent-ledger runtime` 提供同一个进程级 observer/control-plane 状态，适合探针使用。Agent router 和 wrapper 应读取这些字段，而不是硬编码 endpoint 假设，尤其是在启用 `rbac.read_only` 时。
 
 当前工具：
 
@@ -318,6 +320,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `ledger.validate_event`
 - `ledger.event_schema`
 - `ledger.event_examples`
+- `ledger.adapter_contract`
 - `ledger.adapter_conformance`
 - `ledger.integrations`
 - `ledger.get_policy`
@@ -331,6 +334,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `agent-ledger://schema/canonical-events`
 - `agent-ledger://schema/canonical-event-examples`
 - `agent-ledger://integrations/catalog`
+- `agent-ledger://integrations/adapter-contract`
 - `agent-ledger://budget/current`
 - `agent-ledger://workloads/recent`，包含 workload summary rows 与派生 terminal-state snapshots
 - `agent-ledger://policies/status`
@@ -341,7 +345,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `agent-ledger/cost-review`
 - `agent-ledger/incident-evidence`
 
-Canonical event ingest 支持 workload、workload link、run、run heartbeat、model call、tool call、context ref、artifact、evaluation、policy decision 事件。Payload 只允许元数据；如果出现 raw prompt/content 相关键会直接失败，不会静默持久化。当前 event-envelope contract 只接受 `schema_version: "v1"`；未知版本会明确校验失败。`GET /api/event-examples`、`agent-ledger event examples` 与 MCP `ledger.event_examples` 会返回每类事件的隐私安全模板。`POST /api/events/validate` 与 `agent-ledger event validate` 会执行同一套契约校验，但不写入 SQLite，适合直接 canonical event 检查。`POST /api/integrations/conformance` 与 `agent-ledger adapter conformance` 还会先转换 provider、OpenTelemetry GenAI 与 A2A fixture 再校验，让 wrapper CI 在开启 ingest 前证明兼容性。Envelope 同时携带 `schema_version`、`source_version`、`parser_version`、`raw_ref`、`match_type` 等 adapter provenance 字段，让未来 collector 能说明事件是 exact、estimated、reconstructed、source-reported 还是 fuzzy，同时不保存 prompt 内容。Canonical `model.call` 也会投影到 `usage_records`，让 dashboard、预算、导出和 preflight 尽量使用同一个 token 来源。`workload.linked` 会记录异步 goal 图的依赖和 lineage 边，但不保存 prompt 内容。`agent.run.heartbeat` 会写入存活/进度时间线并更新 run 快照，使长时间异步 agent 可被监控而不需要读取 prompt；liveness 查询会标记心跳或启动时间超过阈值的 active run。`GET /api/integrations`、`agent-ledger integrations` 与 `ledger.integrations` 会暴露当前 connector/protocol 能力目录，但不会泄露本地 source 原始路径。`POST /api/otel/genai` 与 `agent-ledger otel ingest` 支持 OpenTelemetry GenAI JSON span，并只保留经过挑选的元数据和 token 字段。显式开启后，`POST /v1/traces` 与 `POST /api/otlp/v1/traces` 可接收 OTLP HTTP/JSON trace batch，并有 body 与 span 数量上限；OTLP protobuf/gRPC 在加入 conformance tests 前会被明确拒绝。`POST /api/a2a/tasks` 与 `agent-ledger a2a ingest` 支持 A2A task snapshot/event，只保留任务生命周期元数据，不保存 message/history/artifact part 内容。`POST /api/provider/calls` 与 `agent-ledger provider ingest` 支持 OpenAI-compatible、Anthropic-style、LiteLLM-style usage envelope，不保存 request/response message 内容。显式开启后，`POST /gateway/openai/v1/chat/completions` 会在内存中代理 OpenAI-compatible JSON 或 SSE streaming 请求，执行本地 policy 检查，写入 usage/audit 元数据，并通过 headers/trailers 暴露记账状态。`POST /api/reconciliation/import` 与 `agent-ledger reconcile import` 支持导入本地 provider CSV/JSON 账单，只保存汇总金额、账单 hash、窗口和 warning，并与相同窗口的本地账本做差异比较。
+Canonical event ingest 支持 workload、workload link、run、run heartbeat、model call、tool call、context ref、artifact、evaluation、policy decision 事件。Payload 只允许元数据；如果出现 raw prompt/content 相关键会直接失败，不会静默持久化。当前 event-envelope contract 只接受 `schema_version: "v1"`；未知版本会明确校验失败。`GET /api/event-examples`、`agent-ledger event examples` 与 MCP `ledger.event_examples` 会返回每类事件的隐私安全模板。`GET /api/integrations/adapter-spec`、`agent-ledger adapter spec`、MCP `ledger.adapter_contract` 与 `agent-ledger://integrations/adapter-contract` 会暴露机器可读 adapter 契约，包含支持的输入类型、必需 envelope 字段、禁止 payload key、token 语义、质量门槛、验证命令和 ingest 入口。`POST /api/events/validate` 与 `agent-ledger event validate` 会执行同一套契约校验，但不写入 SQLite，适合直接 canonical event 检查。`POST /api/integrations/conformance` 与 `agent-ledger adapter conformance` 还会先转换 provider、OpenTelemetry GenAI 与 A2A fixture 再校验，让 wrapper CI 在开启 ingest 前证明兼容性。Envelope 同时携带 `schema_version`、`source_version`、`parser_version`、`raw_ref`、`match_type` 等 adapter provenance 字段，让未来 collector 能说明事件是 exact、estimated、reconstructed、source-reported 还是 fuzzy，同时不保存 prompt 内容。Canonical `model.call` 也会投影到 `usage_records`，让 dashboard、预算、导出和 preflight 尽量使用同一个 token 来源。`workload.linked` 会记录异步 goal 图的依赖和 lineage 边，但不保存 prompt 内容。`agent.run.heartbeat` 会写入存活/进度时间线并更新 run 快照，使长时间异步 agent 可被监控而不需要读取 prompt；liveness 查询会标记心跳或启动时间超过阈值的 active run。`GET /api/integrations`、`agent-ledger integrations` 与 `ledger.integrations` 会暴露当前 connector/protocol 能力目录，但不会泄露本地 source 原始路径。`POST /api/otel/genai` 与 `agent-ledger otel ingest` 支持 OpenTelemetry GenAI JSON span，并只保留经过挑选的元数据和 token 字段。显式开启后，`POST /v1/traces` 与 `POST /api/otlp/v1/traces` 可接收 OTLP HTTP/JSON trace batch，并有 body 与 span 数量上限；OTLP protobuf/gRPC 在加入 conformance tests 前会被明确拒绝。`POST /api/a2a/tasks` 与 `agent-ledger a2a ingest` 支持 A2A task snapshot/event，只保留任务生命周期元数据，不保存 message/history/artifact part 内容。`POST /api/provider/calls` 与 `agent-ledger provider ingest` 支持 OpenAI-compatible、Anthropic-style、LiteLLM-style usage envelope，不保存 request/response message 内容。显式开启后，`POST /gateway/openai/v1/chat/completions` 会在内存中代理 OpenAI-compatible JSON 或 SSE streaming 请求，执行本地 policy 检查，写入 usage/audit 元数据，并通过 headers/trailers 暴露记账状态。`POST /api/reconciliation/import` 与 `agent-ledger reconcile import` 支持导入本地 provider CSV/JSON 账单，只保存汇总金额、账单 hash、窗口和 warning，并与相同窗口的本地账本做差异比较。
 
 ## 数据准确性排障
 
@@ -410,7 +414,7 @@ Release 使用 GoReleaser 构建多平台归档，使用 GitHub Actions 发布 G
 
 ## Roadmap
 
-已落地基础：canonical workload schema、metadata-only canonical event ingest、workload 依赖/lineage links、异步 run start/heartbeat/liveness 账本、workload terminal-state 派生快照与本地 workload event feed/SSE stream、显式 workload evaluation 信号、默认关闭的脱敏 webhook 通知、隐私安全 discovery manifest、canonical-to-usage projection 与 repair、OpenTelemetry GenAI JSON span mapping、可选本地 OTLP HTTP/JSON traces receiver、A2A task telemetry mapping、provider usage envelope mapping、可选 JSON/SSE 本地 OpenAI-compatible gateway、provider 账单导入对账、model router simulation、preflight cost estimates、session cost replay、repo cost badge、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、本地策略审批请求与执行证据、CLI workload/event/policy/router/replay/badge/preflight/projection 命令、CLI run wrapper 和本地 MCP stdio tools/resources/prompts。
+已落地基础：canonical workload schema、metadata-only canonical event ingest、机器可读 adapter contract、workload 依赖/lineage links、异步 run start/heartbeat/liveness 账本、workload terminal-state 派生快照与本地 workload event feed/SSE stream、显式 workload evaluation 信号、默认关闭的脱敏 webhook 通知、隐私安全 discovery manifest、canonical-to-usage projection 与 repair、OpenTelemetry GenAI JSON span mapping、可选本地 OTLP HTTP/JSON traces receiver、A2A task telemetry mapping、provider usage envelope mapping、可选 JSON/SSE 本地 OpenAI-compatible gateway、provider 账单导入对账、model router simulation、preflight cost estimates、session cost replay、repo cost badge、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、本地策略审批请求与执行证据、CLI workload/event/policy/router/replay/badge/preflight/projection 命令、CLI run wrapper 和本地 MCP stdio tools/resources/prompts。
 
 后续路线：OTLP protobuf/gRPC conformance、provider-native gateway adapters、Postgres 团队模式、OIDC/SSO、更完整的 MCP subscriptions、多操作者审批通知。
 

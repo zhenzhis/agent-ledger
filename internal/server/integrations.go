@@ -32,6 +32,14 @@ func (s *Server) handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.runtimeStatus())
 }
 
+func (s *Server) handleAdapterSpec(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, integrations.AdapterContractSpec())
+}
+
 func (s *Server) handleAdapterConformance(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

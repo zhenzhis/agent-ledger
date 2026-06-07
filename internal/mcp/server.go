@@ -306,6 +306,7 @@ func tools() []map[string]interface{} {
 			"strict":   booleanSchema(),
 			"raw_json": requiredStringSchema(),
 		}),
+		tool("ledger.adapter_contract", "Return the machine-readable adapter contract for privacy-safe ecosystem integrations.", map[string]interface{}{}),
 		tool("ledger.integrations", "Return the Agent Ledger integration capability catalog.", map[string]interface{}{}),
 		tool("ledger.get_policy", "Evaluate local advisory policy rules for a proposed agent action.", map[string]interface{}{
 			"workload_id": stringSchema(),
@@ -394,6 +395,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://schema/canonical-events", "Canonical Event Schema", "Metadata-only event contract for workload, run, model-call, tool-call, artifact, evaluation, and policy events.", "application/json"),
 		resource("agent-ledger://schema/canonical-event-examples", "Canonical Event Examples", "Privacy-safe templates for all supported canonical event types.", "application/json"),
 		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
+		resource("agent-ledger://integrations/adapter-contract", "Adapter Contract", "Machine-readable contract for writing privacy-safe Agent Ledger adapters.", "application/json"),
 		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows.", "application/json"),
 		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries and terminal-state snapshots from the local ledger.", "application/json"),
 		resource("agent-ledger://policies/status", "Policy Status", "Local policy configuration summary without prompt or secret content.", "application/json"),
@@ -483,6 +485,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		}, nil
 	case "ledger.adapter_conformance":
 		return s.toolAdapterConformance(args)
+	case "ledger.adapter_contract":
+		return integrations.AdapterContractSpec(), nil
 	case "ledger.integrations":
 		return integrations.Registry(integrations.OptionsFromConfig(s.cfg)), nil
 	case "ledger.get_policy":
@@ -531,6 +535,8 @@ func (s *Server) readResource(uri string) (interface{}, error) {
 		}
 	case "agent-ledger://integrations/catalog":
 		payload = integrations.Registry(integrations.OptionsFromConfig(s.cfg))
+	case "agent-ledger://integrations/adapter-contract":
+		payload = integrations.AdapterContractSpec()
 	case "agent-ledger://budget/current":
 		budget, err := s.toolCurrentBudget([]byte(`{"window":"all"}`))
 		if err != nil {

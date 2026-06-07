@@ -35,6 +35,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapability(t, catalog, "finops.provider_reconciliation", "implemented", true)
 	assertCapability(t, catalog, "governance.policy_evaluator", "implemented", true)
 	assertCapability(t, catalog, "notification.redacted_webhook", "implemented", false)
+	assertCapabilityCommand(t, catalog, "protocol.adapter_conformance", "agent-ledger adapter spec")
 
 	cfg.Integrations.OTLPReceiver.Enabled = true
 	cfg.Gateway.Enabled = true
@@ -100,7 +101,8 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	}
 	if manifest.Auth == "" || manifest.MCPCommand != "agent-ledger mcp" || manifest.CapabilityCatalogURI != "/api/integrations" ||
 		manifest.RuntimeStatusURI != "/api/runtime/status" || manifest.CanonicalSchemaURI != "/api/event-schema" ||
-		manifest.EventExamplesURI != "/api/event-examples" || manifest.AdapterConformanceURI != "/api/integrations/conformance" {
+		manifest.EventExamplesURI != "/api/event-examples" || manifest.AdapterSpecURI != "/api/integrations/adapter-spec" ||
+		manifest.AdapterConformanceURI != "/api/integrations/conformance" {
 		t.Fatalf("discovery missing entrypoints: %#v", manifest)
 	}
 	if manifest.CanonicalSchemaHash == "" || !strings.HasPrefix(manifest.CanonicalSchemaHash, "sha256:") {
@@ -115,6 +117,22 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 				t.Fatalf("raw path leaked in discovery protocol: %#v", protocol)
 			}
 		}
+	}
+}
+
+func TestAdapterContractSpecIsMachineReadableAndPrivacySafe(t *testing.T) {
+	spec := AdapterContractSpec()
+	if spec.Contract != "agent-ledger.adapter-contract" || spec.Version != "v1" || spec.SchemaHash == "" {
+		t.Fatalf("unexpected adapter contract identity: %#v", spec)
+	}
+	if len(spec.SupportedInputKinds) < 4 || len(spec.CanonicalEventTypes) == 0 {
+		t.Fatalf("adapter contract missing supported kinds or event types: %#v", spec)
+	}
+	if !stringSliceHas(spec.ForbiddenPayloadKeys, "prompt") || !stringSliceHas(spec.ForbiddenPayloadKeys, "messages") {
+		t.Fatalf("adapter contract missing forbidden payload keys: %#v", spec.ForbiddenPayloadKeys)
+	}
+	if spec.Validation.HTTP == "" || spec.Validation.CLI == "" || spec.Ingest.HTTP == nil || spec.Ingest.CLI == nil {
+		t.Fatalf("adapter contract missing validation or ingest entrypoints: %#v", spec)
 	}
 }
 
@@ -134,6 +152,28 @@ func TestDiscoveryManifestCarriesReadOnlyRuntimeStatus(t *testing.T) {
 		}
 	}
 	t.Fatalf("canonical event protocol missing: %#v", manifest.Protocols)
+}
+
+func stringSliceHas(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertCapabilityCommand(t *testing.T, catalog Catalog, id, command string) {
+	t.Helper()
+	for _, cap := range catalog.Capabilities {
+		if cap.ID == id {
+			if !stringSliceHas(cap.Commands, command) {
+				t.Fatalf("%s missing command %q: %#v", id, command, cap.Commands)
+			}
+			return
+		}
+	}
+	t.Fatalf("capability %s missing", id)
 }
 
 func hasDiscoveryProtocol(manifest DiscoveryManifest, id string) bool {

@@ -101,6 +101,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/workload-events/stream", s.handleWorkloadEventsStream)
 	mux.HandleFunc("/api/fleet-attribution", s.handleFleetAttribution)
 	mux.HandleFunc("/api/integrations", s.handleIntegrations)
+	mux.HandleFunc("/api/integrations/adapter-spec", s.handleAdapterSpec)
 	mux.HandleFunc("/api/integrations/conformance", s.handleAdapterConformance)
 	mux.HandleFunc("/api/runtime/status", s.handleRuntimeStatus)
 	mux.HandleFunc("/api/event-schema", s.handleCanonicalEventSchema)

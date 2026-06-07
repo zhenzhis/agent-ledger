@@ -141,8 +141,8 @@ func Registry(opts Options) Catalog {
 			Enabled:     true,
 			Privacy:     "dry-run only; validates converted metadata-only events without writing SQLite",
 			EventTypes:  eventTypes,
-			Endpoints:   []string{"POST /api/integrations/conformance?kind=canonical|provider|otel|a2a&strict=true"},
-			Commands:    []string{"agent-ledger adapter conformance --kind provider --strict --file fixture.json"},
+			Endpoints:   []string{"GET /api/integrations/adapter-spec", "POST /api/integrations/conformance?kind=canonical|provider|otel|a2a&strict=true"},
+			Commands:    []string{"agent-ledger adapter spec", "agent-ledger adapter conformance --kind provider --strict --file fixture.json"},
 			DataClasses: []string{"adapter fixture metadata", "canonical event validation result", "provenance warnings"},
 		},
 		{
@@ -155,8 +155,8 @@ func Registry(opts Options) Catalog {
 			Maturity:  "local-preview",
 			Enabled:   true,
 			Privacy:   "local stdio only; does not connect to remote MCP hosts by itself",
-			Tools:     []string{"ledger.current_budget", "ledger.start_workload", "ledger.start_run", "ledger.close_workload", "ledger.link_workloads", "ledger.heartbeat_run", "ledger.run_liveness", "ledger.workload_timeline", "ledger.workload_state", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_evaluation", "ledger.record_event", "ledger.validate_event", "ledger.event_schema", "ledger.event_examples", "ledger.adapter_conformance", "ledger.integrations", "ledger.get_policy", "ledger.policy_audit", "ledger.audit_log", "ledger.explain_cost", "ledger.find_similar_workloads"},
-			Resources: []string{"agent-ledger://schema/canonical-events", "agent-ledger://schema/canonical-event-examples", "agent-ledger://integrations/catalog", "agent-ledger://budget/current", "agent-ledger://workloads/recent", "agent-ledger://policies/status"},
+			Tools:     []string{"ledger.current_budget", "ledger.start_workload", "ledger.start_run", "ledger.close_workload", "ledger.link_workloads", "ledger.heartbeat_run", "ledger.run_liveness", "ledger.workload_timeline", "ledger.workload_state", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_evaluation", "ledger.record_event", "ledger.validate_event", "ledger.event_schema", "ledger.event_examples", "ledger.adapter_contract", "ledger.adapter_conformance", "ledger.integrations", "ledger.get_policy", "ledger.policy_audit", "ledger.audit_log", "ledger.explain_cost", "ledger.find_similar_workloads"},
+			Resources: []string{"agent-ledger://schema/canonical-events", "agent-ledger://schema/canonical-event-examples", "agent-ledger://integrations/catalog", "agent-ledger://integrations/adapter-contract", "agent-ledger://budget/current", "agent-ledger://workloads/recent", "agent-ledger://policies/status"},
 			Prompts:   []string{"agent-ledger/workload-brief", "agent-ledger/cost-review", "agent-ledger/incident-evidence"},
 		},
 		{
