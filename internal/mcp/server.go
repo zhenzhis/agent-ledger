@@ -170,6 +170,13 @@ func tools() []map[string]interface{} {
 			"status":      stringSchema(),
 			"outcome":     stringSchema(),
 		}),
+		tool("ledger.start_run", "Start a new agent run attached to an existing workload.", map[string]interface{}{
+			"workload_id": requiredStringSchema(),
+			"source":      stringSchema(),
+			"agent_name":  stringSchema(),
+			"command":     stringSchema(),
+			"cwd":         stringSchema(),
+		}),
 		tool("ledger.heartbeat_run", "Append a metadata-only liveness/progress heartbeat for an async agent run.", map[string]interface{}{
 			"run_id":     requiredStringSchema(),
 			"status":     stringSchema(),
@@ -320,6 +327,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolCurrentBudget(args)
 	case "ledger.start_workload":
 		return s.toolStartWorkload(args)
+	case "ledger.start_run":
+		return s.toolStartRun(args)
 	case "ledger.close_workload":
 		return s.toolCloseWorkload(args)
 	case "ledger.heartbeat_run":
@@ -518,6 +527,24 @@ func (s *Server) toolStartWorkload(args json.RawMessage) (interface{}, error) {
 		}
 	}
 	return map[string]interface{}{"workload_id": id, "run_id": runID, "status": "active"}, nil
+}
+
+func (s *Server) toolStartRun(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		WorkloadID string `json:"workload_id"`
+		Source     string `json:"source"`
+		AgentName  string `json:"agent_name"`
+		Command    string `json:"command"`
+		CWD        string `json:"cwd"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	runID, err := s.db.StartAgentRun(in.WorkloadID, in.Source, firstNonEmpty(in.AgentName, in.Source, "agent"), in.Command, in.CWD)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"workload_id": in.WorkloadID, "run_id": runID, "status": "running"}, nil
 }
 
 func (s *Server) toolCloseWorkload(args json.RawMessage) (interface{}, error) {

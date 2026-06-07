@@ -383,8 +383,17 @@ func (d *DB) CloseWorkload(workloadID, status, outcome string) error {
 
 // StartAgentRun records a run attached to an existing workload.
 func (d *DB) StartAgentRun(workloadID, source, agentName, command, cwd string) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if workloadID == "" {
 		return "", fmt.Errorf("workload_id is required")
+	}
+	var workloadStatus string
+	if err := d.db.QueryRow(`SELECT status FROM workloads WHERE workload_id=?`, workloadID).Scan(&workloadStatus); err != nil {
+		return "", err
+	}
+	if terminalWorkloadStatus(workloadStatus) {
+		return "", fmt.Errorf("workload_id %s is already %s; run start rejected", workloadID, workloadStatus)
 	}
 	id := generatedID("run")
 	now := time.Now().UTC()
@@ -1098,6 +1107,15 @@ func validAgentRunStatus(status string) bool {
 func terminalAgentRunStatus(status string) bool {
 	switch status {
 	case "completed", "failed", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func terminalWorkloadStatus(status string) bool {
+	switch status {
+	case "completed", "partial", "failed", "abandoned", "cancelled", "merged", "deployed", "reverted":
 		return true
 	default:
 		return false

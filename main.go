@@ -1095,6 +1095,15 @@ func runWorkloadCLI(args []string, db *storage.DB) error {
 			return err
 		}
 		fmt.Printf("%s\t%s\n", id, status)
+	case "start-run":
+		workloadID := firstNonEmptyCLI(cliValue(args[1:], "--workload-id"), cliValue(args[1:], "--id"))
+		source := cliValue(args[1:], "--source")
+		agentName := firstNonEmptyCLI(cliValue(args[1:], "--agent-name"), cliValue(args[1:], "--agent"), source, "agent")
+		runID, err := db.StartAgentRun(workloadID, source, agentName, cliValue(args[1:], "--command"), cliValue(args[1:], "--cwd"))
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"workload_id": workloadID, "run_id": runID, "status": "running"})
 	case "heartbeat":
 		runID := firstNonEmptyCLI(cliValue(args[1:], "--run-id"), cliValue(args[1:], "--run_id"), cliValue(args[1:], "--id"))
 		progress, err := parseFloat(cliValue(args[1:], "--progress"))

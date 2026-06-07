@@ -11,6 +11,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger version                     # print version info
 ./agent-ledger doctor --format markdown    # local diagnostics
 ./agent-ledger today                       # CLI summary
+./agent-ledger workload start-run --workload-id <id> --source codex --agent-name codex
 ./agent-ledger workload heartbeat --run-id <id> --status working --phase testing --progress 0.5
 ./agent-ledger workload liveness --max-age 10m --stale-only
 ./agent-ledger event schema                # print canonical event schema

@@ -31,7 +31,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 2", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.integrations") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.integrations") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	payload := toolTextPayload(t, out[1])
@@ -114,19 +114,24 @@ func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 		t.Fatalf("missing ids: %#v", created)
 	}
 
-	policyLine := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ledger.get_policy","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","model":"gpt-5.5","role":"operator"}}}`
-	artifactLine := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ledger.record_artifact","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","artifact_type":"report","label":"privacy-safe-summary","path_hash":"sha256:abc","sha256":"def","metadata":{"format":"markdown"}}}}`
-	closeLine := `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ledger.close_workload","arguments":{"workload_id":"` + workloadID + `","status":"completed","outcome":"accepted"}}}`
-	responses := serveLines(t, srv, policyLine, artifactLine, closeLine)
-	policy := toolTextPayload(t, responses[0])
+	startRunLine := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ledger.start_run","arguments":{"workload_id":"` + workloadID + `","source":"codex","agent_name":"codex-worker","command":"codex worker","cwd":"C:/work"}}}`
+	policyLine := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ledger.get_policy","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","model":"gpt-5.5","role":"operator"}}}`
+	artifactLine := `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ledger.record_artifact","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","artifact_type":"report","label":"privacy-safe-summary","path_hash":"sha256:abc","sha256":"def","metadata":{"format":"markdown"}}}}`
+	closeLine := `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"ledger.close_workload","arguments":{"workload_id":"` + workloadID + `","status":"completed","outcome":"accepted"}}}`
+	responses := serveLines(t, srv, startRunLine, policyLine, artifactLine, closeLine)
+	startedRun := toolTextPayload(t, responses[0])
+	if startedRun["run_id"] == "" || startedRun["workload_id"] != workloadID {
+		t.Fatalf("start run payload=%#v", startedRun)
+	}
+	policy := toolTextPayload(t, responses[1])
 	if policy["action"] != "warn" {
 		t.Fatalf("policy action=%#v", policy["action"])
 	}
-	artifact := toolTextPayload(t, responses[1])
+	artifact := toolTextPayload(t, responses[2])
 	if artifact["artifact_id"] == "" {
 		t.Fatalf("missing artifact id: %#v", artifact)
 	}
-	closed := toolTextPayload(t, responses[2])
+	closed := toolTextPayload(t, responses[3])
 	if closed["status"] != "completed" {
 		t.Fatalf("close payload=%#v", closed)
 	}
@@ -137,6 +142,9 @@ func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 	}
 	if detail.Summary.Status != "completed" {
 		t.Fatalf("status=%s", detail.Summary.Status)
+	}
+	if len(detail.Runs) != 2 {
+		t.Fatalf("runs=%#v", detail.Runs)
 	}
 	if len(detail.Policies) != 1 || detail.Policies[0].Action != "warn" {
 		t.Fatalf("policy decisions=%#v", detail.Policies)

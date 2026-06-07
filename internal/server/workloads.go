@@ -108,6 +108,37 @@ func (s *Server) handleWorkloadClose(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"ok": true, "workload_id": payload.WorkloadID, "status": payload.Status})
 }
 
+func (s *Server) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
+		return
+	}
+	var payload struct {
+		WorkloadID string `json:"workload_id"`
+		Source     string `json:"source"`
+		AgentName  string `json:"agent_name"`
+		Command    string `json:"command"`
+		CWD        string `json:"cwd"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		badRequest(w, err)
+		return
+	}
+	if payload.WorkloadID == "" {
+		payload.WorkloadID = r.URL.Query().Get("workload_id")
+	}
+	runID, err := s.db.StartAgentRun(payload.WorkloadID, payload.Source, firstNonEmpty(payload.AgentName, payload.Source, "agent"), payload.Command, payload.CWD)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "agent_run.start", runID, map[string]string{"source": payload.Source, "agent_name": payload.AgentName, "workload_id": payload.WorkloadID})
+	writeJSON(w, map[string]interface{}{"ok": true, "workload_id": payload.WorkloadID, "run_id": runID, "status": "running"})
+}
+
 func (s *Server) handleAgentRunHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -102,6 +102,20 @@ func TestManualWorkloadAndRunDetail(t *testing.T) {
 	}
 }
 
+func TestStartAgentRunRejectsClosedWorkload(t *testing.T) {
+	db := tempDB(t)
+	id, err := db.CreateWorkload("closed workload", "codex", "repo-a", "repo-a", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	if err := db.CloseWorkload(id, "completed", "done"); err != nil {
+		t.Fatalf("CloseWorkload: %v", err)
+	}
+	if _, err := db.StartAgentRun(id, "codex", "codex", "codex exec", "/home/user/repo-a"); err == nil {
+		t.Fatal("expected closed workload to reject new run")
+	}
+}
+
 func TestAgentRunLivenessReportsStaleActiveRuns(t *testing.T) {
 	db := tempDB(t)
 	id, err := db.CreateWorkload("ship async goal", "codex", "repo-a", "repo-a", "main", "alice", "research", 0)

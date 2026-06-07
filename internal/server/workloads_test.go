@@ -65,6 +65,55 @@ func TestAgentRunHeartbeatAPI(t *testing.T) {
 	}
 }
 
+func TestAgentRunStartAPI(t *testing.T) {
+	db := testServerDB(t)
+	workloadID, err := db.CreateWorkload("start api workload", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"workload_id": workloadID,
+		"source":      "codex",
+		"agent_name":  "codex",
+		"command":     "codex --token secret-value",
+		"cwd":         "C:/private/workspace",
+	})
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/agent-runs", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.handleAgentRuns(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("start run status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var response struct {
+		OK         bool   `json:"ok"`
+		WorkloadID string `json:"workload_id"`
+		RunID      string `json:"run_id"`
+		Status     string `json:"status"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.OK || response.WorkloadID != workloadID || response.RunID == "" || response.Status != "running" {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+	detail, err := db.GetWorkloadDetail(workloadID)
+	if err != nil {
+		t.Fatalf("GetWorkloadDetail: %v", err)
+	}
+	if len(detail.Runs) != 1 || detail.Runs[0].RunID != response.RunID {
+		t.Fatalf("run not attached: %+v", detail.Runs)
+	}
+	audit, err := db.GetAuditLog(10)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if !strings.Contains(string(rawAudit), "agent_run.start") || strings.Contains(string(rawAudit), "secret-value") || strings.Contains(string(rawAudit), "C:/private") {
+		t.Fatalf("unexpected audit log: %s", string(rawAudit))
+	}
+}
+
 func TestAgentRunLivenessAPI(t *testing.T) {
 	db := testServerDB(t)
 	workloadID, err := db.CreateWorkload("sensitive async goal", "codex", "agent-ledger", "zhenzhis/agent-ledger", "feature/private", "", "", 0)
