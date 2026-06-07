@@ -117,6 +117,34 @@ func (s *Server) handleDataQuality(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, report)
 }
 
+func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
+	from, to, _, err := s.parseTimeRange(r)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	report, err := s.db.GetDoctorReport(from, to, s.options.Pricing.StaleAfter,
+		r.URL.Query().Get("source"), r.URL.Query().Get("model"), r.URL.Query().Get("project"))
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	applyDoctorPrivacy(report, s.privacyFor(r))
+	if strings.EqualFold(r.URL.Query().Get("format"), "markdown") {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		_, _ = w.Write([]byte(storage.FormatDoctorMarkdown(report)))
+		return
+	}
+	writeJSON(w, report)
+}
+
 func (s *Server) handleModelCalls(w http.ResponseWriter, r *http.Request) {
 	from, to, _, err := s.parseTimeRange(r)
 	if err != nil {

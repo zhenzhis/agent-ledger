@@ -18,6 +18,7 @@
 - Preflight Cost Estimate through `GET /api/preflight/estimate` and `agent-ledger preflight`, estimating likely task cost/tokens/calls from local historical session medians and task-type multipliers.
 - Team Chargeback/Showback through `GET /api/chargeback`, `GET /api/export?type=chargeback`, and `agent-ledger chargeback`, using raw usage as the authoritative source and canonical model calls only as fallback.
 - Agent Wrapped through `GET /api/wrapped` and `agent-ledger wrapped`, producing monthly/weekly/yearly Markdown or JSON summaries from metadata-only usage signals.
+- One-click Doctor through `GET /api/doctor` and `agent-ledger doctor`, combining usage, ingestion health, pricing freshness, and data-quality checks into actionable JSON/Markdown diagnostics.
 - Session Cost Replay through `GET /api/session-replay` and `agent-ledger replay`, returning chronological per-call token/cost accumulation without reading prompt content.
 - Repo AI Cost Badge through `GET /api/badge/repo.svg` and `agent-ledger badge`, rendering local black/white SVG cost, token, session, or cache badges.
 - Offline bundle export/import for air-gapped multi-machine aggregation, with metadata-only canonical event replay, payload SHA-256 integrity, optional HMAC-SHA256 signing, CLI commands, and REST endpoints.

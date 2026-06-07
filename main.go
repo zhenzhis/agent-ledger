@@ -345,8 +345,19 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 			fmt.Printf("%s\t%s\t%s\t%s\t$%.4f\t%d tokens\t%s\n", row.Source, row.Project, row.GitBranch, row.SessionID, row.CostUSD, row.Tokens, row.LastActivity)
 		}
 	case "doctor":
-		report, err := db.GetDataQuality(cfg.Pricing.StaleAfter)
+		from, to, err := cliDateRange(args[1:], now)
 		if err != nil {
+			return err
+		}
+		report, err := db.GetDoctorReport(from, to, cfg.Pricing.StaleAfter, cliValue(args[1:], "--source"), cliValue(args[1:], "--model"), cliValue(args[1:], "--project"))
+		if err != nil {
+			return err
+		}
+		if cliBool(args[1:], "--privacy") {
+			redactDoctorReport(report)
+		}
+		if strings.EqualFold(cliValue(args[1:], "--format"), "markdown") {
+			_, err = os.Stdout.Write([]byte(storage.FormatDoctorMarkdown(report)))
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(report)
@@ -505,6 +516,25 @@ func redactWrappedReport(report *storage.WrappedReport) {
 	for i := range report.Highlights {
 		if report.Highlights[i].Label == "top project" {
 			report.Highlights[i].Value = "<redacted>"
+		}
+	}
+}
+
+func redactDoctorReport(report *storage.DoctorReport) {
+	if report == nil {
+		return
+	}
+	for i := range report.Ingestion {
+		for j := range report.Ingestion[i].Paths {
+			report.Ingestion[i].Paths[j] = "<redacted>"
+		}
+		for j := range report.Ingestion[i].PathStatus {
+			report.Ingestion[i].PathStatus[j].Path = "<redacted>"
+		}
+	}
+	for i := range report.Checks {
+		if report.Checks[i].Name == "path.missing" || report.Checks[i].Name == "path.unreadable" {
+			report.Checks[i].Message = "<redacted path>"
 		}
 	}
 }

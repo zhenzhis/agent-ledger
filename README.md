@@ -198,6 +198,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `POST /api/pricing/recalculate?mode=zero|all` | Recalculate costs |
 | `GET /api/cost-intelligence` | Expensive session explanations |
 | `GET /api/cache/doctor` | Cache hit/write/read diagnostics |
+| `GET /api/doctor?format=markdown` | One-click local diagnostics for usage, ingestion, pricing, and data quality |
 | `GET /api/data-quality` | Trust and completeness report |
 | `GET /api/model-calls` | Calls by model/source/project |
 | `GET /api/quota/status` | Local quota and burn-rate estimates |

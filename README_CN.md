@@ -198,6 +198,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `POST /api/pricing/recalculate?mode=zero|all` | 重算费用 |
 | `GET /api/cost-intelligence` | 昂贵会话解释 |
 | `GET /api/cache/doctor` | cache 命中、写入、读取诊断 |
+| `GET /api/doctor?format=markdown` | 一键本地诊断 usage、采集、价格与数据质量 |
 | `GET /api/data-quality` | 数据可信度报告 |
 | `GET /api/model-calls` | 模型调用次数 |
 | `GET /api/quota/status` | 本地 quota 和 burn-rate 估算 |

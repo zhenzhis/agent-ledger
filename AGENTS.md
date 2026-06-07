@@ -9,7 +9,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger                             # run server (reads config.yaml by default)
 ./agent-ledger --config path/to/config.yaml
 ./agent-ledger version                     # print version info
-./agent-ledger doctor                      # local diagnostics
+./agent-ledger doctor --format markdown    # local diagnostics
 ./agent-ledger today                       # CLI summary
 ./agent-ledger event schema                # print canonical event schema
 ./agent-ledger event ingest < event.json   # ingest metadata-only canonical event(s)

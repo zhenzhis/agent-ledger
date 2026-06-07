@@ -71,6 +71,25 @@ func applyWrappedPrivacy(report *storage.WrappedReport, privacy config.PrivacyCo
 	}
 }
 
+func applyDoctorPrivacy(report *storage.DoctorReport, privacy config.PrivacyConfig) {
+	if report == nil || !(privacy.RedactPaths || privacy.ScreenshotMode) {
+		return
+	}
+	for i := range report.Ingestion {
+		for j := range report.Ingestion[i].Paths {
+			report.Ingestion[i].Paths[j] = "<redacted>"
+		}
+		for j := range report.Ingestion[i].PathStatus {
+			report.Ingestion[i].PathStatus[j].Path = "<redacted>"
+		}
+	}
+	for i := range report.Checks {
+		if report.Checks[i].Name == "path.missing" || report.Checks[i].Name == "path.unreadable" {
+			report.Checks[i].Message = "<redacted path>"
+		}
+	}
+}
+
 func hashValue(value string) string {
 	if value == "" {
 		return ""

@@ -1726,7 +1726,7 @@ $("btn-pricing-sync").addEventListener("click", async () => {
 });
 
 $("btn-doctor").addEventListener("click", () => {
-  downloadApi("evidence-bundle", { extra: { format: "json", privacy: state.privacy ? "1" : "" } });
+  downloadApi("doctor", { extra: { format: "markdown", privacy: state.privacy ? "1" : "" } });
 });
 
 $("btn-recalc").addEventListener("click", async () => {
