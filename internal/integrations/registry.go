@@ -23,6 +23,7 @@ type Options struct {
 	QuotaEnabled        bool     `json:"quota_enabled"`
 	WebhooksEnabled     bool     `json:"webhooks_enabled"`
 	OTLPReceiverEnabled bool     `json:"otlp_receiver_enabled"`
+	GatewayEnabled      bool     `json:"gateway_enabled"`
 }
 
 // Capability describes one supported or planned integration surface.
@@ -85,6 +86,7 @@ func OptionsFromConfig(cfg *config.Config) Options {
 		QuotaEnabled:        cfg.Quota.Enabled,
 		WebhooksEnabled:     cfg.Webhooks.Enabled,
 		OTLPReceiverEnabled: cfg.Integrations.OTLPReceiver.Enabled,
+		GatewayEnabled:      cfg.Gateway.Enabled,
 	}
 }
 
@@ -243,14 +245,16 @@ func Registry(opts Options) Catalog {
 			ID:             "gateway.provider_live_proxy",
 			Name:           "Live Provider Gateway Mode",
 			Category:       "gateway",
-			Protocol:       "OpenAI-compatible and provider-native proxy",
+			Protocol:       "OpenAI-compatible non-streaming HTTP JSON proxy",
 			Direction:      "observe-and-route",
-			Status:         "planned",
-			Maturity:       "roadmap",
-			Enabled:        false,
-			Privacy:        "must redact or hash prompt content before ledger writes; no API key persistence by default",
+			Status:         "experimental",
+			Maturity:       "local-preview",
+			Enabled:        opts.GatewayEnabled,
+			Privacy:        "forwards prompt content only in-memory to the configured upstream; ledger writes usage metadata only; API keys are read from env and not persisted",
 			EventTypes:     []string{"model.call", "policy.decision", "context.ref"},
-			NextMilestones: []string{"explicit gateway config", "budget-aware policy hooks", "provider reconciliation import/export"},
+			Endpoints:      []string{"POST /gateway/openai/v1/chat/completions"},
+			Limitations:    []string{"disabled by default", "non-streaming JSON requests only", "OpenAI-compatible chat completions MVP", "does not persist prompt or response content"},
+			NextMilestones: []string{"streaming capture with conformance tests", "provider-native adapters", "budget-aware routing decisions"},
 		},
 		{
 			ID:             "protocol.otlp_receiver",

@@ -359,6 +359,9 @@ func (d *DB) applyCanonicalEvent(tx *sql.Tx, event *CanonicalEvent, payload map[
 		if err := ensureEventWorkload(tx, event, payload, now); err != nil {
 			return nil, err
 		}
+		if err := hydrateEventWorkloadMetadata(tx, event); err != nil {
+			return nil, err
+		}
 		if event.SessionID == "" {
 			event.SessionID = payloadString(payload, "session_id")
 		}
@@ -369,13 +372,24 @@ func (d *DB) applyCanonicalEvent(tx *sql.Tx, event *CanonicalEvent, payload map[
 			return nil, fmt.Errorf("model is required for %s", event.EventType)
 		}
 		callID := firstNonEmptyStorage(payloadString(payload, "call_id"), event.SourceEventID, generatedID("call"))
+		sessionID := firstNonEmptyStorage(event.SessionID, payloadString(payload, "session_id"), callID)
 		_, err := tx.Exec(`INSERT OR IGNORE INTO model_calls(call_id,workload_id,run_id,source,session_id,provider,model,model_alias,input_tokens,output_tokens,cache_read_input_tokens,cache_creation_input_tokens,reasoning_output_tokens,cost_usd,latency_ms,finish_reason,pricing_source,pricing_confidence,timestamp,confidence)
 			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, callID, event.WorkloadID, event.AgentRunID, event.Source,
-			firstNonEmptyStorage(event.SessionID, payloadString(payload, "session_id")), payloadString(payload, "provider"), event.Model, payloadString(payload, "model_alias"),
+			sessionID, payloadString(payload, "provider"), event.Model, payloadString(payload, "model_alias"),
 			payloadInt64(payload, "input_tokens"), payloadInt64(payload, "output_tokens"), payloadInt64(payload, "cache_read_input_tokens"),
 			payloadInt64(payload, "cache_creation_input_tokens"), payloadInt64(payload, "reasoning_output_tokens"), payloadFloat(payload, "cost_usd"),
 			payloadInt64(payload, "latency_ms"), payloadString(payload, "finish_reason"), payloadString(payload, "pricing_source"),
 			payloadString(payload, "pricing_confidence"), event.Timestamp, event.Confidence)
+		if err != nil {
+			return nil, err
+		}
+		event.SessionID = sessionID
+		_, err = tx.Exec(`INSERT OR IGNORE INTO usage_records(source,session_id,model,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,reasoning_output_tokens,cost_usd,timestamp,project,git_branch,pricing_source,pricing_model,pricing_confidence,pricing_note)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			event.Source, sessionID, event.Model, payloadInt64(payload, "input_tokens"), payloadInt64(payload, "output_tokens"),
+			payloadInt64(payload, "cache_creation_input_tokens"), payloadInt64(payload, "cache_read_input_tokens"), payloadInt64(payload, "reasoning_output_tokens"),
+			payloadFloat(payload, "cost_usd"), event.Timestamp, event.Project, normalizeBranch(event.GitBranch), payloadString(payload, "pricing_source"),
+			firstNonEmptyStorage(payloadString(payload, "matched_model"), payloadString(payload, "model_alias")), payloadString(payload, "pricing_confidence"), "canonical model.call projection")
 		if err != nil {
 			return nil, err
 		}
@@ -467,6 +481,30 @@ func ensureEventWorkload(tx *sql.Tx, event *CanonicalEvent, payload map[string]i
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, event.WorkloadID, goal, "active", source, project, payloadString(payload, "repo"), branch,
 		payloadString(payload, "owner"), payloadString(payload, "team"), payloadFloat(payload, "budget_usd"), "", event.Confidence, now, now)
 	return err
+}
+
+func hydrateEventWorkloadMetadata(tx *sql.Tx, event *CanonicalEvent) error {
+	if event.WorkloadID == "" {
+		return nil
+	}
+	if event.Project != "" && normalizeBranch(event.GitBranch) != "unknown" {
+		return nil
+	}
+	var project, branch string
+	err := tx.QueryRow(`SELECT COALESCE(project,''),COALESCE(git_branch,'') FROM workloads WHERE workload_id=?`, event.WorkloadID).Scan(&project, &branch)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	if event.Project == "" {
+		event.Project = project
+	}
+	if normalizeBranch(event.GitBranch) == "unknown" && branch != "" {
+		event.GitBranch = branch
+	}
+	return nil
 }
 
 func closeEventWorkload(tx *sql.Tx, event *CanonicalEvent, payload map[string]interface{}, now time.Time) error {

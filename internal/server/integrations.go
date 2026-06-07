@@ -31,5 +31,6 @@ func (s *Server) integrationOptions() integrations.Options {
 		QuotaEnabled:        s.options.Quota.Enabled,
 		WebhooksEnabled:     s.options.Webhooks.Enabled,
 		OTLPReceiverEnabled: s.options.Integrations.OTLPReceiver.Enabled,
+		GatewayEnabled:      s.options.Gateway.Enabled,
 	}
 }

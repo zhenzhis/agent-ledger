@@ -51,14 +51,21 @@ func (d *DB) hasUsageRows(from, to time.Time, source, model, project string) boo
 func (d *DB) getRawChargeback(from, to time.Time, source, model, project string, groups map[string]string, machineName, gitAuthor string, limit int) ([]ChargebackRow, error) {
 	filter, fa := buildUsageFilterAlias("u", source, model, project)
 	args := append([]interface{}{from, to}, fa...)
-	rows, err := d.db.Query(`SELECT u.source,u.model,u.project,COUNT(*),
+	rows, err := d.db.Query(`SELECT u.source,u.model,COALESCE(NULLIF(w.project,''),u.project,''),COALESCE(w.repo,''),COALESCE(w.owner,''),COALESCE(w.team,''),COUNT(*),
 		COUNT(DISTINCT u.source || char(0) || u.session_id),
 		COALESCE(SUM(u.input_tokens+u.cache_read_input_tokens+u.cache_creation_input_tokens+u.output_tokens),0),
 		COALESCE(SUM(u.cost_usd),0),
 		SUM(CASE WHEN u.cost_usd=0 THEN 1 ELSE 0 END)
 		FROM usage_records u
+		LEFT JOIN (
+			SELECT ws.source,ws.session_id,
+				COALESCE(MAX(CASE WHEN COALESCE(w.outcome,'')<>'legacy-session-derived' THEN ws.workload_id END),MAX(ws.workload_id)) AS workload_id
+			FROM workload_sessions ws JOIN workloads w ON w.workload_id=ws.workload_id
+			GROUP BY ws.source,ws.session_id
+		) owner ON owner.source=u.source AND owner.session_id=u.session_id
+		LEFT JOIN workloads w ON w.workload_id=owner.workload_id
 		WHERE u.timestamp >= ? AND u.timestamp < ?`+filter+`
-		GROUP BY u.source,u.model,u.project`, args...)
+		GROUP BY u.source,u.model,COALESCE(NULLIF(w.project,''),u.project,''),w.repo,w.owner,w.team`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +73,11 @@ func (d *DB) getRawChargeback(from, to time.Time, source, model, project string,
 	agg := map[string]*ChargebackRow{}
 	for rows.Next() {
 		var r ChargebackRow
-		if err := rows.Scan(&r.Source, &r.Model, &r.Project, &r.Calls, &r.Sessions, &r.Tokens, &r.CostUSD, &r.UnpricedCalls); err != nil {
+		var repo, owner, explicitTeam string
+		if err := rows.Scan(&r.Source, &r.Model, &r.Project, &repo, &owner, &explicitTeam, &r.Calls, &r.Sessions, &r.Tokens, &r.CostUSD, &r.UnpricedCalls); err != nil {
 			return nil, err
 		}
-		r.Team, r.MappingSource, r.Confidence = resolveShowbackTeam(groups, r.Project, "", "", "", machineName, gitAuthor)
+		r.Team, r.MappingSource, r.Confidence = resolveShowbackTeam(groups, r.Project, repo, owner, explicitTeam, machineName, gitAuthor)
 		r.DataSource = "usage_records"
 		mergeChargeback(agg, r)
 	}

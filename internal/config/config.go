@@ -25,6 +25,7 @@ type Config struct {
 	Webhooks     WebhookConfig      `yaml:"webhooks"`
 	Teams        TeamsConfig        `yaml:"teams"`
 	Integrations IntegrationsConfig `yaml:"integrations"`
+	Gateway      GatewayConfig      `yaml:"gateway"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -178,6 +179,16 @@ type IntegrationsConfig struct {
 	OTLPReceiver OTLPReceiverConfig `yaml:"otlp_receiver"`
 }
 
+// GatewayConfig controls the optional local provider gateway.
+type GatewayConfig struct {
+	Enabled          bool          `yaml:"enabled"`
+	UpstreamBaseURL  string        `yaml:"upstream_base_url"`
+	APIKeyEnv        string        `yaml:"api_key_env"`
+	MaxBodyBytes     int64         `yaml:"max_body_bytes"`
+	MaxResponseBytes int64         `yaml:"max_response_bytes"`
+	Timeout          time.Duration `yaml:"timeout"`
+}
+
 // OTLPReceiverConfig controls the local OTLP HTTP/JSON traces receiver.
 type OTLPReceiverConfig struct {
 	Enabled      bool  `yaml:"enabled"`
@@ -250,6 +261,14 @@ func DefaultConfig() *Config {
 		Integrations: IntegrationsConfig{
 			OTLPReceiver: OTLPReceiverConfig{Enabled: false, MaxBodyBytes: 4 << 20, MaxSpans: 1000},
 		},
+		Gateway: GatewayConfig{
+			Enabled:          false,
+			UpstreamBaseURL:  "https://api.openai.com",
+			APIKeyEnv:        "OPENAI_API_KEY",
+			MaxBodyBytes:     4 << 20,
+			MaxResponseBytes: 32 << 20,
+			Timeout:          120 * time.Second,
+		},
 	}
 }
 
@@ -312,6 +331,21 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Integrations.OTLPReceiver.MaxSpans <= 0 {
 		cfg.Integrations.OTLPReceiver.MaxSpans = 1000
+	}
+	if cfg.Gateway.UpstreamBaseURL == "" {
+		cfg.Gateway.UpstreamBaseURL = "https://api.openai.com"
+	}
+	if cfg.Gateway.APIKeyEnv == "" {
+		cfg.Gateway.APIKeyEnv = "OPENAI_API_KEY"
+	}
+	if cfg.Gateway.MaxBodyBytes <= 0 {
+		cfg.Gateway.MaxBodyBytes = 4 << 20
+	}
+	if cfg.Gateway.MaxResponseBytes <= 0 {
+		cfg.Gateway.MaxResponseBytes = 32 << 20
+	}
+	if cfg.Gateway.Timeout <= 0 {
+		cfg.Gateway.Timeout = 120 * time.Second
 	}
 	if cfg.Pricing.StaleAfter <= 0 {
 		cfg.Pricing.StaleAfter = 24 * time.Hour

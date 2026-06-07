@@ -93,6 +93,7 @@ func ConvertProviderCalls(calls []ProviderCall) ([]storage.CanonicalEvent, error
 			"output_tokens":                call.Usage.OutputTokens,
 			"reasoning_output_tokens":      call.Usage.ReasoningOutputTokens,
 			"cost_usd":                     call.Usage.CostUSD,
+			"latency_ms":                   metadataInt(call.Metadata, "latency_ms", "agent_ledger.latency_ms"),
 			"pricing_source":               firstNonEmpty(metadataString(call.Metadata, "pricing_source"), "provider-reported"),
 			"pricing_confidence":           firstNonEmpty(metadataString(call.Metadata, "pricing_confidence"), "provider-usage"),
 			"finish_reason":                metadataString(call.Metadata, "finish_reason"),
@@ -316,6 +317,15 @@ func intValue(value interface{}) int {
 	default:
 		return 0
 	}
+}
+
+func metadataInt(metadata map[string]interface{}, keys ...string) int {
+	for _, key := range keys {
+		if value, ok := metadata[key]; ok {
+			return intValue(value)
+		}
+	}
+	return 0
 }
 
 func providerConfidence(call ProviderCall) float64 {

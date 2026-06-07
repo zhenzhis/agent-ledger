@@ -111,9 +111,19 @@ integrations:
     enabled: false
     max_body_bytes: 4194304
     max_spans: 1000
+
+gateway:
+  enabled: false
+  upstream_base_url: "https://api.openai.com"
+  api_key_env: "OPENAI_API_KEY"
+  max_body_bytes: 4194304
+  max_response_bytes: 33554432
+  timeout: 120s
 ```
 
 Use `pricing.overrides` for enterprise contracts, relay pricing, regional multipliers, or provider-specific discounts.
+
+The optional gateway is a local OpenAI-compatible Chat Completions proxy. It is disabled by default, supports non-streaming JSON requests only, reads the upstream API key from the configured environment variable, and records token usage plus audit metadata without storing request messages or response content.
 
 ## Pricing Model
 
@@ -193,11 +203,12 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `POST /api/otlp/v1/traces` | Same receiver under the API namespace for local reverse proxies |
 | `POST /api/a2a/tasks` | Convert A2A JSON task snapshots/events into workload/run/artifact/evaluation events |
 | `POST /api/provider/calls` | Convert provider response usage envelopes into canonical model-call events |
+| `POST /gateway/openai/v1/chat/completions` | Optional non-streaming OpenAI-compatible gateway when `gateway.enabled` is true |
 | `GET /api/reconciliation/status` | Recent local/provider bill comparisons |
 | `POST /api/reconciliation/import` | Import manual summary or provider CSV/JSON statement for local reconciliation |
 | `GET /api/router/simulate?to_model=gpt-5-mini&ratio=0.5` | Simulate cost impact of model-routing changes without mutating the ledger |
 | `GET /api/preflight/estimate?task=refactor&project=repo-name` | Estimate likely cost/tokens before starting an agent workload |
-| `GET /api/chargeback` | Team/project/source/model showback using raw usage first, canonical model calls as fallback |
+| `GET /api/chargeback` | Team/project/source/model showback using usage records joined with workload metadata |
 | `GET /api/fleet-attribution` | Sub-agent, parent run, and parallel-run cost attribution |
 | `GET /api/wrapped?period=monthly&format=markdown` | Monthly/weekly/yearly Agent Wrapped summary without prompt analysis |
 | `POST /api/policy/evaluate` | Evaluate local advisory policy rules and optionally record decisions |
@@ -259,7 +270,7 @@ Current prompts:
 - `agent-ledger/cost-review`
 - `agent-ledger/incident-evidence`
 
-Canonical event ingest supports workload, run, model-call, tool-call, context-ref, artifact, evaluation, and policy-decision events. Payloads are metadata-only; raw prompt/content keys are rejected instead of silently persisted. `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations` expose the current connector/protocol capability catalog without leaking local source paths. `POST /api/otel/genai` and `agent-ledger otel ingest` accept OpenTelemetry GenAI JSON spans and persist only selected metadata/token fields. When explicitly enabled, `POST /v1/traces` and `POST /api/otlp/v1/traces` accept OTLP HTTP/JSON trace batches with body and span-count limits; OTLP protobuf/gRPC are intentionally rejected until conformance tests are added. `POST /api/a2a/tasks` and `agent-ledger a2a ingest` accept A2A task snapshots/events and persist task lifecycle metadata while excluding message/history/artifact-part content. `POST /api/provider/calls` and `agent-ledger provider ingest` accept OpenAI-compatible, Anthropic-style, and LiteLLM-style usage envelopes while excluding request/response message content. `POST /api/reconciliation/import` and `agent-ledger reconcile import` accept local provider CSV/JSON billing exports, store only summary totals, statement hash, window, and warnings, and compare them with the local ledger for the same window.
+Canonical event ingest supports workload, run, model-call, tool-call, context-ref, artifact, evaluation, and policy-decision events. Payloads are metadata-only; raw prompt/content keys are rejected instead of silently persisted. Canonical `model.call` events are also projected into `usage_records` so dashboard, budget, export, and preflight APIs use one token source where possible. `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations` expose the current connector/protocol capability catalog without leaking local source paths. `POST /api/otel/genai` and `agent-ledger otel ingest` accept OpenTelemetry GenAI JSON spans and persist only selected metadata/token fields. When explicitly enabled, `POST /v1/traces` and `POST /api/otlp/v1/traces` accept OTLP HTTP/JSON trace batches with body and span-count limits; OTLP protobuf/gRPC are intentionally rejected until conformance tests are added. `POST /api/a2a/tasks` and `agent-ledger a2a ingest` accept A2A task snapshots/events and persist task lifecycle metadata while excluding message/history/artifact-part content. `POST /api/provider/calls` and `agent-ledger provider ingest` accept OpenAI-compatible, Anthropic-style, and LiteLLM-style usage envelopes while excluding request/response message content. When explicitly enabled, `POST /gateway/openai/v1/chat/completions` proxies non-streaming OpenAI-compatible requests in memory, applies local policy checks, writes usage/audit metadata, and returns `X-Agent-Ledger-Usage-Recorded` to expose metering state. `POST /api/reconciliation/import` and `agent-ledger reconcile import` accept local provider CSV/JSON billing exports, store only summary totals, statement hash, window, and warnings, and compare them with the local ledger for the same window.
 
 ## Troubleshooting Data Accuracy
 
@@ -298,6 +309,7 @@ If costs differ from a provider invoice:
 - Manual operations are localhost-only by default.
 - Optional RBAC supports `viewer`, `operator`, and `admin` tokens.
 - Policy approval requests are local metadata records. They authorize only matching action/target retries and do not include prompt content.
+- The optional provider gateway is disabled by default. It forwards prompt content only to the configured upstream in memory, reads API keys from environment variables, and stores usage metadata rather than message content.
 - Privacy presets can hide paths, project names, branches, machine names, and session IDs.
 - Webhooks are disabled by default and should only send redacted summaries.
 - Offline bundles are local JSON exports. Set `AGENT_LEDGER_BUNDLE_KEY` and pass `signed=1` / `--signed` to add an HMAC-SHA256 signature; use `verify=1` / `--verify` on import to require signature verification.
@@ -323,9 +335,9 @@ Releases use GoReleaser for platform archives and GitHub Actions for GHCR images
 
 ## Roadmap
 
-Implemented foundation: canonical workload schema, metadata-only canonical event ingest, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP/JSON traces receiver, A2A task telemetry mapping, provider usage envelope mapping, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, local policy approval requests, CLI workload/event/policy/router/replay/badge/preflight commands, CLI run wrapper, and local MCP stdio tools/resources/prompts.
+Implemented foundation: canonical workload schema, metadata-only canonical event ingest, canonical-to-usage projection, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP/JSON traces receiver, A2A task telemetry mapping, provider usage envelope mapping, optional non-streaming local OpenAI-compatible gateway, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, local policy approval requests, CLI workload/event/policy/router/replay/badge/preflight commands, CLI run wrapper, and local MCP stdio tools/resources/prompts.
 
-Planned integrations: OTLP protobuf/gRPC conformance, live provider/API gateway mode, Postgres team mode, OIDC/SSO, richer MCP subscriptions, and multi-actor approval notifications.
+Planned integrations: OTLP protobuf/gRPC conformance, streaming gateway capture, provider-native gateway adapters, Postgres team mode, OIDC/SSO, richer MCP subscriptions, and multi-actor approval notifications.
 
 ## License
 

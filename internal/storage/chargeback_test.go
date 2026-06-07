@@ -28,7 +28,7 @@ func TestGetChargebackUsesRawUsageAndTeamMapping(t *testing.T) {
 		t.Fatalf("IngestCanonicalEvent: %v", err)
 	}
 
-	rows, err := db.GetChargeback(ts.Add(-time.Hour), ts.Add(time.Hour), "", "", "", map[string]string{"project:alpha": "research"}, "", "", 10)
+	rows, err := db.GetChargeback(ts.Add(-time.Hour), ts.Add(time.Hour), "codex", "", "", map[string]string{"project:alpha": "research"}, "", "", 10)
 	if err != nil {
 		t.Fatalf("GetChargeback: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestGetChargebackUsesRawUsageAndTeamMapping(t *testing.T) {
 	}
 }
 
-func TestGetChargebackFallsBackToCanonicalWorkloadTeam(t *testing.T) {
+func TestGetChargebackUsesCanonicalProjectionWithWorkloadTeam(t *testing.T) {
 	db := tempDB(t)
 	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 	start, err := db.IngestCanonicalEvent(CanonicalEvent{
@@ -83,8 +83,8 @@ func TestGetChargebackFallsBackToCanonicalWorkloadTeam(t *testing.T) {
 		t.Fatalf("rows=%d %+v", len(rows), rows)
 	}
 	row := rows[0]
-	if row.Team != "platform" || row.MappingSource != "workload.team" || row.DataSource != "model_calls" {
-		t.Fatalf("unexpected canonical mapping: %+v", row)
+	if row.Team != "platform" || row.MappingSource != "workload.team" || row.DataSource != "usage_records" || row.Project != "agent-ledger" {
+		t.Fatalf("unexpected canonical projection mapping: %+v", row)
 	}
 	if row.Calls != 1 || row.Sessions != 1 || row.Tokens != 125 || !near(row.CostUSD, 1.25, 0.000001) {
 		t.Fatalf("unexpected canonical aggregation: %+v", row)

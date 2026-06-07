@@ -201,6 +201,7 @@ func main() {
 		Webhooks:     cfg.Webhooks,
 		Teams:        cfg.Teams,
 		Integrations: cfg.Integrations,
+		Gateway:      cfg.Gateway,
 		Pricing:      cfg.Pricing,
 		Sources:      sourceOptions,
 		Scan:         scanSource,

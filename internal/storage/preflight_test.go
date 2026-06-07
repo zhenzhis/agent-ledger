@@ -60,7 +60,7 @@ func TestEstimatePreflightCostEmpty(t *testing.T) {
 	}
 }
 
-func TestEstimatePreflightCostFallsBackToCanonicalModelCalls(t *testing.T) {
+func TestEstimatePreflightCostUsesCanonicalUsageProjection(t *testing.T) {
 	db := tempDB(t)
 	ts := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	payload, _ := json.Marshal(map[string]interface{}{
@@ -88,10 +88,10 @@ func TestEstimatePreflightCostFallsBackToCanonicalModelCalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EstimatePreflightCost canonical: %v", err)
 	}
-	if report.Method != "canonical-model-call-median-with-task-multiplier" || report.Samples != 1 {
-		t.Fatalf("unexpected canonical method: %+v", report)
+	if report.Method != "local-usage-session-median-with-task-multiplier" || report.Samples != 1 {
+		t.Fatalf("unexpected projection method: %+v", report)
 	}
 	if report.Estimate.Tokens != 150 || !near(report.Estimate.CostUSD, 1.5, 0.000001) {
-		t.Fatalf("unexpected canonical estimate: %+v", report)
+		t.Fatalf("unexpected projection estimate: %+v", report)
 	}
 }

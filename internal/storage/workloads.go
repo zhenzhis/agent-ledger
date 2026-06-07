@@ -241,6 +241,16 @@ func (d *DB) BackfillWorkloadsFromUsage(from, to time.Time) error {
 	for _, s := range legacy {
 		workloadID := stableID("wl", s.source+"\x00"+s.sessionID)
 		runID := stableID("run", s.source+"\x00"+s.sessionID)
+		var nonLegacyOwners int
+		if err := tx.QueryRow(`SELECT COUNT(*)
+			FROM workload_sessions ws JOIN workloads w ON ws.workload_id=w.workload_id
+			WHERE ws.source=? AND ws.session_id=? AND ws.workload_id<>? AND COALESCE(w.outcome,'')<>'legacy-session-derived'`,
+			s.source, s.sessionID, workloadID).Scan(&nonLegacyOwners); err != nil {
+			return err
+		}
+		if nonLegacyOwners > 0 {
+			continue
+		}
 		repo := deriveRepo(s.project, s.cwd)
 		goal := fmt.Sprintf("%s session %s", s.source, shortID(s.sessionID))
 		if _, err := tx.Exec(`INSERT INTO workloads(workload_id,goal,status,source,project,repo,git_branch,budget_usd,outcome,confidence,created_at,updated_at,closed_at)

@@ -19,6 +19,7 @@ Agent Ledger runs locally and reads local agent usage files. The default deploym
 - `agent-ledger mcp` is a local stdio tool surface. Treat the launching agent as the operator and do not connect it to untrusted hosts without sandboxing and policy review.
 - MCP resources and prompts expose metadata-only local context and templates; they must not be extended to include raw prompts, transcripts, secrets, or file contents.
 - The OTLP HTTP/JSON receiver is disabled by default, rejects OTLP protobuf/gRPC, and still requires localhost access or configured auth.
+- The optional OpenAI-compatible provider gateway is disabled by default. It forwards request bodies only in memory to the configured upstream, reads API keys only from environment variables, and records usage/audit metadata instead of prompt or response content.
 - Local policy evaluation is advisory unless your wrapper or gateway enforces it. Policy decisions record rule metadata, role, workload ID, and action, but must not record prompt text, secrets, or raw tool output.
 - Policy approval requests are local metadata records and authorize only matching action/target retries through an explicit approval id.
 - Webhooks are disabled by default.
@@ -28,7 +29,7 @@ Agent Ledger runs locally and reads local agent usage files. The default deploym
 
 Agent Ledger should not store prompt content, secrets, API keys, webhook URLs, private keys, or raw secret-bearing logs. Audit logs should record operation metadata, not raw prompt or file content.
 
-Canonical event ingest accepts metadata only and rejects obvious raw prompt/content payload keys. Integrations should send hashes, IDs, counts, timings, and status instead of raw prompts, transcripts, or model output.
+Canonical event ingest accepts metadata only and rejects obvious raw prompt/content payload keys. Canonical model-call projection writes token metadata into `usage_records`; it must not include prompt text, transcripts, model output, or API keys. Integrations should send hashes, IDs, counts, timings, and status instead of raw prompts, transcripts, or model output.
 
 Offline bundles are local JSON files. They always include a payload SHA-256 hash and can include an HMAC-SHA256 signature when `AGENT_LEDGER_BUNDLE_KEY` is set. Do not put signing keys in config files, reports, screenshots, or durable logs.
 

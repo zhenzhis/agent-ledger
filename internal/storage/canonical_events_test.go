@@ -164,6 +164,13 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 	if detail.ModelCalls[0].Tokens != 1550 || detail.ModelCalls[0].CostUSD != 0.42 {
 		t.Fatalf("model call=%#v", detail.ModelCalls[0])
 	}
+	callRows, err := db.GetModelCalls(ts.Add(-time.Hour), ts.Add(time.Hour), "codex", "", "", 10)
+	if err != nil {
+		t.Fatalf("model call analytics: %v", err)
+	}
+	if len(callRows) != 1 || callRows[0].Calls != 1 || callRows[0].Tokens != 1550 || callRows[0].CostUSD != 0.42 {
+		t.Fatalf("usage projection missing from analytics: %+v", callRows)
+	}
 	if len(detail.Artifacts) != 1 || len(detail.Evaluations) != 1 || len(detail.Policies) != 1 {
 		t.Fatalf("artifacts=%d evaluations=%d policies=%d", len(detail.Artifacts), len(detail.Evaluations), len(detail.Policies))
 	}

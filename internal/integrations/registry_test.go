@@ -17,8 +17,8 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	if catalog.Contract != "agent-ledger.integration-capability-catalog" || catalog.Version != "v1" {
 		t.Fatalf("unexpected catalog identity: %#v", catalog)
 	}
-	if catalog.Summary.Implemented == 0 || catalog.Summary.Planned == 0 {
-		t.Fatalf("expected implemented and planned capabilities: %#v", catalog.Summary)
+	if catalog.Summary.Implemented == 0 || catalog.Summary.Experimental == 0 {
+		t.Fatalf("expected implemented and experimental capabilities: %#v", catalog.Summary)
 	}
 	if catalog.Summary.EnabledCollectors == 0 {
 		t.Fatalf("expected enabled collector count: %#v", catalog.Summary)
@@ -28,12 +28,15 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapability(t, catalog, "protocol.otlp_receiver", "experimental", false)
 	assertCapability(t, catalog, "protocol.a2a", "implemented", true)
 	assertCapability(t, catalog, "gateway.provider_api", "implemented", true)
+	assertCapability(t, catalog, "gateway.provider_live_proxy", "experimental", false)
 	assertCapability(t, catalog, "finops.provider_reconciliation", "implemented", true)
 	assertCapability(t, catalog, "governance.policy_evaluator", "implemented", true)
 
 	cfg.Integrations.OTLPReceiver.Enabled = true
+	cfg.Gateway.Enabled = true
 	enabledCatalog := Registry(OptionsFromConfig(cfg))
 	assertCapability(t, enabledCatalog, "protocol.otlp_receiver", "experimental", true)
+	assertCapability(t, enabledCatalog, "gateway.provider_live_proxy", "experimental", true)
 }
 
 func TestCollectorCapabilitiesDoNotExposeRawPaths(t *testing.T) {

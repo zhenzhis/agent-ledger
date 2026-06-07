@@ -56,6 +56,7 @@ type Options struct {
 	Webhooks     config.WebhookConfig
 	Teams        config.TeamsConfig
 	Integrations config.IntegrationsConfig
+	Gateway      config.GatewayConfig
 	Pricing      config.PricingConfig
 	Sources      []SourceOption
 	Scan         func(source string, reset bool) error
@@ -97,6 +98,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/v1/traces", s.handleOTLPTraces)
 	mux.HandleFunc("/api/a2a/tasks", s.handleA2ATasks)
 	mux.HandleFunc("/api/provider/calls", s.handleProviderCalls)
+	mux.HandleFunc("/gateway/openai/v1/chat/completions", s.handleOpenAIChatGateway)
 	mux.HandleFunc("/api/health/ingestion", s.handleIngestionHealth)
 	mux.HandleFunc("/api/scan", s.handleScan)
 	mux.HandleFunc("/api/recalculate-costs", s.handleRecalculateCosts)

@@ -111,9 +111,19 @@ integrations:
     enabled: false
     max_body_bytes: 4194304
     max_spans: 1000
+
+gateway:
+  enabled: false
+  upstream_base_url: "https://api.openai.com"
+  api_key_env: "OPENAI_API_KEY"
+  max_body_bytes: 4194304
+  max_response_bytes: 33554432
+  timeout: 120s
 ```
 
 企业合同价、三方中转价、地区倍率和内部折扣请通过 `pricing.overrides` 配置。
+
+可选 gateway 是本地 OpenAI-compatible Chat Completions 代理。它默认关闭，只支持非流式 JSON 请求，只从配置的环境变量读取上游 API key，并只记录 token usage 与审计元数据，不保存 request messages 或 response content。
 
 ## 价格与成本
 
@@ -193,11 +203,12 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `POST /api/otlp/v1/traces` | 同一 receiver 的 API 命名空间路径，便于本地反向代理 |
 | `POST /api/a2a/tasks` | 将 A2A JSON task snapshot/event 转成 workload/run/artifact/evaluation events |
 | `POST /api/provider/calls` | 将 provider response usage envelope 转成 canonical model-call events |
+| `POST /gateway/openai/v1/chat/completions` | 显式开启 `gateway.enabled` 后可用的非流式 OpenAI-compatible gateway |
 | `GET /api/reconciliation/status` | 查看最近本地账本与 provider 账单对账 |
 | `POST /api/reconciliation/import` | 导入手动 summary 或 provider CSV/JSON 账单并做本地对账 |
 | `GET /api/router/simulate?to_model=gpt-5-mini&ratio=0.5` | 模拟模型路由调整的费用影响，不修改账本 |
 | `GET /api/preflight/estimate?task=refactor&project=repo-name` | 开始 agent 任务前估算可能费用、token 与调用量 |
-| `GET /api/chargeback` | 团队/项目/source/model showback；优先使用 raw usage，无 raw 时 fallback 到 canonical model calls |
+| `GET /api/chargeback` | 团队/项目/source/model showback；使用 usage records 并关联 workload metadata |
 | `GET /api/fleet-attribution` | sub-agent、parent run 与并行 run 成本归因 |
 | `GET /api/wrapped?period=monthly&format=markdown` | 月度/周度/年度 Agent Wrapped 摘要，不分析 prompt 内容 |
 | `POST /api/policy/evaluate` | 评估本地 advisory policy，并可选择写入 policy decision |
@@ -259,7 +270,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 - `agent-ledger/cost-review`
 - `agent-ledger/incident-evidence`
 
-Canonical event ingest 支持 workload、run、model call、tool call、context ref、artifact、evaluation、policy decision 事件。Payload 只允许元数据；如果出现 raw prompt/content 相关键会直接失败，不会静默持久化。`GET /api/integrations`、`agent-ledger integrations` 与 `ledger.integrations` 会暴露当前 connector/protocol 能力目录，但不会泄露本地 source 原始路径。`POST /api/otel/genai` 与 `agent-ledger otel ingest` 支持 OpenTelemetry GenAI JSON span，并只保留经过挑选的元数据和 token 字段。显式开启后，`POST /v1/traces` 与 `POST /api/otlp/v1/traces` 可接收 OTLP HTTP/JSON trace batch，并有 body 与 span 数量上限；OTLP protobuf/gRPC 在加入 conformance tests 前会被明确拒绝。`POST /api/a2a/tasks` 与 `agent-ledger a2a ingest` 支持 A2A task snapshot/event，只保留任务生命周期元数据，不保存 message/history/artifact part 内容。`POST /api/provider/calls` 与 `agent-ledger provider ingest` 支持 OpenAI-compatible、Anthropic-style、LiteLLM-style usage envelope，不保存 request/response message 内容。`POST /api/reconciliation/import` 与 `agent-ledger reconcile import` 支持导入本地 provider CSV/JSON 账单，只保存汇总金额、账单 hash、窗口和 warning，并与相同窗口的本地账本做差异比较。
+Canonical event ingest 支持 workload、run、model call、tool call、context ref、artifact、evaluation、policy decision 事件。Payload 只允许元数据；如果出现 raw prompt/content 相关键会直接失败，不会静默持久化。Canonical `model.call` 也会投影到 `usage_records`，让 dashboard、预算、导出和 preflight 尽量使用同一个 token 来源。`GET /api/integrations`、`agent-ledger integrations` 与 `ledger.integrations` 会暴露当前 connector/protocol 能力目录，但不会泄露本地 source 原始路径。`POST /api/otel/genai` 与 `agent-ledger otel ingest` 支持 OpenTelemetry GenAI JSON span，并只保留经过挑选的元数据和 token 字段。显式开启后，`POST /v1/traces` 与 `POST /api/otlp/v1/traces` 可接收 OTLP HTTP/JSON trace batch，并有 body 与 span 数量上限；OTLP protobuf/gRPC 在加入 conformance tests 前会被明确拒绝。`POST /api/a2a/tasks` 与 `agent-ledger a2a ingest` 支持 A2A task snapshot/event，只保留任务生命周期元数据，不保存 message/history/artifact part 内容。`POST /api/provider/calls` 与 `agent-ledger provider ingest` 支持 OpenAI-compatible、Anthropic-style、LiteLLM-style usage envelope，不保存 request/response message 内容。显式开启后，`POST /gateway/openai/v1/chat/completions` 会在内存中代理非流式 OpenAI-compatible 请求，执行本地 policy 检查，写入 usage/audit 元数据，并通过 `X-Agent-Ledger-Usage-Recorded` 暴露记账状态。`POST /api/reconciliation/import` 与 `agent-ledger reconcile import` 支持导入本地 provider CSV/JSON 账单，只保存汇总金额、账单 hash、窗口和 warning，并与相同窗口的本地账本做差异比较。
 
 ## 数据准确性排障
 
@@ -298,6 +309,7 @@ agent-ledger doctor --format markdown
 - 副作用操作默认 localhost-only。
 - 可选 RBAC：`viewer`、`operator`、`admin`。
 - 策略审批请求只保存本地 metadata。批准后只授权相同 action/target 的重试，不包含 prompt 内容。
+- 可选 provider gateway 默认关闭。它只在内存中把 prompt content 转发给配置的上游，只从环境变量读取 API key，并只保存 usage 元数据而不是消息内容。
 - 隐私 preset 可隐藏路径、项目、分支、机器名和 session id。
 - Webhook 默认关闭，只应发送脱敏摘要。
 - Offline bundle 是本地 JSON 导出。设置 `AGENT_LEDGER_BUNDLE_KEY` 并使用 `signed=1` / `--signed` 可加入 HMAC-SHA256 签名；导入时使用 `verify=1` / `--verify` 可强制验证签名。
@@ -323,9 +335,9 @@ Release 使用 GoReleaser 构建多平台归档，使用 GitHub Actions 发布 G
 
 ## Roadmap
 
-已落地基础：canonical workload schema、metadata-only canonical event ingest、OpenTelemetry GenAI JSON span mapping、可选本地 OTLP HTTP/JSON traces receiver、A2A task telemetry mapping、provider usage envelope mapping、provider 账单导入对账、model router simulation、preflight cost estimates、session cost replay、repo cost badge、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、本地策略审批请求、CLI workload/event/policy/router/replay/badge/preflight 命令、CLI run wrapper 和本地 MCP stdio tools/resources/prompts。
+已落地基础：canonical workload schema、metadata-only canonical event ingest、canonical-to-usage projection、OpenTelemetry GenAI JSON span mapping、可选本地 OTLP HTTP/JSON traces receiver、A2A task telemetry mapping、provider usage envelope mapping、可选非流式本地 OpenAI-compatible gateway、provider 账单导入对账、model router simulation、preflight cost estimates、session cost replay、repo cost badge、integration capability catalog、signed offline bundle export/import、旧 session 自动 backfill、workload API、workload CSV 导出、本地策略审批请求、CLI workload/event/policy/router/replay/badge/preflight 命令、CLI run wrapper 和本地 MCP stdio tools/resources/prompts。
 
-后续路线：OTLP protobuf/gRPC conformance、live provider/API gateway mode、Postgres 团队模式、OIDC/SSO、更完整的 MCP subscriptions、多操作者审批通知。
+后续路线：OTLP protobuf/gRPC conformance、streaming gateway capture、provider-native gateway adapters、Postgres 团队模式、OIDC/SSO、更完整的 MCP subscriptions、多操作者审批通知。
 
 ## License
 
