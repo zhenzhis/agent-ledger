@@ -24,6 +24,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 		t.Fatalf("expected enabled collector count: %#v", catalog.Summary)
 	}
 	assertCapability(t, catalog, "protocol.canonical_events.http", "implemented", true)
+	assertCapability(t, catalog, "protocol.adapter_conformance", "implemented", true)
 	assertCapability(t, catalog, "protocol.workload_event_feed", "implemented", true)
 	assertCapability(t, catalog, "protocol.opentelemetry_genai", "implemented", true)
 	assertCapability(t, catalog, "protocol.otlp_receiver", "experimental", false)
@@ -76,6 +77,7 @@ func TestRegistryAnnotatesReadOnlyRuntimeCapabilities(t *testing.T) {
 	}
 	assertRuntimeCapability(t, catalog, "protocol.canonical_events.http", false, true, false)
 	assertRuntimeCapability(t, catalog, "collector.codex", false, true, false)
+	assertRuntimeCapability(t, catalog, "protocol.adapter_conformance", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.mcp_stdio", true, true, true)
 	assertRuntimeCapability(t, catalog, "protocol.offline_bundle", true, true, true)
 	assertRuntimeCapability(t, catalog, "governance.policy_evaluator", true, true, true)

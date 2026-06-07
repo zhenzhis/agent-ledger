@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"net/http"
 
 	"github.com/zhenzhis/agent-ledger/internal/integrations"
@@ -28,6 +29,27 @@ func (s *Server) handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, s.runtimeStatus())
+}
+
+func (s *Server) handleAdapterConformance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) {
+		return
+	}
+	raw := bytes.Buffer{}
+	if _, err := raw.ReadFrom(http.MaxBytesReader(w, r.Body, 4<<20)); err != nil {
+		badRequest(w, err)
+		return
+	}
+	report, err := integrations.RunAdapterConformance(r.URL.Query().Get("kind"), raw.Bytes())
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	writeJSON(w, report)
 }
 
 func (s *Server) integrationOptions() integrations.Options {

@@ -411,6 +411,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runWrappedCLI(args[1:], db)
 	case "event":
 		return runEventCLI(args[1:], db)
+	case "adapter":
+		return runAdapterCLI(args[1:])
 	case "bundle":
 		return runBundleCLI(args[1:], db, !cfg.RBAC.ReadOnly)
 	case "policy":
@@ -880,6 +882,21 @@ func runProviderCLI(args []string, db *storage.DB) error {
 		results = append(results, result)
 	}
 	return json.NewEncoder(os.Stdout).Encode(results)
+}
+
+func runAdapterCLI(args []string) error {
+	if len(args) == 0 || args[0] != "conformance" {
+		return fmt.Errorf("usage: agent-ledger adapter conformance [--kind auto|canonical|provider|otel|a2a] [--file fixture.json]")
+	}
+	raw, err := readCLIInput(args[1:], "--file", 4<<20)
+	if err != nil {
+		return err
+	}
+	report, err := integrations.RunAdapterConformance(cliValue(args[1:], "--kind"), raw)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(report)
 }
 
 func runProjectionCLI(args []string, db *storage.DB) error {

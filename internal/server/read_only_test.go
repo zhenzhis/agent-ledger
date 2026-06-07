@@ -186,3 +186,36 @@ func TestReadOnlyAllowsCanonicalEventValidationWithoutWrites(t *testing.T) {
 		t.Fatalf("validate wrote canonical events: %#v", quality.Provenance)
 	}
 }
+
+func TestReadOnlyAllowsAdapterConformanceWithoutWrites(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{RBAC: config.RBACConfig{ReadOnly: true}})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/integrations/conformance?kind=canonical", strings.NewReader(`{
+		"source":"codex",
+		"event_type":"workload.started",
+		"payload":{"goal":"adapter conformance only"}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleAdapterConformance(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("conformance status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		OK            bool `json:"ok"`
+		DecodedEvents int  `json:"decoded_events"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode conformance response: %v", err)
+	}
+	if !body.OK || body.DecodedEvents != 1 {
+		t.Fatalf("unexpected conformance response: %+v", body)
+	}
+	quality, err := db.GetDataQuality(time.Hour)
+	if err != nil {
+		t.Fatalf("GetDataQuality: %v", err)
+	}
+	if quality.Provenance == nil || quality.Provenance.Events != 0 {
+		t.Fatalf("conformance wrote canonical events: %#v", quality.Provenance)
+	}
+}

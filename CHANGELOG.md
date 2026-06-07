@@ -13,6 +13,7 @@
 - Async run start, heartbeat, and liveness ledger with `agent_run_events`, run snapshot fields, `agent.run.heartbeat` canonical events, `POST /api/agent-runs`, `POST /api/agent-runs/heartbeat`, `GET /api/agent-runs/liveness`, `agent-ledger workload start-run|heartbeat|liveness`, and MCP `ledger.start_run` / `ledger.heartbeat_run` / `ledger.run_liveness`.
 - Metadata-only canonical event schema and ingest through storage, `GET /api/event-schema`, `POST /api/events`, `agent-ledger event schema/ingest`, and `ledger.event_schema` / `ledger.record_event`.
 - Canonical event dry-run validation through `POST /api/events/validate` and `agent-ledger event validate`, sharing ingest validation without mutating SQLite.
+- Adapter conformance validation through `POST /api/integrations/conformance` and `agent-ledger adapter conformance`, covering canonical, provider, OpenTelemetry GenAI, and A2A fixtures without writing SQLite.
 - Canonical event provenance fields for future adapters: `schema_version`, `source_version`, `parser_version`, `raw_ref`, and `match_type`, persisted locally and included in offline bundle exports.
 - Data Quality and Doctor provenance checks for canonical events, including schema/source/parser coverage, raw reference coverage, match-type mix, confidence, and UI panel visibility.
 - Provenance metadata is now populated by OpenTelemetry, A2A, provider usage, and gateway adapters so downstream quality checks can distinguish source-reported data from reconstructed references.
