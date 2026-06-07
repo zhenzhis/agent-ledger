@@ -16,6 +16,7 @@ docker compose up -d --build
 ./agent-ledger integrations
 printf '{"trace_id":"t","span_id":"s","attributes":{"gen_ai.request.model":"gpt-5.5","gen_ai.usage.input_tokens":10,"gen_ai.usage.output_tokens":5,"agent_ledger.goal":"release smoke"}}\n' | ./agent-ledger otel convert
 printf '{"id":"task-release","contextId":"ctx-release","status":{"state":"completed"},"metadata":{"agent_ledger.goal":"release smoke"}}\n' | ./agent-ledger a2a convert
+printf '{"id":"resp-release","provider":"openai","model":"gpt-5.5","usage":{"input_tokens":10,"output_tokens":5},"metadata":{"agent_ledger.goal":"release smoke"}}\n' | ./agent-ledger provider convert
 printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | ./agent-ledger mcp
 printf '{"source":"local","event_type":"workload.started","payload":{"goal":"release smoke"}}\n' | ./agent-ledger event ingest
 AGENT_LEDGER_BUNDLE_KEY=test-key ./agent-ledger bundle export --signed --privacy > /tmp/agent-ledger-bundle.json

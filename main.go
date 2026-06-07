@@ -401,12 +401,47 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runOTelCLI(args[1:], db)
 	case "a2a":
 		return runA2ACLI(args[1:], db)
+	case "provider":
+		return runProviderCLI(args[1:], db)
 	case "mcp":
 		return mcp.New(db, cfg).Serve(os.Stdin, os.Stdout)
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
 	return nil
+}
+
+func runProviderCLI(args []string, db *storage.DB) error {
+	if len(args) == 0 || (args[0] != "convert" && args[0] != "ingest") {
+		return fmt.Errorf("usage: agent-ledger provider convert|ingest [--file response.json]")
+	}
+	raw, err := readCLIInput(args[1:], "--file", 4<<20)
+	if err != nil {
+		return err
+	}
+	calls, err := integrations.DecodeProviderCalls(raw)
+	if err != nil {
+		return err
+	}
+	events, err := integrations.ConvertProviderCalls(calls)
+	if err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return fmt.Errorf("no provider usage calls found")
+	}
+	if args[0] == "convert" {
+		return json.NewEncoder(os.Stdout).Encode(events)
+	}
+	results := make([]*storage.CanonicalEventResult, 0, len(events))
+	for _, event := range events {
+		result, err := db.IngestCanonicalEvent(event)
+		if err != nil {
+			return err
+		}
+		results = append(results, result)
+	}
+	return json.NewEncoder(os.Stdout).Encode(results)
 }
 
 func runA2ACLI(args []string, db *storage.DB) error {

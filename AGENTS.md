@@ -16,6 +16,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger integrations                # print privacy-safe integration capability catalog
 ./agent-ledger otel convert/ingest         # map OpenTelemetry GenAI JSON spans to canonical events
 ./agent-ledger a2a convert/ingest          # map A2A task snapshots/events to canonical events
+./agent-ledger provider convert/ingest     # map provider usage envelopes to canonical events
 ./agent-ledger bundle export/import        # offline JSON bundle for air-gapped aggregation
 ./agent-ledger policy evaluate --model gpt-5.5 --action model.call  # local advisory policy evaluation
 ./agent-ledger mcp                         # local stdio JSON-RPC tool surface

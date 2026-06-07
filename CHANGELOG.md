@@ -12,6 +12,7 @@
 - Privacy-safe integration capability catalog through `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations`, covering implemented collectors/protocols plus planned provider gateway surfaces.
 - OpenTelemetry GenAI JSON span mapping through `POST /api/otel/genai` and `agent-ledger otel convert|ingest`, projecting token metadata into canonical `model.call` plus hashed `context.ref` events while excluding prompt/completion message attributes.
 - A2A task telemetry mapping through `POST /api/a2a/tasks` and `agent-ledger a2a convert|ingest`, projecting task snapshots/events into workload, run, context, artifact, close, and evaluation events while excluding message/history/artifact-part content.
+- Provider usage envelope mapping through `POST /api/provider/calls` and `agent-ledger provider convert|ingest`, supporting OpenAI-compatible, Anthropic-style, and LiteLLM-style usage objects while excluding request/response message content.
 - Offline bundle export/import for air-gapped multi-machine aggregation, with metadata-only canonical event replay, payload SHA-256 integrity, optional HMAC-SHA256 signing, CLI commands, and REST endpoints.
 - Shared local policy evaluator across MCP, `POST /api/policy/evaluate`, and `agent-ledger policy evaluate`, with stable action severity and optional decision recording.
 - Legacy session backfill into workload/run/model-call records for immediate compatibility with existing local data.
