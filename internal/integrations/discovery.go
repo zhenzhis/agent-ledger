@@ -2,21 +2,24 @@ package integrations
 
 // DiscoveryProtocol is a compact protocol entry for automatic local discovery.
 type DiscoveryProtocol struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Category    string   `json:"category"`
-	Protocol    string   `json:"protocol"`
-	Direction   string   `json:"direction"`
-	Status      string   `json:"status"`
-	Maturity    string   `json:"maturity"`
-	Enabled     bool     `json:"enabled"`
-	Privacy     string   `json:"privacy"`
-	Endpoints   []string `json:"endpoints,omitempty"`
-	Commands    []string `json:"commands,omitempty"`
-	Tools       []string `json:"tools,omitempty"`
-	Resources   []string `json:"resources,omitempty"`
-	EventTypes  []string `json:"event_types,omitempty"`
-	DataClasses []string `json:"data_classes,omitempty"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	Category            string   `json:"category"`
+	Protocol            string   `json:"protocol"`
+	Direction           string   `json:"direction"`
+	Status              string   `json:"status"`
+	Maturity            string   `json:"maturity"`
+	Enabled             bool     `json:"enabled"`
+	WritesLocalState    bool     `json:"writes_local_state"`
+	AvailableInReadOnly bool     `json:"available_in_read_only"`
+	RuntimeStatus       string   `json:"runtime_status"`
+	Privacy             string   `json:"privacy"`
+	Endpoints           []string `json:"endpoints,omitempty"`
+	Commands            []string `json:"commands,omitempty"`
+	Tools               []string `json:"tools,omitempty"`
+	Resources           []string `json:"resources,omitempty"`
+	EventTypes          []string `json:"event_types,omitempty"`
+	DataClasses         []string `json:"data_classes,omitempty"`
 }
 
 // DiscoveryManifest is the privacy-safe well-known contract for local agents and wrappers.
@@ -48,21 +51,24 @@ func Discovery(opts Options) DiscoveryManifest {
 			continue
 		}
 		protocols = append(protocols, DiscoveryProtocol{
-			ID:          cap.ID,
-			Name:        cap.Name,
-			Category:    cap.Category,
-			Protocol:    cap.Protocol,
-			Direction:   cap.Direction,
-			Status:      cap.Status,
-			Maturity:    cap.Maturity,
-			Enabled:     cap.Enabled,
-			Privacy:     cap.Privacy,
-			Endpoints:   cap.Endpoints,
-			Commands:    cap.Commands,
-			Tools:       cap.Tools,
-			Resources:   cap.Resources,
-			EventTypes:  cap.EventTypes,
-			DataClasses: cap.DataClasses,
+			ID:                  cap.ID,
+			Name:                cap.Name,
+			Category:            cap.Category,
+			Protocol:            cap.Protocol,
+			Direction:           cap.Direction,
+			Status:              cap.Status,
+			Maturity:            cap.Maturity,
+			Enabled:             cap.Enabled,
+			WritesLocalState:    cap.WritesLocalState,
+			AvailableInReadOnly: cap.AvailableInReadOnly,
+			RuntimeStatus:       cap.RuntimeStatus,
+			Privacy:             cap.Privacy,
+			Endpoints:           cap.Endpoints,
+			Commands:            cap.Commands,
+			Tools:               cap.Tools,
+			Resources:           cap.Resources,
+			EventTypes:          cap.EventTypes,
+			DataClasses:         cap.DataClasses,
 		})
 	}
 	return DiscoveryManifest{

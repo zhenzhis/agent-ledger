@@ -65,6 +65,24 @@ func TestCollectorCapabilitiesDoNotExposeRawPaths(t *testing.T) {
 	t.Fatal("collector.claude capability missing")
 }
 
+func TestRegistryAnnotatesReadOnlyRuntimeCapabilities(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+	cfg.Policies.Enabled = true
+	cfg.Gateway.Enabled = true
+	catalog := Registry(OptionsFromConfig(cfg))
+	if catalog.Summary.ReadOnlyLimited == 0 {
+		t.Fatalf("expected read-only limited capability count: %#v", catalog.Summary)
+	}
+	assertRuntimeCapability(t, catalog, "protocol.canonical_events.http", false, true, false)
+	assertRuntimeCapability(t, catalog, "collector.codex", false, true, false)
+	assertRuntimeCapability(t, catalog, "protocol.mcp_stdio", true, true, true)
+	assertRuntimeCapability(t, catalog, "protocol.offline_bundle", true, true, true)
+	assertRuntimeCapability(t, catalog, "governance.policy_evaluator", true, true, true)
+	assertRuntimeCapability(t, catalog, "governance.pricing", true, true, true)
+	assertRuntimeCapability(t, catalog, "gateway.provider_live_proxy", false, true, false)
+}
+
 func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Collectors.Claude.Enabled = true
@@ -92,6 +110,24 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	}
 }
 
+func TestDiscoveryManifestCarriesReadOnlyRuntimeStatus(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+	manifest := Discovery(OptionsFromConfig(cfg))
+	if !manifest.ReadOnly || manifest.Auth == "" {
+		t.Fatalf("expected read-only discovery status: %#v", manifest)
+	}
+	for _, protocol := range manifest.Protocols {
+		if protocol.ID == "protocol.canonical_events.http" {
+			if protocol.Enabled || !protocol.WritesLocalState || protocol.AvailableInReadOnly || protocol.RuntimeStatus == "" {
+				t.Fatalf("unexpected canonical event read-only protocol: %#v", protocol)
+			}
+			return
+		}
+	}
+	t.Fatalf("canonical event protocol missing: %#v", manifest.Protocols)
+}
+
 func hasDiscoveryProtocol(manifest DiscoveryManifest, id string) bool {
 	for _, protocol := range manifest.Protocols {
 		if protocol.ID == id {
@@ -99,6 +135,19 @@ func hasDiscoveryProtocol(manifest DiscoveryManifest, id string) bool {
 		}
 	}
 	return false
+}
+
+func assertRuntimeCapability(t *testing.T, catalog Catalog, id string, enabled, writes, availableInReadOnly bool) {
+	t.Helper()
+	for _, cap := range catalog.Capabilities {
+		if cap.ID == id {
+			if cap.Enabled != enabled || cap.WritesLocalState != writes || cap.AvailableInReadOnly != availableInReadOnly || cap.RuntimeStatus == "" {
+				t.Fatalf("%s runtime=%v/%v/%v/%q want %v/%v/%v/non-empty", id, cap.Enabled, cap.WritesLocalState, cap.AvailableInReadOnly, cap.RuntimeStatus, enabled, writes, availableInReadOnly)
+			}
+			return
+		}
+	}
+	t.Fatalf("capability %s missing", id)
 }
 
 func assertCapability(t *testing.T, catalog Catalog, id, status string, enabled bool) {

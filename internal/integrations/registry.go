@@ -2,6 +2,7 @@ package integrations
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/zhenzhis/agent-ledger/internal/config"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
@@ -29,24 +30,27 @@ type Options struct {
 
 // Capability describes one supported or planned integration surface.
 type Capability struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Category       string   `json:"category"`
-	Protocol       string   `json:"protocol"`
-	Direction      string   `json:"direction"`
-	Status         string   `json:"status"`
-	Maturity       string   `json:"maturity"`
-	Enabled        bool     `json:"enabled"`
-	Privacy        string   `json:"privacy"`
-	EventTypes     []string `json:"event_types,omitempty"`
-	Endpoints      []string `json:"endpoints,omitempty"`
-	Commands       []string `json:"commands,omitempty"`
-	Tools          []string `json:"tools,omitempty"`
-	Resources      []string `json:"resources,omitempty"`
-	Prompts        []string `json:"prompts,omitempty"`
-	DataClasses    []string `json:"data_classes,omitempty"`
-	Limitations    []string `json:"limitations,omitempty"`
-	NextMilestones []string `json:"next_milestones,omitempty"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	Category            string   `json:"category"`
+	Protocol            string   `json:"protocol"`
+	Direction           string   `json:"direction"`
+	Status              string   `json:"status"`
+	Maturity            string   `json:"maturity"`
+	Enabled             bool     `json:"enabled"`
+	WritesLocalState    bool     `json:"writes_local_state"`
+	AvailableInReadOnly bool     `json:"available_in_read_only"`
+	RuntimeStatus       string   `json:"runtime_status"`
+	Privacy             string   `json:"privacy"`
+	EventTypes          []string `json:"event_types,omitempty"`
+	Endpoints           []string `json:"endpoints,omitempty"`
+	Commands            []string `json:"commands,omitempty"`
+	Tools               []string `json:"tools,omitempty"`
+	Resources           []string `json:"resources,omitempty"`
+	Prompts             []string `json:"prompts,omitempty"`
+	DataClasses         []string `json:"data_classes,omitempty"`
+	Limitations         []string `json:"limitations,omitempty"`
+	NextMilestones      []string `json:"next_milestones,omitempty"`
 }
 
 // Summary captures high-level registry counts.
@@ -55,6 +59,7 @@ type Summary struct {
 	Experimental      int `json:"experimental"`
 	Planned           int `json:"planned"`
 	EnabledCollectors int `json:"enabled_collectors"`
+	ReadOnlyLimited   int `json:"read_only_limited"`
 }
 
 // Catalog is the public Agent Ledger ecosystem capability contract.
@@ -310,6 +315,7 @@ func Registry(opts Options) Catalog {
 		},
 	}
 	capabilities = append(capabilities, collectorCapabilities(opts.Sources)...)
+	annotateRuntimeCapabilities(capabilities, opts)
 	sort.Slice(capabilities, func(i, j int) bool { return capabilities[i].ID < capabilities[j].ID })
 	return Catalog{
 		Product:        "Agent Ledger",
@@ -318,6 +324,61 @@ func Registry(opts Options) Catalog {
 		PrivacyDefault: "local-first metadata-only; no prompt content required",
 		Summary:        summarize(capabilities),
 		Capabilities:   capabilities,
+	}
+}
+
+func annotateRuntimeCapabilities(capabilities []Capability, opts Options) {
+	for i := range capabilities {
+		cap := &capabilities[i]
+		cap.WritesLocalState = capabilityWritesLocalState(cap.ID)
+		cap.AvailableInReadOnly = !cap.WritesLocalState || capabilityReadOnlyPartial(cap.ID)
+		switch {
+		case opts.ReadOnly && cap.WritesLocalState && cap.AvailableInReadOnly:
+			cap.RuntimeStatus = "read-only limited: query/export surfaces remain available; write/import/sync operations are disabled"
+		case opts.ReadOnly && cap.WritesLocalState:
+			cap.Enabled = false
+			cap.RuntimeStatus = "disabled by read-only mode"
+		case cap.Enabled:
+			cap.RuntimeStatus = "enabled"
+		default:
+			cap.RuntimeStatus = "disabled by config"
+		}
+	}
+}
+
+func capabilityWritesLocalState(id string) bool {
+	if strings.HasPrefix(id, "collector.") {
+		return true
+	}
+	switch id {
+	case "protocol.canonical_events.http",
+		"protocol.canonical_events.cli",
+		"protocol.mcp_stdio",
+		"protocol.offline_bundle",
+		"governance.policy_evaluator",
+		"notification.redacted_webhook",
+		"governance.pricing",
+		"protocol.opentelemetry_genai",
+		"protocol.a2a",
+		"gateway.provider_api",
+		"finops.provider_reconciliation",
+		"gateway.provider_live_proxy",
+		"protocol.otlp_receiver":
+		return true
+	default:
+		return false
+	}
+}
+
+func capabilityReadOnlyPartial(id string) bool {
+	switch id {
+	case "protocol.mcp_stdio",
+		"protocol.offline_bundle",
+		"governance.policy_evaluator",
+		"governance.pricing":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -394,6 +455,9 @@ func summarize(capabilities []Capability) Summary {
 		}
 		if cap.Category == "collector" && cap.Enabled {
 			summary.EnabledCollectors++
+		}
+		if cap.WritesLocalState && cap.AvailableInReadOnly && strings.HasPrefix(cap.RuntimeStatus, "read-only") {
+			summary.ReadOnlyLimited++
 		}
 	}
 	return summary
