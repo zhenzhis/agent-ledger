@@ -151,6 +151,20 @@ func TestAgentRunLivenessReportsStaleActiveRuns(t *testing.T) {
 	if len(staleRows) != 1 || staleRows[0].RunID != runID {
 		t.Fatalf("unexpected stale rows: %+v", staleRows)
 	}
+	filteredRows, err := db.GetAgentRunLiveness(10*time.Minute, false, 10, "codex", "repo-a")
+	if err != nil {
+		t.Fatalf("GetAgentRunLiveness filtered: %v", err)
+	}
+	if len(filteredRows) != 1 || filteredRows[0].RunID != runID {
+		t.Fatalf("unexpected filtered rows: %+v", filteredRows)
+	}
+	emptyRows, err := db.GetAgentRunLiveness(10*time.Minute, false, 10, "codex", "repo-missing")
+	if err != nil {
+		t.Fatalf("GetAgentRunLiveness empty filter: %v", err)
+	}
+	if len(emptyRows) != 0 {
+		t.Fatalf("expected empty filtered rows, got %+v", emptyRows)
+	}
 }
 
 func TestAgentRunHeartbeatRejectsTerminalRun(t *testing.T) {

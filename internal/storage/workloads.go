@@ -454,7 +454,7 @@ func (d *DB) RecordAgentRunHeartbeat(eventID, runID, status, phase, message stri
 }
 
 // GetAgentRunLiveness returns active runs ordered by oldest heartbeat/activity first.
-func (d *DB) GetAgentRunLiveness(maxAge time.Duration, staleOnly bool, limit int) ([]AgentRunLivenessRow, error) {
+func (d *DB) GetAgentRunLiveness(maxAge time.Duration, staleOnly bool, limit int, filters ...string) ([]AgentRunLivenessRow, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if maxAge <= 0 {
@@ -463,12 +463,30 @@ func (d *DB) GetAgentRunLiveness(maxAge time.Duration, staleOnly bool, limit int
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
+	source, project := "", ""
+	if len(filters) > 0 {
+		source = strings.TrimSpace(filters[0])
+	}
+	if len(filters) > 1 {
+		project = strings.TrimSpace(filters[1])
+	}
+	clauses := []string{`ar.status IN ('queued','running','working','waiting_approval','blocked','evaluating','stalled')`}
+	args := []interface{}{}
+	if source != "" {
+		clauses = append(clauses, `ar.source=?`)
+		args = append(args, source)
+	}
+	if project != "" {
+		clauses = append(clauses, `(w.project=? OR w.repo=?)`)
+		args = append(args, project, project)
+	}
+	args = append(args, limit)
 	rows, err := d.db.Query(`SELECT ar.run_id,ar.workload_id,w.goal,ar.source,ar.agent_name,ar.status,w.project,w.repo,w.git_branch,
 		COALESCE(ar.phase,''),COALESCE(ar.progress,0),ar.started_at,COALESCE(ar.last_heartbeat_at,''),COALESCE(ar.heartbeat_count,0),COALESCE(ar.status_message,'')
 		FROM agent_runs ar JOIN workloads w ON ar.workload_id=w.workload_id
-		WHERE ar.status IN ('queued','running','working','waiting_approval','blocked','evaluating','stalled')
+		WHERE `+strings.Join(clauses, " AND ")+`
 		ORDER BY COALESCE(ar.last_heartbeat_at, ar.started_at) ASC
-		LIMIT ?`, limit)
+		LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}

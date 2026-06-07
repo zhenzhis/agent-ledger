@@ -173,7 +173,7 @@ func (s *Server) handleAgentRunLiveness(w http.ResponseWriter, r *http.Request) 
 		maxAge = parsed
 	}
 	staleOnly := r.URL.Query().Get("stale_only") == "1" || r.URL.Query().Get("stale_only") == "true"
-	rows, err := s.db.GetAgentRunLiveness(maxAge, staleOnly, parseLimit(r, 200))
+	rows, err := s.db.GetAgentRunLiveness(maxAge, staleOnly, parseLimit(r, 200), r.URL.Query().Get("source"), r.URL.Query().Get("project"))
 	if err != nil {
 		serverError(w, err)
 		return

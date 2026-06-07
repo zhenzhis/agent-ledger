@@ -182,6 +182,12 @@ const I18N = {
     projectionIssues: "projection issues",
     unpriced: "unpriced",
     stale: "stale",
+    runLiveness: "Run Liveness",
+    staleRuns: "stale runs",
+    activeRuns: "active runs",
+    heartbeat: "heartbeat",
+    lastActive: "last active",
+    progress: "progress",
     localEstimate: "local estimate",
   },
   zh: {
@@ -337,6 +343,12 @@ const I18N = {
     projectionIssues: "投影问题",
     unpriced: "未计价",
     stale: "过期",
+    runLiveness: "运行存活",
+    staleRuns: "失联运行",
+    activeRuns: "活跃运行",
+    heartbeat: "心跳",
+    lastActive: "最近活动",
+    progress: "进度",
     localEstimate: "本地估算",
   },
 };
@@ -865,15 +877,38 @@ function renderCacheDoctor(rows) {
   list.replaceChildren(fragment);
 }
 
-function renderWatchdog(rows) {
+function runLivenessSeverity(row) {
+  const status = String(row.status || "").toLowerCase();
+  if (row.stale) return "critical";
+  if (status === "blocked" || status === "stalled" || status === "waiting_approval") return "warning";
+  return "ok";
+}
+
+function renderWatchdog(rows, liveness) {
   const list = $("watchdog-list");
   if (!list) return;
   const fragment = document.createDocumentFragment();
-  (rows || []).slice(0, 8).forEach((row) => {
+  const events = rows || [];
+  const runs = ((liveness && liveness.rows) || []).slice().sort((a, b) => {
+    if (a.stale !== b.stale) return a.stale ? -1 : 1;
+    return Number(b.age_seconds || 0) - Number(a.age_seconds || 0);
+  });
+  runs.slice(0, 4).forEach((row) => {
+    const label = row.stale ? t("staleRuns") : t("activeRuns");
+    const title = `${label} · ${row.source || "-"} · ${row.agent_name || "-"}`;
+    const last = row.last_activity ? relTime(row.last_activity) : "-";
+    const detail = `${row.goal || row.run_id || "-"} · ${row.phase || row.status || "-"} · ${t("lastActive")} ${last}`;
+    const progress = Number(row.progress || 0);
+    const value = row.heartbeat_count > 0 ? `${Math.round(progress * 100)}%` : "-";
+    addOpsRow(fragment, title, detail, value, runLivenessSeverity(row));
+  });
+  const remainingSlots = Math.max(0, 8 - Math.min(runs.length, 4));
+  events.slice(0, remainingSlots).forEach((row) => {
     addOpsRow(fragment, row.kind || "event", `${row.source || "-"} · ${row.message || ""}`, fmt(row.value || 0), row.severity || "ok");
   });
-  if (!rows || rows.length === 0) fragment.appendChild(createMessage(t("noIssues"), "ops-empty"));
-  setText("watchdog-meta", `${(rows || []).length} events`);
+  if (events.length === 0 && runs.length === 0) fragment.appendChild(createMessage(t("noIssues"), "ops-empty"));
+  const staleRuns = runs.filter((row) => row.stale).length;
+  setText("watchdog-meta", `${events.length} events · ${runs.length} ${t("activeRuns")} · ${staleRuns} ${t("staleRuns")}`);
   list.replaceChildren(fragment);
 }
 
@@ -1198,6 +1233,7 @@ async function refresh(options = {}) {
       costIntel: api("cost-intelligence"),
       cacheDoctor: api("cache/doctor"),
       watchdog: api("watchdog/events", { skipModel: true }),
+      liveness: api("agent-runs/liveness", { skipModel: true, extra: { max_age: "10m", limit: 20 } }),
       fleet: api("fleet-attribution", { extra: { limit: 50 } }),
       reconciliation: api("reconciliation/status", { skipModel: true, extra: { limit: 20 } }),
       chargeback: api("chargeback", { extra: { limit: 50 } }),
@@ -1245,7 +1281,7 @@ async function refresh(options = {}) {
     if (data.modelCalls) renderModelCalls(data.modelCalls);
     if (data.costIntel) renderCostIntelligence(data.costIntel);
     if (data.cacheDoctor) renderCacheDoctor(data.cacheDoctor);
-    if (data.watchdog) renderWatchdog(data.watchdog);
+    if (data.watchdog || data.liveness) renderWatchdog(data.watchdog, data.liveness);
     if (data.fleet) renderFleetAttribution(data.fleet);
     if (data.reconciliation) renderReconciliation(data.reconciliation);
     if (data.chargeback) renderChargeback(data.chargeback);
