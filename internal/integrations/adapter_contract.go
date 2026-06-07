@@ -84,6 +84,15 @@ func AdapterContractSpec() AdapterContract {
 				PrivacyNotes:    []string{"drop request/response bodies before conversion", "prefer provider request ids or hashes as raw_ref"},
 			},
 			{
+				Kind:            "provider-stream",
+				Description:     "Provider SSE usage transcripts from OpenAI-compatible Chat Completions, OpenAI Responses, or Anthropic Messages streaming responses.",
+				ConformanceKind: "provider-stream",
+				ConvertCommand:  "agent-ledger adapter conformance --kind provider-stream --file stream.sse",
+				Endpoint:        "POST /api/integrations/conformance?kind=provider-stream",
+				RequiredSignals: []string{"SSE data events", "provider response id when available", "model", "usage tokens"},
+				PrivacyNotes:    []string{"stream deltas are ignored", "fixtures should include usage events only", "do not store prompt, output, or transcript text"},
+			},
+			{
 				Kind:            "otel",
 				Description:     "OpenTelemetry GenAI JSON spans or local OTLP HTTP JSON traces.",
 				ConformanceKind: "otel",

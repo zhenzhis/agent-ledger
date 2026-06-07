@@ -51,12 +51,24 @@ func TestAdapterSpecEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &spec); err != nil {
 		t.Fatalf("decode adapter spec: %v", err)
 	}
-	if spec.Contract != "agent-ledger.adapter-contract" || spec.SchemaHash == "" || len(spec.SupportedInputKinds) < 4 {
+	if spec.Contract != "agent-ledger.adapter-contract" || spec.SchemaHash == "" || len(spec.SupportedInputKinds) < 5 {
 		t.Fatalf("unexpected adapter spec: %+v", spec)
+	}
+	if !adapterSpecHasKind(spec, "provider-stream") {
+		t.Fatalf("adapter spec missing provider-stream kind: %+v", spec.SupportedInputKinds)
 	}
 	if !adapterSpecForbids(spec, "prompt") || !adapterSpecForbids(spec, "messages") {
 		t.Fatalf("adapter spec missing privacy forbidden keys: %+v", spec.ForbiddenPayloadKeys)
 	}
+}
+
+func adapterSpecHasKind(spec integrations.AdapterContract, kind string) bool {
+	for _, item := range spec.SupportedInputKinds {
+		if item.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func adapterSpecForbids(spec integrations.AdapterContract, key string) bool {

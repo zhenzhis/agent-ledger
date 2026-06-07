@@ -125,8 +125,11 @@ func TestAdapterContractSpecIsMachineReadableAndPrivacySafe(t *testing.T) {
 	if spec.Contract != "agent-ledger.adapter-contract" || spec.Version != "v1" || spec.SchemaHash == "" {
 		t.Fatalf("unexpected adapter contract identity: %#v", spec)
 	}
-	if len(spec.SupportedInputKinds) < 4 || len(spec.CanonicalEventTypes) == 0 {
+	if len(spec.SupportedInputKinds) < 5 || len(spec.CanonicalEventTypes) == 0 {
 		t.Fatalf("adapter contract missing supported kinds or event types: %#v", spec)
+	}
+	if !adapterContractHasKind(spec, "provider-stream") {
+		t.Fatalf("adapter contract missing provider-stream kind: %#v", spec.SupportedInputKinds)
 	}
 	if !stringSliceHas(spec.ForbiddenPayloadKeys, "prompt") || !stringSliceHas(spec.ForbiddenPayloadKeys, "messages") {
 		t.Fatalf("adapter contract missing forbidden payload keys: %#v", spec.ForbiddenPayloadKeys)
@@ -134,6 +137,15 @@ func TestAdapterContractSpecIsMachineReadableAndPrivacySafe(t *testing.T) {
 	if spec.Validation.HTTP == "" || spec.Validation.CLI == "" || spec.Ingest.HTTP == nil || spec.Ingest.CLI == nil {
 		t.Fatalf("adapter contract missing validation or ingest entrypoints: %#v", spec)
 	}
+}
+
+func adapterContractHasKind(spec AdapterContract, kind string) bool {
+	for _, item := range spec.SupportedInputKinds {
+		if item.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDiscoveryManifestCarriesReadOnlyRuntimeStatus(t *testing.T) {
