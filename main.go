@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -406,6 +407,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runBadgeCLI(args[1:], db)
 	case "preflight":
 		return runPreflightCLI(args[1:], db)
+	case "chargeback":
+		return runChargebackCLI(args[1:], cfg, db)
 	case "integrations":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "otel":
@@ -420,6 +423,45 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return fmt.Errorf("unknown command %q", cmd)
 	}
 	return nil
+}
+
+func runChargebackCLI(args []string, cfg *config.Config, db *storage.DB) error {
+	now := time.Now()
+	from, to, err := cliDateRange(args, now)
+	if err != nil {
+		return err
+	}
+	limit := 200
+	if raw := cliValue(args, "--limit"); raw != "" {
+		var parsed int
+		if _, err := fmt.Sscanf(raw, "%d", &parsed); err != nil {
+			return fmt.Errorf("invalid --limit %q: %w", raw, err)
+		}
+		limit = parsed
+	}
+	rows, err := db.GetChargeback(from, to, cliValue(args, "--source"), cliValue(args, "--model"), cliValue(args, "--project"),
+		cfg.Teams.Groups, cfg.Teams.MachineName, cfg.Teams.GitAuthor, limit)
+	if err != nil {
+		return err
+	}
+	if strings.EqualFold(cliValue(args, "--format"), "csv") {
+		w := csv.NewWriter(os.Stdout)
+		if err := w.Write([]string{"team", "project", "source", "model", "calls", "sessions", "tokens", "cost_usd", "mapping_source", "data_source", "confidence"}); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if err := w.Write([]string{
+				row.Team, row.Project, row.Source, row.Model,
+				fmt.Sprint(row.Calls), fmt.Sprint(row.Sessions), fmt.Sprint(row.Tokens), fmt.Sprintf("%.6f", row.CostUSD),
+				row.MappingSource, row.DataSource, fmt.Sprintf("%.2f", row.Confidence),
+			}); err != nil {
+				return err
+			}
+		}
+		w.Flush()
+		return w.Error()
+	}
+	return json.NewEncoder(os.Stdout).Encode(rows)
 }
 
 func runReconcileCLI(args []string, db *storage.DB) error {

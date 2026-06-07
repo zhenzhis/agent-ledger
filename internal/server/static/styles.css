@@ -1835,7 +1835,8 @@ select,
 .chart-grid > .panel:nth-child(9),
 .chart-grid > .panel:nth-child(12),
 .chart-grid > .panel:nth-child(13),
-.chart-grid > .panel:nth-child(14) {
+.chart-grid > .panel:nth-child(14),
+.chart-grid > .panel:nth-child(15) {
   grid-column: span 6;
 }
 
@@ -1848,7 +1849,8 @@ select,
   .chart-grid > .panel:nth-child(9),
   .chart-grid > .panel:nth-child(12),
   .chart-grid > .panel:nth-child(13),
-  .chart-grid > .panel:nth-child(14) {
+  .chart-grid > .panel:nth-child(14),
+  .chart-grid > .panel:nth-child(15) {
     grid-column: span 6;
   }
 
@@ -1869,7 +1871,8 @@ select,
   .chart-grid > .panel:nth-child(9),
   .chart-grid > .panel:nth-child(12),
   .chart-grid > .panel:nth-child(13),
-  .chart-grid > .panel:nth-child(14) {
+  .chart-grid > .panel:nth-child(14),
+  .chart-grid > .panel:nth-child(15) {
     grid-column: 1 / -1;
   }
 }

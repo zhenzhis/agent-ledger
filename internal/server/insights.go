@@ -342,6 +342,36 @@ func (s *Server) handlePreflightEstimate(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, report)
 }
 
+func (s *Server) handleChargeback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
+	from, to, _, err := s.parseTimeRange(r)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	rows, err := s.db.GetChargeback(from, to,
+		r.URL.Query().Get("source"),
+		r.URL.Query().Get("model"),
+		r.URL.Query().Get("project"),
+		s.options.Teams.Groups,
+		s.options.Teams.MachineName,
+		s.options.Teams.GitAuthor,
+		parseLimit(r, 200),
+	)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	applyChargebackPrivacy(rows, s.privacyFor(r))
+	writeJSON(w, rows)
+}
+
 func (s *Server) handleReconciliationImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

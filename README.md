@@ -186,6 +186,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `POST /api/reconciliation/import` | Import manual summary or provider CSV/JSON statement for local reconciliation |
 | `GET /api/router/simulate?to_model=gpt-5-mini&ratio=0.5` | Simulate cost impact of model-routing changes without mutating the ledger |
 | `GET /api/preflight/estimate?task=refactor&project=repo-name` | Estimate likely cost/tokens before starting an agent workload |
+| `GET /api/chargeback` | Team/project/source/model showback using raw usage first, canonical model calls as fallback |
 | `POST /api/policy/evaluate` | Evaluate local advisory policy rules and optionally record decisions |
 | `GET /api/sessions` | Server-side paginated session ledger |
 | `GET /api/session-replay?source=codex&session_id=...` | Chronological per-call token/cost replay for one session |
@@ -204,6 +205,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/offline-bundle/export` | Export signed/hashed offline bundle |
 | `POST /api/offline-bundle/import` | Import offline bundle canonical events |
 | `GET /api/export?type=workloads&format=csv` | CSV/JSON exports |
+| `GET /api/export?type=chargeback&format=csv` | Team showback CSV export |
 | `GET /api/report?format=markdown` | Markdown report |
 
 Manual scan, reset, pricing sync, imports, and recalculation require localhost access unless auth tokens are configured.

@@ -113,6 +113,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/reconciliation/import", s.handleReconciliationImport)
 	mux.HandleFunc("/api/router/simulate", s.handleRouterSimulation)
 	mux.HandleFunc("/api/preflight/estimate", s.handlePreflightEstimate)
+	mux.HandleFunc("/api/chargeback", s.handleChargeback)
 	mux.HandleFunc("/api/badge/repo.svg", s.handleRepoBadge)
 	mux.HandleFunc("/api/evidence-bundle", s.handleEvidenceBundle)
 	mux.HandleFunc("/api/offline-bundle/export", s.handleOfflineBundleExport)

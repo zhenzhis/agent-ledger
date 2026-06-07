@@ -186,6 +186,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `POST /api/reconciliation/import` | 导入手动 summary 或 provider CSV/JSON 账单并做本地对账 |
 | `GET /api/router/simulate?to_model=gpt-5-mini&ratio=0.5` | 模拟模型路由调整的费用影响，不修改账本 |
 | `GET /api/preflight/estimate?task=refactor&project=repo-name` | 开始 agent 任务前估算可能费用、token 与调用量 |
+| `GET /api/chargeback` | 团队/项目/source/model showback；优先使用 raw usage，无 raw 时 fallback 到 canonical model calls |
 | `POST /api/policy/evaluate` | 评估本地 advisory policy，并可选择写入 policy decision |
 | `GET /api/sessions` | 服务端分页会话账本 |
 | `GET /api/session-replay?source=codex&session_id=...` | 单个 session 的调用级 token/cost 时间回放 |
@@ -204,6 +205,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/offline-bundle/export` | 导出带 hash/可选签名的离线包 |
 | `POST /api/offline-bundle/import` | 导入离线包中的 canonical events |
 | `GET /api/export?type=workloads&format=csv` | CSV/JSON 导出 |
+| `GET /api/export?type=chargeback&format=csv` | 团队 showback CSV 导出 |
 | `GET /api/report?format=markdown` | Markdown 报告 |
 
 手动扫描、清理重扫、价格同步、导入和费用重算默认只允许本机访问；暴露到网络前必须配置 auth token 或反向代理访问控制。

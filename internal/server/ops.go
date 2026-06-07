@@ -141,11 +141,13 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "chargeback":
-		payload, err = s.db.GetModelCalls(from, to, source, model, project, 1000)
+		rows, err := s.db.GetChargeback(from, to, source, model, project, s.options.Teams.Groups, s.options.Teams.MachineName, s.options.Teams.GitAuthor, 1000)
 		if err != nil {
 			serverError(w, err)
 			return
 		}
+		applyChargebackPrivacy(rows, privacy)
+		payload = rows
 	case "audit":
 		payload, err = s.db.GetAuditLog(1000)
 		if err != nil {
@@ -392,7 +394,7 @@ func csvFor(exportType string, payload interface{}) ([]byte, error) {
 				return nil, err
 			}
 		}
-	case "model-calls", "chargeback":
+	case "model-calls":
 		data, _ := json.Marshal(payload)
 		var rows []map[string]interface{}
 		if err := json.Unmarshal(data, &rows); err != nil {
@@ -406,6 +408,25 @@ func csvFor(exportType string, payload interface{}) ([]byte, error) {
 				fmt.Sprint(row["source"]), fmt.Sprint(row["model"]), fmt.Sprint(row["project"]), fmt.Sprint(row["calls"]),
 				fmt.Sprint(row["tokens"]), fmt.Sprint(row["cost_usd"]), fmt.Sprint(row["avg_tokens_per_call"]),
 				fmt.Sprint(row["cost_per_call"]), fmt.Sprint(row["unpriced_calls"]),
+			}); err != nil {
+				return nil, err
+			}
+		}
+	case "chargeback":
+		data, _ := json.Marshal(payload)
+		var rows []map[string]interface{}
+		if err := json.Unmarshal(data, &rows); err != nil {
+			return nil, err
+		}
+		if err := w.Write([]string{"team", "project", "source", "model", "calls", "sessions", "tokens", "cost_usd", "avg_tokens_per_call", "cost_per_call", "unpriced_calls", "mapping_source", "data_source", "confidence"}); err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if err := w.Write([]string{
+				fmt.Sprint(row["team"]), fmt.Sprint(row["project"]), fmt.Sprint(row["source"]), fmt.Sprint(row["model"]),
+				fmt.Sprint(row["calls"]), fmt.Sprint(row["sessions"]), fmt.Sprint(row["tokens"]), fmt.Sprint(row["cost_usd"]),
+				fmt.Sprint(row["avg_tokens_per_call"]), fmt.Sprint(row["cost_per_call"]), fmt.Sprint(row["unpriced_calls"]),
+				fmt.Sprint(row["mapping_source"]), fmt.Sprint(row["data_source"]), fmt.Sprint(row["confidence"]),
 			}); err != nil {
 				return nil, err
 			}

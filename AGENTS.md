@@ -22,6 +22,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger replay --source codex --session-id <id>  # per-call session token/cost replay
 ./agent-ledger badge --project repo --metric cost       # local SVG repo AI cost badge
 ./agent-ledger preflight --task refactor --project repo # estimate cost before starting a task
+./agent-ledger chargeback --format csv                  # team/project showback report
 ./agent-ledger bundle export/import        # offline JSON bundle for air-gapped aggregation
 ./agent-ledger policy evaluate --model gpt-5.5 --action model.call  # local advisory policy evaluation
 ./agent-ledger mcp                         # local stdio JSON-RPC tool surface

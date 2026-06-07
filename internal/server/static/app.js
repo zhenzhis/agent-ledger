@@ -70,6 +70,8 @@ const I18N = {
     dataQuality: "Data Quality",
     watchdog: "Watchdog",
     reconciliation: "Reconciliation",
+    teamShowback: "Team Showback",
+    team: "Team",
     workloadLedger: "Workload Ledger",
     goal: "Goal",
     status: "Status",
@@ -163,6 +165,7 @@ const I18N = {
     unitSec: "sec",
     noIssues: "No issues detected",
     noReconciliation: "No provider statements imported",
+    noChargeback: "No showback rows",
     providerBill: "provider bill",
     localLedger: "local ledger",
     unpriced: "unpriced",
@@ -210,6 +213,8 @@ const I18N = {
     dataQuality: "数据质量",
     watchdog: "Watchdog",
     reconciliation: "对账",
+    teamShowback: "团队 Showback",
+    team: "团队",
     workloadLedger: "工作负载账本",
     goal: "目标",
     status: "状态",
@@ -303,6 +308,7 @@ const I18N = {
     unitSec: "秒",
     noIssues: "未发现问题",
     noReconciliation: "尚未导入 provider 账单",
+    noChargeback: "暂无团队归因数据",
     providerBill: "provider 账单",
     localLedger: "本地账本",
     unpriced: "未计价",
@@ -862,6 +868,28 @@ function renderReconciliation(rows) {
   list.replaceChildren(fragment);
 }
 
+function renderChargeback(rows) {
+  const list = $("chargeback-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  const data = rows || [];
+  if (data.length === 0) {
+    fragment.appendChild(createMessage(t("noChargeback"), "ops-empty"));
+    setText("chargeback-meta", "0");
+    list.replaceChildren(fragment);
+    return;
+  }
+  const totalCost = data.reduce((sum, row) => sum + Number(row.cost_usd || 0), 0);
+  const teams = new Set(data.map((row) => row.team || "unassigned"));
+  data.slice(0, 8).forEach((row) => {
+    const team = row.team || "unassigned";
+    const detail = `${row.project || "-"} · ${row.source || "-"} / ${row.model || t("unknownModel")} · ${fmt(row.sessions || 0)} sessions · ${row.mapping_source || "unmapped"}`;
+    addOpsRow(fragment, team, detail, fmtCost(row.cost_usd || 0), row.team === "unassigned" || row.unpriced_calls ? "warning" : "ok");
+  });
+  setText("chargeback-meta", `${teams.size} ${t("team")} · ${fmtCost(totalCost)}`);
+  list.replaceChildren(fragment);
+}
+
 function renderActivityMatrix(tokensTime) {
   const data = tokensTime || [];
   const labels = data.map((row) => row.date);
@@ -1113,6 +1141,7 @@ async function refresh(options = {}) {
       cacheDoctor: api("cache/doctor"),
       watchdog: api("watchdog/events", { skipModel: true }),
       reconciliation: api("reconciliation/status", { skipModel: true, extra: { limit: 20 } }),
+      chargeback: api("chargeback", { extra: { limit: 50 } }),
     };
     const settled = await Promise.allSettled(Object.entries(requests).map(async ([key, promise]) => [key, await promise]));
     const data = {};
@@ -1145,6 +1174,7 @@ async function refresh(options = {}) {
     if (data.cacheDoctor) renderCacheDoctor(data.cacheDoctor);
     if (data.watchdog) renderWatchdog(data.watchdog);
     if (data.reconciliation) renderReconciliation(data.reconciliation);
+    if (data.chargeback) renderChargeback(data.chargeback);
     if (data.workloads) {
       allWorkloads = data.workloads.rows || [];
       workloadTotal = Number(data.workloads.total || allWorkloads.length);

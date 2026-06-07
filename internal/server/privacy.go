@@ -41,6 +41,17 @@ func applySessionPrivacy(session *storage.SessionInfo, privacy config.PrivacyCon
 	}
 }
 
+func applyChargebackPrivacy(rows []storage.ChargebackRow, privacy config.PrivacyConfig) {
+	for i := range rows {
+		if privacy.HideProjectNames || privacy.ScreenshotMode {
+			rows[i].Project = "<redacted>"
+		}
+		if privacy.ScreenshotMode {
+			rows[i].Team = "team"
+		}
+	}
+}
+
 func hashValue(value string) string {
 	if value == "" {
 		return ""
