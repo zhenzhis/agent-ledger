@@ -52,6 +52,7 @@ CLI:
 ./agent-ledger workload heartbeat --run-id run_... --status working --phase testing --progress 0.5
 ./agent-ledger workload liveness --max-age 10m --stale-only
 ./agent-ledger workload state --workload-id wl_... --max-age 10m
+./agent-ledger workload feed --severity warning --max-age 10m
 ./agent-ledger workload evaluation --workload-id wl_... --run-id run_... --status pass --score 0.97 --signal unit-tests
 ./agent-ledger run --goal "debug ingestion" --agent codex -- codex
 ./agent-ledger event schema
@@ -211,6 +212,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/workload-graph` | Compact workload graph |
 | `GET /api/workload-timeline` | Chronological workload audit timeline |
 | `GET /api/workload-state` | Derived terminal-state snapshot for one async agent workload |
+| `GET /api/workload-events` | Derived local workload state feed for monitors, routers, and notification adapters |
 | `GET /api/integrations` | Privacy-safe integration capability catalog |
 | `GET /api/event-schema` | Canonical event schema and supported event types |
 | `POST /api/events` | Ingest metadata-only canonical events |
@@ -367,7 +369,7 @@ Releases use GoReleaser for platform archives and GitHub Actions for GHCR images
 
 ## Roadmap
 
-Implemented foundation: canonical workload schema, metadata-only canonical event ingest, async run start/heartbeat/liveness ledger, derived workload terminal-state snapshots, explicit workload evaluation signals, canonical-to-usage projection plus repair, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP/JSON traces receiver, A2A task telemetry mapping, provider usage envelope mapping, optional JSON/SSE local OpenAI-compatible gateway, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, local policy approval requests, CLI workload/event/policy/router/replay/badge/preflight/projection commands, CLI run wrapper, and local MCP stdio tools/resources/prompts.
+Implemented foundation: canonical workload schema, metadata-only canonical event ingest, async run start/heartbeat/liveness ledger, derived workload terminal-state snapshots and local workload event feed, explicit workload evaluation signals, canonical-to-usage projection plus repair, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP/JSON traces receiver, A2A task telemetry mapping, provider usage envelope mapping, optional JSON/SSE local OpenAI-compatible gateway, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, local policy approval requests, CLI workload/event/policy/router/replay/badge/preflight/projection commands, CLI run wrapper, and local MCP stdio tools/resources/prompts.
 
 Planned integrations: OTLP protobuf/gRPC conformance, provider-native gateway adapters, Postgres team mode, OIDC/SSO, richer MCP subscriptions, and multi-actor approval notifications.
 

@@ -285,6 +285,44 @@ func (s *Server) handleWorkloadState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, state)
 }
 
+func (s *Server) handleWorkloadEvents(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
+	from, to, _, err := s.parseTimeRange(r)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	maxAge := 10 * time.Minute
+	if raw := r.URL.Query().Get("max_age"); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			badRequest(w, fmt.Errorf("invalid max_age: %w", err))
+			return
+		}
+		if parsed <= 0 {
+			badRequest(w, fmt.Errorf("invalid max_age: must be positive"))
+			return
+		}
+		maxAge = parsed
+	}
+	feed, err := s.db.GetWorkloadEventFeed(from, to,
+		r.URL.Query().Get("source"),
+		r.URL.Query().Get("model"),
+		r.URL.Query().Get("project"),
+		r.URL.Query().Get("phase"),
+		r.URL.Query().Get("severity"),
+		parseLimit(r, 100),
+		maxAge)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	applyWorkloadEventFeedPrivacy(feed, s.privacyFor(r))
+	writeJSON(w, feed)
+}
+
 func (s *Server) handleFleetAttribution(w http.ResponseWriter, r *http.Request) {
 	if !s.requireRole(w, r, "viewer") {
 		return
@@ -473,6 +511,27 @@ func applyWorkloadStatePrivacy(state *storage.WorkloadState, privacy config.Priv
 		state.Repo = "<redacted>"
 		state.GitBranch = "<redacted>"
 		state.Team = "<redacted>"
+	}
+}
+
+func applyWorkloadEventFeedPrivacy(feed *storage.WorkloadEventFeed, privacy config.PrivacyConfig) {
+	if feed == nil {
+		return
+	}
+	for i := range feed.Rows {
+		if privacy.HashSessionIDs || privacy.ScreenshotMode {
+			feed.Rows[i].EventID = hashValue(feed.Rows[i].EventID)
+			feed.Rows[i].WorkloadID = hashValue(feed.Rows[i].WorkloadID)
+		}
+		if privacy.ScreenshotMode {
+			feed.Rows[i].Goal = "<redacted>"
+		}
+		if privacy.HideProjectNames || privacy.ScreenshotMode {
+			feed.Rows[i].Project = "<redacted>"
+			feed.Rows[i].Repo = "<redacted>"
+			feed.Rows[i].GitBranch = "<redacted>"
+			feed.Rows[i].Team = "<redacted>"
+		}
 	}
 }
 

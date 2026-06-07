@@ -14,6 +14,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger workload start-run --workload-id <id> --source codex --agent-name codex
 ./agent-ledger workload heartbeat --run-id <id> --status working --phase testing --progress 0.5
 ./agent-ledger workload liveness --max-age 10m --stale-only
+./agent-ledger workload feed --severity warning --max-age 10m
 ./agent-ledger event schema                # print canonical event schema
 ./agent-ledger event ingest < event.json   # ingest metadata-only canonical event(s)
 ./agent-ledger integrations                # print privacy-safe integration capability catalog

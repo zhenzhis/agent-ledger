@@ -1244,6 +1244,34 @@ func runWorkloadCLI(args []string, db *storage.DB) error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(state)
+	case "feed", "events":
+		from, to, err := cliDateRange(args[1:], time.Now())
+		if err != nil {
+			return err
+		}
+		maxAge := 10 * time.Minute
+		if raw := cliValue(args[1:], "--max-age"); raw != "" {
+			parsed, err := time.ParseDuration(raw)
+			if err != nil {
+				return err
+			}
+			if parsed <= 0 {
+				return fmt.Errorf("--max-age must be positive")
+			}
+			maxAge = parsed
+		}
+		feed, err := db.GetWorkloadEventFeed(from, to,
+			cliValue(args[1:], "--source"),
+			cliValue(args[1:], "--model"),
+			cliValue(args[1:], "--project"),
+			cliValue(args[1:], "--phase"),
+			cliValue(args[1:], "--severity"),
+			cliInt(args[1:], "--limit", 100),
+			maxAge)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(feed)
 	case "close":
 		id := firstNonEmptyCLI(cliValue(args[1:], "--id"), cliValue(args[1:], "--workload-id"))
 		status := firstNonEmptyCLI(cliValue(args[1:], "--status"), "completed")

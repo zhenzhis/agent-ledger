@@ -186,6 +186,43 @@ func TestWorkloadStateAPIPrivacy(t *testing.T) {
 	}
 }
 
+func TestWorkloadEventsAPIPrivacy(t *testing.T) {
+	db := testServerDB(t)
+	now := time.Now().UTC()
+	workloadID, err := db.CreateWorkload("private event feed goal", "codex", "private-project", "zhenzhis/private-project", "feature/private", "", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	runID, err := db.StartAgentRun(workloadID, "codex", "codex", "codex", "C:/private/workspace")
+	if err != nil {
+		t.Fatalf("StartAgentRun: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-api-feed", runID, "working", "testing", "private message", 0.6, nil, now.Add(-20*time.Minute), 1); err != nil {
+		t.Fatalf("RecordAgentRunHeartbeat: %v", err)
+	}
+	srv := New(db, "", Options{Privacy: config.PrivacyConfig{ScreenshotMode: true}})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/workload-events?from="+now.AddDate(0, 0, -1).Format("2006-01-02")+"&to="+now.Format("2006-01-02")+"&max_age=10m&severity=warning&privacy=1", nil)
+	rr := httptest.NewRecorder()
+	srv.handleWorkloadEvents(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("events status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var feed storage.WorkloadEventFeed
+	if err := json.Unmarshal(rr.Body.Bytes(), &feed); err != nil {
+		t.Fatalf("decode feed: %v", err)
+	}
+	if feed.Total != 1 || len(feed.Rows) != 1 {
+		t.Fatalf("unexpected feed: %+v", feed)
+	}
+	row := feed.Rows[0]
+	if row.Phase != "stale" || row.Severity != "warning" || !row.Stale {
+		t.Fatalf("unexpected event row: %+v", row)
+	}
+	if row.WorkloadID == workloadID || row.Goal != "<redacted>" || row.Project != "<redacted>" || row.Repo != "<redacted>" || row.GitBranch != "<redacted>" || row.Team != "<redacted>" {
+		t.Fatalf("privacy redaction failed: %+v", row)
+	}
+}
+
 func TestEvidenceBundleIncludesRedactedWorkloadState(t *testing.T) {
 	db := testServerDB(t)
 	now := time.Now().UTC()

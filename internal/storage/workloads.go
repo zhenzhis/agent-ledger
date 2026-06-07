@@ -121,6 +121,7 @@ type WorkloadState struct {
 	WorkloadID               string   `json:"workload_id"`
 	Goal                     string   `json:"goal"`
 	Status                   string   `json:"status"`
+	Source                   string   `json:"source"`
 	Phase                    string   `json:"phase"`
 	Terminal                 bool     `json:"terminal"`
 	Stale                    bool     `json:"stale"`
@@ -809,6 +810,7 @@ func (d *DB) GetWorkloadState(workloadID string, staleAfter time.Duration) (*Wor
 		WorkloadID:               detail.Summary.WorkloadID,
 		Goal:                     detail.Summary.Goal,
 		Status:                   detail.Summary.Status,
+		Source:                   detail.Summary.Source,
 		Project:                  detail.Summary.Project,
 		Repo:                     detail.Summary.Repo,
 		GitBranch:                detail.Summary.GitBranch,

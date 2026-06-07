@@ -273,6 +273,56 @@ func TestWorkloadStateDerivesAsyncTerminalSignals(t *testing.T) {
 	}
 }
 
+func TestWorkloadEventFeedDerivesSeverity(t *testing.T) {
+	db := tempDB(t)
+	now := time.Now().UTC()
+	staleID, err := db.CreateWorkload("stale feed", "codex", "repo-a", "repo-a", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload stale: %v", err)
+	}
+	runID, err := db.StartAgentRun(staleID, "codex", "codex", "codex exec", "/home/user/repo-a")
+	if err != nil {
+		t.Fatalf("StartAgentRun: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-feed-stale", runID, "working", "testing", "waiting", 0.4, nil, now.Add(-20*time.Minute), 1); err != nil {
+		t.Fatalf("RecordAgentRunHeartbeat: %v", err)
+	}
+	blockedID, err := db.CreateWorkload("blocked feed", "codex", "repo-b", "repo-b", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload blocked: %v", err)
+	}
+	if _, err := db.RecordPolicyDecision(blockedID, "", "deny-model", "block", "model not allowed", "operator"); err != nil {
+		t.Fatalf("RecordPolicyDecision: %v", err)
+	}
+
+	feed, err := db.GetWorkloadEventFeed(now.AddDate(0, 0, -1), now.AddDate(0, 0, 1), "codex", "", "", "", "", 10, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("GetWorkloadEventFeed: %v", err)
+	}
+	if feed.Total != 2 || len(feed.Rows) != 2 {
+		t.Fatalf("unexpected feed: %+v", feed)
+	}
+	if !feedHasSeverity(feed.Rows, blockedID, "critical") || !feedHasSeverity(feed.Rows, staleID, "warning") {
+		t.Fatalf("unexpected feed severities: %+v", feed.Rows)
+	}
+	warnings, err := db.GetWorkloadEventFeed(now.AddDate(0, 0, -1), now.AddDate(0, 0, 1), "codex", "", "", "", "warning", 10, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("GetWorkloadEventFeed warning: %v", err)
+	}
+	if warnings.Total != 1 || warnings.Rows[0].WorkloadID != staleID || warnings.Rows[0].Phase != "stale" {
+		t.Fatalf("unexpected warning feed: %+v", warnings)
+	}
+}
+
+func feedHasSeverity(rows []WorkloadFeedEvent, workloadID, severity string) bool {
+	for _, row := range rows {
+		if row.WorkloadID == workloadID && row.Severity == severity {
+			return true
+		}
+	}
+	return false
+}
+
 func TestAgentRunHeartbeatRejectsTerminalRun(t *testing.T) {
 	db := tempDB(t)
 	id, err := db.CreateWorkload("terminal run", "codex", "repo-a", "repo-a", "main", "", "", 0)
