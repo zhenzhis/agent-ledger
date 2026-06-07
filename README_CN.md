@@ -233,6 +233,35 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 
 Canonical event ingest 支持 workload、run、model call、tool call、context ref、artifact、evaluation、policy decision 事件。Payload 只允许元数据；如果出现 raw prompt/content 相关键会直接失败，不会静默持久化。`GET /api/integrations`、`agent-ledger integrations` 与 `ledger.integrations` 会暴露当前 connector/protocol 能力目录，但不会泄露本地 source 原始路径。`POST /api/otel/genai` 与 `agent-ledger otel ingest` 支持 OpenTelemetry GenAI JSON span，并只保留经过挑选的元数据和 token 字段。`POST /api/a2a/tasks` 与 `agent-ledger a2a ingest` 支持 A2A task snapshot/event，只保留任务生命周期元数据，不保存 message/history/artifact part 内容。`POST /api/provider/calls` 与 `agent-ledger provider ingest` 支持 OpenAI-compatible、Anthropic-style、LiteLLM-style usage envelope，不保存 request/response message 内容。`POST /api/reconciliation/import` 与 `agent-ledger reconcile import` 支持导入本地 provider CSV/JSON 账单，只保存汇总金额、账单 hash、窗口和 warning，并与相同窗口的本地账本做差异比较。
 
+## 数据准确性排障
+
+优先运行一键诊断：
+
+```bash
+agent-ledger doctor --format markdown
+```
+
+也可以打开 `GET /api/doctor?format=markdown&privacy=1`。诊断报告会检查当前时间窗口、collector health、路径是否存在/可读、最近扫描错误、价格新鲜度、未计价模型和空 usage 窗口。
+
+如果 Codex、OpenCode 或其他来源没有数据：
+
+- 确认 source 已启用，配置路径真实存在。
+- 执行 `POST /api/scan?source=codex` 或 UI 的 Scan Source。
+- 查看 `GET /api/health/ingestion`；`last_error` 会明确暴露失败原因。
+- Docker 部署时只挂载真实存在的 agent 目录。Docker 会把缺失的 host path 创建成 root-owned 目录，可能破坏后续 agent 写入。
+
+如果 KPI 和图表总数不一致：
+
+- Web UI 使用 `GET /api/dashboard` 作为 KPI、token、费用、模型面板的一致性读取入口。
+- 价格变更后执行 `POST /api/recalculate-costs?mode=zero`。
+- 如果差异持续，运行 `agent-ledger doctor --format markdown`，查看 dashboard consistency 或 pricing warning。
+
+如果费用与 provider 账单不一致：
+
+- 执行 `POST /api/pricing/sync`；如果需要重算历史数据，再执行 `POST /api/pricing/recalculate?mode=all`。
+- 企业合同价或第三方中转价应使用本地 pricing override。
+- 通过 `POST /api/reconciliation/import` 或 `agent-ledger reconcile import` 导入 provider CSV/JSON 账单；对账只保存汇总金额、hash、窗口和 warning。
+
 ## 安全模型
 
 - 默认绑定 `127.0.0.1`。

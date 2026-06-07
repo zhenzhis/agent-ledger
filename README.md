@@ -233,6 +233,35 @@ Current tools:
 
 Canonical event ingest supports workload, run, model-call, tool-call, context-ref, artifact, evaluation, and policy-decision events. Payloads are metadata-only; raw prompt/content keys are rejected instead of silently persisted. `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations` expose the current connector/protocol capability catalog without leaking local source paths. `POST /api/otel/genai` and `agent-ledger otel ingest` accept OpenTelemetry GenAI JSON spans and persist only selected metadata/token fields. `POST /api/a2a/tasks` and `agent-ledger a2a ingest` accept A2A task snapshots/events and persist task lifecycle metadata while excluding message/history/artifact-part content. `POST /api/provider/calls` and `agent-ledger provider ingest` accept OpenAI-compatible, Anthropic-style, and LiteLLM-style usage envelopes while excluding request/response message content. `POST /api/reconciliation/import` and `agent-ledger reconcile import` accept local provider CSV/JSON billing exports, store only summary totals, statement hash, window, and warnings, and compare them with the local ledger for the same window.
 
+## Troubleshooting Data Accuracy
+
+Start with the one-click doctor:
+
+```bash
+agent-ledger doctor --format markdown
+```
+
+Or open `GET /api/doctor?format=markdown&privacy=1`. The report checks the selected time range, collector health, path existence/readability, last scan errors, pricing freshness, unpriced models, and empty usage windows.
+
+If Codex, OpenCode, or another source shows no data:
+
+- Confirm the source is enabled and the configured path exists.
+- Run `POST /api/scan?source=codex` or the UI Scan Source action.
+- Check `GET /api/health/ingestion`; `last_error` is intentionally explicit.
+- For Docker, mount only real agent directories. Docker creates missing host paths as root, which can break later agent writes.
+
+If KPI totals and charts disagree:
+
+- The web UI uses `GET /api/dashboard` for KPI, token, cost, and model panels so they are read from one storage window.
+- Run `POST /api/recalculate-costs?mode=zero` after pricing changes.
+- Run `agent-ledger doctor --format markdown` and inspect `dashboard consistency` or pricing warnings if a mismatch persists.
+
+If costs differ from a provider invoice:
+
+- Run `POST /api/pricing/sync`, then `POST /api/pricing/recalculate?mode=all` if you intentionally want all historical rows repriced.
+- Use local pricing overrides for enterprise contract prices or third-party relay prices.
+- Import the provider CSV/JSON statement through `POST /api/reconciliation/import` or `agent-ledger reconcile import`; reconciliation stores only totals, hashes, windows, and warnings.
+
 ## Security Model
 
 - Binds to `127.0.0.1` by default.
