@@ -89,6 +89,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/session-replay", s.handleSessionReplay)
 	mux.HandleFunc("/api/workloads", s.handleWorkloads)
 	mux.HandleFunc("/api/workloads/close", s.handleWorkloadClose)
+	mux.HandleFunc("/api/workloads/link", s.handleWorkloadLink)
 	mux.HandleFunc("/api/agent-runs", s.handleAgentRuns)
 	mux.HandleFunc("/api/agent-runs/heartbeat", s.handleAgentRunHeartbeat)
 	mux.HandleFunc("/api/agent-runs/liveness", s.handleAgentRunLiveness)

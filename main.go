@@ -1462,6 +1462,14 @@ func runWorkloadCLI(args []string, db *storage.DB) error {
 			return err
 		}
 		fmt.Printf("%s\t%s\n", id, status)
+	case "link":
+		sourceID := firstNonEmptyCLI(cliValue(args[1:], "--source-workload-id"), cliValue(args[1:], "--source-id"), cliValue(args[1:], "--from"), cliValue(args[1:], "--id"))
+		targetID := firstNonEmptyCLI(cliValue(args[1:], "--target-workload-id"), cliValue(args[1:], "--target-id"), cliValue(args[1:], "--to"))
+		linkID, err := db.LinkWorkloads(sourceID, targetID, cliValue(args[1:], "--relation"), cliValue(args[1:], "--reason"), cliValue(args[1:], "--created-by"), 1)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"link_id": linkID, "source_workload_id": sourceID, "target_workload_id": targetID})
 	case "start-run":
 		workloadID := firstNonEmptyCLI(cliValue(args[1:], "--workload-id"), cliValue(args[1:], "--id"))
 		source := cliValue(args[1:], "--source")

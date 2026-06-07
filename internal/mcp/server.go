@@ -170,6 +170,13 @@ func tools() []map[string]interface{} {
 			"status":      stringSchema(),
 			"outcome":     stringSchema(),
 		}),
+		tool("ledger.link_workloads", "Create a metadata-only dependency or lineage edge between workloads.", map[string]interface{}{
+			"source_workload_id": requiredStringSchema(),
+			"target_workload_id": requiredStringSchema(),
+			"relation":           stringSchema(),
+			"reason":             stringSchema(),
+			"created_by":         stringSchema(),
+		}),
 		tool("ledger.start_run", "Start a new agent run attached to an existing workload.", map[string]interface{}{
 			"workload_id": requiredStringSchema(),
 			"source":      stringSchema(),
@@ -440,6 +447,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolStartRun(args)
 	case "ledger.close_workload":
 		return s.toolCloseWorkload(args)
+	case "ledger.link_workloads":
+		return s.toolLinkWorkloads(args)
 	case "ledger.heartbeat_run":
 		return s.toolHeartbeatRun(args)
 	case "ledger.run_liveness":
@@ -496,6 +505,7 @@ func mcpToolRequiresWrite(name string) bool {
 	case "ledger.start_workload",
 		"ledger.start_run",
 		"ledger.close_workload",
+		"ledger.link_workloads",
 		"ledger.heartbeat_run",
 		"ledger.record_tool_call",
 		"ledger.record_artifact",
@@ -733,6 +743,29 @@ func (s *Server) toolCloseWorkload(args json.RawMessage) (interface{}, error) {
 		return nil, err
 	}
 	return map[string]interface{}{"workload_id": in.WorkloadID, "status": firstNonEmpty(in.Status, "completed")}, nil
+}
+
+func (s *Server) toolLinkWorkloads(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		SourceWorkloadID string `json:"source_workload_id"`
+		TargetWorkloadID string `json:"target_workload_id"`
+		Relation         string `json:"relation"`
+		Reason           string `json:"reason"`
+		CreatedBy        string `json:"created_by"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	linkID, err := s.db.LinkWorkloads(in.SourceWorkloadID, in.TargetWorkloadID, in.Relation, in.Reason, in.CreatedBy, 1)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"link_id":            linkID,
+		"source_workload_id": in.SourceWorkloadID,
+		"target_workload_id": in.TargetWorkloadID,
+		"relation":           firstNonEmpty(in.Relation, "relates_to"),
+	}, nil
 }
 
 func (s *Server) toolHeartbeatRun(args json.RawMessage) (interface{}, error) {

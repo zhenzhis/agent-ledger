@@ -108,6 +108,41 @@ func (s *Server) handleWorkloadClose(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"ok": true, "workload_id": payload.WorkloadID, "status": payload.Status})
 }
 
+func (s *Server) handleWorkloadLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
+		return
+	}
+	var payload struct {
+		SourceWorkloadID string  `json:"source_workload_id"`
+		TargetWorkloadID string  `json:"target_workload_id"`
+		Relation         string  `json:"relation"`
+		Reason           string  `json:"reason"`
+		CreatedBy        string  `json:"created_by"`
+		Confidence       float64 `json:"confidence"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		badRequest(w, err)
+		return
+	}
+	if payload.SourceWorkloadID == "" {
+		payload.SourceWorkloadID = r.URL.Query().Get("source_workload_id")
+	}
+	if payload.TargetWorkloadID == "" {
+		payload.TargetWorkloadID = r.URL.Query().Get("target_workload_id")
+	}
+	linkID, err := s.db.LinkWorkloads(payload.SourceWorkloadID, payload.TargetWorkloadID, payload.Relation, payload.Reason, payload.CreatedBy, payload.Confidence)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "workload.link", linkID, map[string]string{"relation": payload.Relation})
+	writeJSON(w, map[string]interface{}{"ok": true, "link_id": linkID, "source_workload_id": payload.SourceWorkloadID, "target_workload_id": payload.TargetWorkloadID})
+}
+
 func (s *Server) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -612,6 +647,17 @@ func applyWorkloadDetailPrivacy(detail *storage.WorkloadDetail, privacy config.P
 			detail.ContextRefs[i].CommitSHA = "<redacted>"
 		}
 	}
+	for i := range detail.Links {
+		if privacy.HashSessionIDs || privacy.ScreenshotMode {
+			detail.Links[i].LinkID = hashValue(detail.Links[i].LinkID)
+			detail.Links[i].SourceWorkloadID = hashValue(detail.Links[i].SourceWorkloadID)
+			detail.Links[i].TargetWorkloadID = hashValue(detail.Links[i].TargetWorkloadID)
+		}
+		if privacy.HideProjectNames || privacy.ScreenshotMode {
+			detail.Links[i].Reason = "<redacted>"
+			detail.Links[i].CreatedBy = "<redacted>"
+		}
+	}
 	for i := range detail.Sessions {
 		applySessionPrivacy(&detail.Sessions[i], privacy)
 	}
@@ -626,7 +672,7 @@ func applyWorkloadTimelinePrivacy(rows []storage.WorkloadTimelineRow, privacy co
 		}
 		if privacy.RedactPaths || privacy.HideProjectNames {
 			switch rows[i].Kind {
-			case "workload", "context_ref", "artifact", "run_event":
+			case "workload", "context_ref", "artifact", "run_event", "workload_link":
 				rows[i].Detail = "<redacted>"
 			}
 		}

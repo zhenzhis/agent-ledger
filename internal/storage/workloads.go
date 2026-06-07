@@ -249,6 +249,18 @@ type PolicyDecisionRow struct {
 	CreatedAt  string `json:"created_at"`
 }
 
+// WorkloadLinkRow captures a metadata-only dependency or lineage edge between workloads.
+type WorkloadLinkRow struct {
+	LinkID           string  `json:"link_id"`
+	SourceWorkloadID string  `json:"source_workload_id"`
+	TargetWorkloadID string  `json:"target_workload_id"`
+	Relation         string  `json:"relation"`
+	Reason           string  `json:"reason"`
+	CreatedBy        string  `json:"created_by"`
+	CreatedAt        string  `json:"created_at"`
+	Confidence       float64 `json:"confidence"`
+}
+
 // WorkloadDetail contains the workload plus child ledger rows.
 type WorkloadDetail struct {
 	Summary     WorkloadSummary     `json:"summary"`
@@ -260,6 +272,7 @@ type WorkloadDetail struct {
 	Artifacts   []ArtifactRow       `json:"artifacts"`
 	Evaluations []EvaluationRow     `json:"evaluations"`
 	Policies    []PolicyDecisionRow `json:"policy_decisions"`
+	Links       []WorkloadLinkRow   `json:"links"`
 	Sessions    []SessionInfo       `json:"sessions"`
 }
 
@@ -790,6 +803,9 @@ func (d *DB) GetWorkloadDetail(workloadID string) (*WorkloadDetail, error) {
 	if detail.Policies, err = d.GetPolicyDecisions(workloadID, 200); err != nil {
 		return nil, err
 	}
+	if detail.Links, err = d.GetWorkloadLinks(workloadID); err != nil {
+		return nil, err
+	}
 	if detail.Sessions, err = d.getWorkloadSessions(workloadID); err != nil {
 		return nil, err
 	}
@@ -956,6 +972,14 @@ func (d *DB) GetWorkloadGraph(workloadID string) (*WorkloadGraph, error) {
 			graph.Edges = append(graph.Edges, GraphEdge{From: detail.Summary.WorkloadID, To: c.ContextRefID, Label: "context"})
 		}
 	}
+	for _, link := range detail.Links {
+		otherID := link.TargetWorkloadID
+		if otherID == detail.Summary.WorkloadID {
+			otherID = link.SourceWorkloadID
+		}
+		graph.Nodes = append(graph.Nodes, GraphNode{ID: otherID, Kind: "workload", Label: otherID, Meta: map[string]string{"relation": link.Relation}})
+		graph.Edges = append(graph.Edges, GraphEdge{From: link.SourceWorkloadID, To: link.TargetWorkloadID, Label: link.Relation})
+	}
 	return graph, nil
 }
 
@@ -1081,6 +1105,17 @@ func (d *DB) GetWorkloadTimeline(workloadID string, limit int) ([]WorkloadTimeli
 			Timestamp: p.CreatedAt,
 		})
 	}
+	for _, link := range detail.Links {
+		rows = append(rows, WorkloadTimelineRow{
+			Kind:       "workload_link",
+			ID:         link.LinkID,
+			Label:      link.Relation,
+			Status:     link.TargetWorkloadID,
+			Detail:     link.Reason,
+			Timestamp:  link.CreatedAt,
+			Confidence: link.Confidence,
+		})
+	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		ti, iok := parseDBTime(rows[i].Timestamp)
 		tj, jok := parseDBTime(rows[j].Timestamp)
@@ -1182,6 +1217,80 @@ func (d *DB) GetPolicyDecisions(workloadID string, limit int) ([]PolicyDecisionR
 	for rows.Next() {
 		var r PolicyDecisionRow
 		if err := rows.Scan(&r.DecisionID, &r.WorkloadID, &r.RunID, &r.RuleID, &r.Action, &r.Reason, &r.ActorRole, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// LinkWorkloads creates or updates a dependency/lineage edge between two workloads.
+func (d *DB) LinkWorkloads(sourceWorkloadID, targetWorkloadID, relation, reason, createdBy string, confidence float64) (string, error) {
+	sourceWorkloadID = strings.TrimSpace(sourceWorkloadID)
+	targetWorkloadID = strings.TrimSpace(targetWorkloadID)
+	if sourceWorkloadID == "" || targetWorkloadID == "" {
+		return "", fmt.Errorf("source_workload_id and target_workload_id are required")
+	}
+	if sourceWorkloadID == targetWorkloadID {
+		return "", fmt.Errorf("workload link cannot target itself")
+	}
+	relation = normalizeWorkloadRelation(relation)
+	if !validWorkloadRelation(relation) {
+		return "", fmt.Errorf("unsupported workload relation %q", relation)
+	}
+	if err := validateShortMetadata("reason", reason, 512); err != nil {
+		return "", err
+	}
+	if err := validateShortMetadata("created_by", createdBy, 128); err != nil {
+		return "", err
+	}
+	if confidence <= 0 {
+		confidence = 1
+	}
+	if confidence > 1 {
+		confidence = 1
+	}
+	var existing int
+	if err := d.db.QueryRow(`SELECT COUNT(*) FROM workloads WHERE workload_id IN (?,?)`, sourceWorkloadID, targetWorkloadID).Scan(&existing); err != nil {
+		return "", err
+	}
+	if existing != 2 {
+		return "", fmt.Errorf("both source and target workloads must exist")
+	}
+	id := stableID("lnk", sourceWorkloadID+"\x00"+targetWorkloadID+"\x00"+relation)
+	now := time.Now().UTC()
+	_, err := d.db.Exec(`INSERT INTO workload_links(link_id,source_workload_id,target_workload_id,relation,reason,created_by,created_at,confidence)
+		VALUES(?,?,?,?,?,?,?,?)
+		ON CONFLICT(source_workload_id,target_workload_id,relation) DO UPDATE SET
+			reason=excluded.reason,
+			created_by=excluded.created_by,
+			created_at=excluded.created_at,
+			confidence=excluded.confidence`,
+		id, sourceWorkloadID, targetWorkloadID, relation, strings.TrimSpace(reason), strings.TrimSpace(createdBy), now, confidence)
+	if err != nil {
+		return "", err
+	}
+	_, _ = d.db.Exec(`UPDATE workloads SET updated_at=? WHERE workload_id IN (?,?)`, now, sourceWorkloadID, targetWorkloadID)
+	return id, nil
+}
+
+// GetWorkloadLinks returns incoming and outgoing workload dependency edges.
+func (d *DB) GetWorkloadLinks(workloadID string) ([]WorkloadLinkRow, error) {
+	if workloadID == "" {
+		return nil, fmt.Errorf("workload_id is required")
+	}
+	rows, err := d.db.Query(`SELECT link_id,source_workload_id,target_workload_id,relation,reason,created_by,created_at,confidence
+		FROM workload_links
+		WHERE source_workload_id=? OR target_workload_id=?
+		ORDER BY created_at DESC`, workloadID, workloadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WorkloadLinkRow
+	for rows.Next() {
+		var r WorkloadLinkRow
+		if err := rows.Scan(&r.LinkID, &r.SourceWorkloadID, &r.TargetWorkloadID, &r.Relation, &r.Reason, &r.CreatedBy, &r.CreatedAt, &r.Confidence); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -1778,6 +1887,56 @@ func isNegativeEvaluationStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func normalizeWorkloadRelation(relation string) string {
+	relation = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(relation, "-", "_")))
+	switch relation {
+	case "", "related", "relates", "relates_to":
+		return "relates_to"
+	case "depends", "dependency", "depends_on":
+		return "depends_on"
+	case "blocks":
+		return "blocks"
+	case "blocked_by":
+		return "blocked_by"
+	case "spawns", "spawned", "spawned_by":
+		return "spawned_by"
+	case "supersedes", "replaces":
+		return "supersedes"
+	case "superseded_by", "replaced_by":
+		return "superseded_by"
+	case "duplicates", "duplicate_of":
+		return "duplicates"
+	case "parent", "parent_of":
+		return "parent_of"
+	case "child", "child_of":
+		return "child_of"
+	default:
+		return relation
+	}
+}
+
+func validWorkloadRelation(relation string) bool {
+	switch relation {
+	case "relates_to", "depends_on", "blocks", "blocked_by", "spawned_by", "supersedes", "superseded_by", "duplicates", "parent_of", "child_of":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateShortMetadata(name, value string, maxLen int) error {
+	value = strings.TrimSpace(value)
+	if len(value) > maxLen {
+		return fmt.Errorf("%s is too long: max %d bytes", name, maxLen)
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("%s contains control characters", name)
+		}
+	}
+	return nil
 }
 
 func clamp01(v float64) float64 {

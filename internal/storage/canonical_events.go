@@ -158,6 +158,18 @@ func CanonicalEventTypes() []CanonicalEventTypeInfo {
 			},
 		},
 		{
+			EventType:   "workload.linked",
+			Description: "Create a metadata-only dependency or lineage edge between two workloads.",
+			Required:    []string{"source", "event_type", "workload_id or payload.source_workload_id", "payload.target_workload_id"},
+			PayloadFields: map[string]string{
+				"source_workload_id": "Optional source workload id when envelope.workload_id is omitted.",
+				"target_workload_id": "Required target workload id.",
+				"relation":           "relates_to, depends_on, blocks, blocked_by, spawned_by, supersedes, superseded_by, duplicates, parent_of, or child_of.",
+				"reason":             "Short metadata-only reason; no prompt or transcript content.",
+				"created_by":         "Local actor, wrapper, adapter, or agent alias.",
+			},
+		},
+		{
 			EventType:   "agent.run.started",
 			Description: "Attach an agent execution to a workload.",
 			Required:    []string{"source", "event_type", "workload_id or payload.goal"},
@@ -375,6 +387,12 @@ func CanonicalEventExamples(eventType string) []CanonicalEventExample {
 			"status":  "completed",
 			"outcome": "adapter integration validated",
 		})),
+		canonicalExample("workload.linked", "Link workloads", "Record workload dependency or lineage metadata.", "wl_example_adapter", "", examplePayload(map[string]interface{}{
+			"target_workload_id": "wl_example_parent",
+			"relation":           "depends_on",
+			"reason":             "requires parent workload evaluation signal",
+			"created_by":         "example-adapter",
+		})),
 	}
 	if filter == "" {
 		return examples
@@ -562,6 +580,16 @@ func validateCanonicalEventRequirements(event CanonicalEvent, payload map[string
 		if event.WorkloadID == "" && payloadString(payload, "workload_id") == "" {
 			return fmt.Errorf("workload_id is required for %s", event.EventType)
 		}
+	case "workload.linked":
+		if event.WorkloadID == "" && payloadString(payload, "source_workload_id") == "" && payloadString(payload, "workload_id") == "" {
+			return fmt.Errorf("workload_id or payload.source_workload_id is required for %s", event.EventType)
+		}
+		if payloadString(payload, "target_workload_id") == "" {
+			return fmt.Errorf("payload.target_workload_id is required for %s", event.EventType)
+		}
+		if relation := payloadString(payload, "relation"); relation != "" && !validWorkloadRelation(normalizeWorkloadRelation(relation)) {
+			return fmt.Errorf("unsupported workload relation %q", relation)
+		}
 	case "agent.run.started":
 		if !hasWorkload {
 			return fmt.Errorf("workload_id or payload.goal is required for %s", event.EventType)
@@ -614,6 +642,11 @@ func (d *DB) applyCanonicalEvent(tx *sql.Tx, event *CanonicalEvent, payload map[
 			return nil, err
 		}
 		return []string{"workload"}, nil
+	case "workload.linked":
+		if err := linkEventWorkloads(tx, event, payload, now); err != nil {
+			return nil, err
+		}
+		return []string{"workload_link"}, nil
 	case "agent.run.started":
 		if err := ensureEventWorkload(tx, event, payload, now); err != nil {
 			return nil, err
@@ -858,6 +891,53 @@ func closeEventWorkload(tx *sql.Tx, event *CanonicalEvent, payload map[string]in
 	return nil
 }
 
+func linkEventWorkloads(tx *sql.Tx, event *CanonicalEvent, payload map[string]interface{}, now time.Time) error {
+	sourceID := firstNonEmptyStorage(event.WorkloadID, payloadString(payload, "source_workload_id"), payloadString(payload, "workload_id"))
+	targetID := payloadString(payload, "target_workload_id")
+	if sourceID == "" || targetID == "" {
+		return fmt.Errorf("source and target workload ids are required for %s", event.EventType)
+	}
+	if sourceID == targetID {
+		return fmt.Errorf("workload link cannot target itself")
+	}
+	relation := normalizeWorkloadRelation(payloadString(payload, "relation"))
+	if !validWorkloadRelation(relation) {
+		return fmt.Errorf("unsupported workload relation %q", relation)
+	}
+	reason := payloadString(payload, "reason")
+	createdBy := payloadString(payload, "created_by")
+	if err := validateShortMetadata("reason", reason, 512); err != nil {
+		return err
+	}
+	if err := validateShortMetadata("created_by", createdBy, 128); err != nil {
+		return err
+	}
+	var existing int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM workloads WHERE workload_id IN (?,?)`, sourceID, targetID).Scan(&existing); err != nil {
+		return err
+	}
+	if existing != 2 {
+		return fmt.Errorf("both source and target workloads must exist")
+	}
+	linkID := firstNonEmptyStorage(payloadString(payload, "link_id"), event.SourceEventID, stableID("lnk", sourceID+"\x00"+targetID+"\x00"+relation))
+	_, err := tx.Exec(`INSERT INTO workload_links(link_id,source_workload_id,target_workload_id,relation,reason,created_by,created_at,confidence)
+		VALUES(?,?,?,?,?,?,?,?)
+		ON CONFLICT(source_workload_id,target_workload_id,relation) DO UPDATE SET
+			reason=excluded.reason,
+			created_by=excluded.created_by,
+			created_at=excluded.created_at,
+			confidence=excluded.confidence`,
+		linkID, sourceID, targetID, relation, reason, createdBy, event.Timestamp, event.Confidence)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE workloads SET updated_at=? WHERE workload_id IN (?,?)`, now, sourceID, targetID); err != nil {
+		return err
+	}
+	event.WorkloadID = sourceID
+	return nil
+}
+
 func canonicalPayload(raw json.RawMessage) (map[string]interface{}, string, error) {
 	if len(raw) == 0 {
 		return map[string]interface{}{}, "{}", nil
@@ -952,6 +1032,8 @@ func normalizeCanonicalEventType(raw string) string {
 		return "workload.started"
 	case "workload_closed", "workload.close", "workload.closed":
 		return "workload.closed"
+	case "workload_linked", "workload.link", "workload.linked":
+		return "workload.linked"
 	case "agent_run_started", "run.started", "agent.run.start", "agent.run.started":
 		return "agent.run.started"
 	case "agent_run_finished", "run.finished", "agent.run.finish", "agent.run.finished":

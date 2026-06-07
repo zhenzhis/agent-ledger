@@ -89,6 +89,10 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 	if heartbeat.WorkloadID != start.WorkloadID || heartbeat.RunID != run.RunID {
 		t.Fatalf("unexpected heartbeat result: %#v", heartbeat)
 	}
+	parentID, err := db.CreateWorkload("parent dependency", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "platform", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload parent: %v", err)
+	}
 
 	events := []CanonicalEvent{
 		{
@@ -184,6 +188,19 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 				"actor_role": "operator",
 			}),
 		},
+		{
+			EventID:    "evt-link",
+			Source:     "codex",
+			EventType:  "workload.linked",
+			WorkloadID: start.WorkloadID,
+			Timestamp:  ts.Add(7 * time.Minute),
+			Payload: rawJSON(t, map[string]interface{}{
+				"target_workload_id": parentID,
+				"relation":           "depends-on",
+				"reason":             "needs parent evidence",
+				"created_by":         "test-adapter",
+			}),
+		},
 	}
 	for _, event := range events {
 		if _, err := db.IngestCanonicalEvent(event); err != nil {
@@ -223,6 +240,9 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 	if len(detail.Artifacts) != 1 || len(detail.Evaluations) != 1 || len(detail.Policies) != 1 {
 		t.Fatalf("artifacts=%d evaluations=%d policies=%d", len(detail.Artifacts), len(detail.Evaluations), len(detail.Policies))
 	}
+	if len(detail.Links) != 1 || detail.Links[0].Relation != "depends_on" || detail.Links[0].TargetWorkloadID != parentID {
+		t.Fatalf("links=%#v", detail.Links)
+	}
 	if len(detail.Sessions) != 1 || detail.Sessions[0].SessionID != "sess-event-ledger" {
 		t.Fatalf("sessions=%#v", detail.Sessions)
 	}
@@ -230,7 +250,7 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("graph: %v", err)
 	}
-	var contextNode, contextEdge bool
+	var contextNode, contextEdge, linkEdge bool
 	for _, node := range graph.Nodes {
 		if node.Kind == "context" && node.Label == "agent-ledger working tree" {
 			contextNode = true
@@ -240,8 +260,11 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 		if edge.To == detail.ContextRefs[0].ContextRefID && edge.Label == "context" {
 			contextEdge = true
 		}
+		if edge.From == start.WorkloadID && edge.To == parentID && edge.Label == "depends_on" {
+			linkEdge = true
+		}
 	}
-	if !contextNode || !contextEdge {
+	if !contextNode || !contextEdge || !linkEdge {
 		t.Fatalf("context missing from graph: nodes=%#v edges=%#v", graph.Nodes, graph.Edges)
 	}
 	timeline, err := db.GetWorkloadTimeline(start.WorkloadID, 100)
@@ -252,7 +275,7 @@ func TestIngestCanonicalEventBuildsWorkloadLedger(t *testing.T) {
 	for _, row := range timeline {
 		seenKinds[row.Kind] = true
 	}
-	for _, kind := range []string{"workload", "agent_run", "run_event", "model_call", "tool_call", "context_ref", "artifact", "evaluation", "policy"} {
+	for _, kind := range []string{"workload", "agent_run", "run_event", "model_call", "tool_call", "context_ref", "artifact", "evaluation", "policy", "workload_link"} {
 		if !seenKinds[kind] {
 			t.Fatalf("timeline missing %s: %#v", kind, timeline)
 		}
@@ -279,7 +302,7 @@ func TestCanonicalEventSchemaListsCoreTypes(t *testing.T) {
 	for _, info := range types {
 		seen[info.EventType] = true
 	}
-	for _, eventType := range []string{"workload.started", "agent.run.started", "agent.run.heartbeat", "model.call", "tool.call", "policy.decision"} {
+	for _, eventType := range []string{"workload.started", "workload.linked", "agent.run.started", "agent.run.heartbeat", "model.call", "tool.call", "policy.decision"} {
 		if !seen[eventType] {
 			t.Fatalf("schema missing %s", eventType)
 		}

@@ -31,7 +31,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 2", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.validate_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.adapter_conformance") || !hasTool(tools, "ledger.integrations") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.link_workloads") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.validate_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.adapter_conformance") || !hasTool(tools, "ledger.integrations") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	payload := toolTextPayload(t, out[1])
@@ -167,46 +167,55 @@ func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 	if workloadID == "" || runID == "" {
 		t.Fatalf("missing ids: %#v", created)
 	}
+	parentID, err := db.CreateWorkload("parent workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload parent: %v", err)
+	}
 
 	startRunLine := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ledger.start_run","arguments":{"workload_id":"` + workloadID + `","source":"codex","agent_name":"codex-worker","command":"codex worker","cwd":"C:/work"}}}`
-	policyLine := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ledger.get_policy","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","model":"gpt-5.5","role":"operator"}}}`
-	toolLine := `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ledger.record_tool_call","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","source":"codex","tool_call_id":"tool-mcp","tool_name":"shell","tool_type":"command","status":"ok","duration_ms":120,"params_hash":"sha256:params"}}}`
-	contextLine := `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"ledger.record_context","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","source":"codex","context_ref_id":"ctx-mcp","ref_type":"repo","ref_hash":"sha256:context","label":"privacy-safe-context","repo":"zhenzhis/agent-ledger","git_branch":"main","privacy_label":"synthetic"}}}`
-	artifactLine := `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"ledger.record_artifact","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","artifact_type":"report","label":"privacy-safe-summary","path_hash":"sha256:abc","sha256":"def","metadata":{"format":"markdown"}}}}`
-	evaluationLine := `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"ledger.record_evaluation","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","source":"codex","evaluation_id":"eval-mcp","evaluator":"ci","status":"pass","score":0.97,"signal":"unit-tests","notes":"privacy-safe acceptance signal"}}}`
-	closeLine := `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"ledger.close_workload","arguments":{"workload_id":"` + workloadID + `","status":"completed","outcome":"accepted"}}}`
-	timelineLine := `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"ledger.workload_timeline","arguments":{"workload_id":"` + workloadID + `","limit":20}}}`
-	stateLine := `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"ledger.workload_state","arguments":{"workload_id":"` + workloadID + `","max_age":"10m"}}}`
-	responses := serveLines(t, srv, startRunLine, policyLine, toolLine, contextLine, artifactLine, evaluationLine, closeLine, timelineLine, stateLine)
+	linkLine := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ledger.link_workloads","arguments":{"source_workload_id":"` + workloadID + `","target_workload_id":"` + parentID + `","relation":"depends-on","reason":"privacy-safe parent dependency","created_by":"mcp-test"}}}`
+	policyLine := `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ledger.get_policy","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","model":"gpt-5.5","role":"operator"}}}`
+	toolLine := `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"ledger.record_tool_call","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","source":"codex","tool_call_id":"tool-mcp","tool_name":"shell","tool_type":"command","status":"ok","duration_ms":120,"params_hash":"sha256:params"}}}`
+	contextLine := `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"ledger.record_context","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","source":"codex","context_ref_id":"ctx-mcp","ref_type":"repo","ref_hash":"sha256:context","label":"privacy-safe-context","repo":"zhenzhis/agent-ledger","git_branch":"main","privacy_label":"synthetic"}}}`
+	artifactLine := `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"ledger.record_artifact","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","artifact_type":"report","label":"privacy-safe-summary","path_hash":"sha256:abc","sha256":"def","metadata":{"format":"markdown"}}}}`
+	evaluationLine := `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"ledger.record_evaluation","arguments":{"workload_id":"` + workloadID + `","run_id":"` + runID + `","source":"codex","evaluation_id":"eval-mcp","evaluator":"ci","status":"pass","score":0.97,"signal":"unit-tests","notes":"privacy-safe acceptance signal"}}}`
+	closeLine := `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"ledger.close_workload","arguments":{"workload_id":"` + workloadID + `","status":"completed","outcome":"accepted"}}}`
+	timelineLine := `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"ledger.workload_timeline","arguments":{"workload_id":"` + workloadID + `","limit":20}}}`
+	stateLine := `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"ledger.workload_state","arguments":{"workload_id":"` + workloadID + `","max_age":"10m"}}}`
+	responses := serveLines(t, srv, startRunLine, linkLine, policyLine, toolLine, contextLine, artifactLine, evaluationLine, closeLine, timelineLine, stateLine)
 	startedRun := toolTextPayload(t, responses[0])
 	if startedRun["run_id"] == "" || startedRun["workload_id"] != workloadID {
 		t.Fatalf("start run payload=%#v", startedRun)
 	}
-	policy := toolTextPayload(t, responses[1])
+	link := toolTextPayload(t, responses[1])
+	if link["link_id"] == "" || link["target_workload_id"] != parentID {
+		t.Fatalf("missing link result: %#v", link)
+	}
+	policy := toolTextPayload(t, responses[2])
 	if policy["action"] != "warn" {
 		t.Fatalf("policy action=%#v", policy["action"])
 	}
-	tool := toolTextPayload(t, responses[2])
+	tool := toolTextPayload(t, responses[3])
 	if tool["status"] != "inserted" {
 		t.Fatalf("missing tool result: %#v", tool)
 	}
-	context := toolTextPayload(t, responses[3])
+	context := toolTextPayload(t, responses[4])
 	if context["status"] != "inserted" {
 		t.Fatalf("missing context result: %#v", context)
 	}
-	artifact := toolTextPayload(t, responses[4])
+	artifact := toolTextPayload(t, responses[5])
 	if artifact["artifact_id"] == "" {
 		t.Fatalf("missing artifact id: %#v", artifact)
 	}
-	evaluation := toolTextPayload(t, responses[5])
+	evaluation := toolTextPayload(t, responses[6])
 	if evaluation["status"] != "inserted" {
 		t.Fatalf("missing evaluation result: %#v", evaluation)
 	}
-	closed := toolTextPayload(t, responses[6])
+	closed := toolTextPayload(t, responses[7])
 	if closed["status"] != "completed" {
 		t.Fatalf("close payload=%#v", closed)
 	}
-	timeline := toolTextPayload(t, responses[7])
+	timeline := toolTextPayload(t, responses[8])
 	rows, ok := timeline["rows"].([]interface{})
 	if !ok || len(rows) == 0 {
 		t.Fatalf("timeline payload=%#v", timeline)
@@ -214,7 +223,10 @@ func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 	if !timelineHasKind(rows, "evaluation") {
 		t.Fatalf("timeline missing evaluation: %#v", timeline)
 	}
-	state := toolTextPayload(t, responses[8])
+	if !timelineHasKind(rows, "workload_link") {
+		t.Fatalf("timeline missing workload link: %#v", timeline)
+	}
+	state := toolTextPayload(t, responses[9])
 	if state["phase"] != "accepted" || state["terminal"] != true {
 		t.Fatalf("unexpected workload state: %#v", state)
 	}
@@ -237,6 +249,9 @@ func TestMCPWorkloadLifecycleArtifactAndPolicy(t *testing.T) {
 	}
 	if len(detail.Policies) != 1 || detail.Policies[0].Action != "warn" {
 		t.Fatalf("policy decisions=%#v", detail.Policies)
+	}
+	if len(detail.Links) != 1 || detail.Links[0].TargetWorkloadID != parentID || detail.Links[0].Relation != "depends_on" {
+		t.Fatalf("links=%#v", detail.Links)
 	}
 	if len(detail.Artifacts) != 1 || detail.Artifacts[0].Label != "privacy-safe-summary" {
 		t.Fatalf("artifacts=%#v", detail.Artifacts)

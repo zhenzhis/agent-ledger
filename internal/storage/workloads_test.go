@@ -104,6 +104,42 @@ func TestManualWorkloadAndRunDetail(t *testing.T) {
 	}
 }
 
+func TestLinkWorkloadsCreatesDependencyEdge(t *testing.T) {
+	db := tempDB(t)
+	childID, err := db.CreateWorkload("child goal", "codex", "repo-a", "repo-a", "main", "", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload child: %v", err)
+	}
+	parentID, err := db.CreateWorkload("parent goal", "codex", "repo-a", "repo-a", "main", "", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload parent: %v", err)
+	}
+	linkID, err := db.LinkWorkloads(childID, parentID, "depends-on", "requires parent evidence", "local-test", 0.8)
+	if err != nil {
+		t.Fatalf("LinkWorkloads: %v", err)
+	}
+	dupID, err := db.LinkWorkloads(childID, parentID, "depends_on", "updated reason", "local-test", 0.9)
+	if err != nil {
+		t.Fatalf("LinkWorkloads duplicate: %v", err)
+	}
+	if dupID != linkID {
+		t.Fatalf("expected stable duplicate link id, got %s want %s", dupID, linkID)
+	}
+	links, err := db.GetWorkloadLinks(childID)
+	if err != nil {
+		t.Fatalf("GetWorkloadLinks: %v", err)
+	}
+	if len(links) != 1 || links[0].Relation != "depends_on" || links[0].Reason != "updated reason" || links[0].Confidence != 0.9 {
+		t.Fatalf("unexpected links: %+v", links)
+	}
+	if _, err := db.LinkWorkloads(childID, childID, "relates_to", "", "", 1); err == nil {
+		t.Fatal("expected self-link rejection")
+	}
+	if _, err := db.LinkWorkloads(childID, "missing", "relates_to", "", "", 1); err == nil {
+		t.Fatal("expected missing target rejection")
+	}
+}
+
 func TestStartAgentRunRejectsClosedWorkload(t *testing.T) {
 	db := tempDB(t)
 	id, err := db.CreateWorkload("closed workload", "codex", "repo-a", "repo-a", "main", "", "", 0)

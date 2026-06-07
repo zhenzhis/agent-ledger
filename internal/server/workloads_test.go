@@ -114,6 +114,57 @@ func TestAgentRunStartAPI(t *testing.T) {
 	}
 }
 
+func TestWorkloadLinkAPI(t *testing.T) {
+	db := testServerDB(t)
+	sourceID, err := db.CreateWorkload("source link workload", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload source: %v", err)
+	}
+	targetID, err := db.CreateWorkload("target link workload", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload target: %v", err)
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"source_workload_id": sourceID,
+		"target_workload_id": targetID,
+		"relation":           "spawned-by",
+		"reason":             "private parent task summary",
+		"created_by":         "local-wrapper",
+	})
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/link", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.handleWorkloadLink(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("link status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var response struct {
+		OK     bool   `json:"ok"`
+		LinkID string `json:"link_id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.OK || response.LinkID == "" {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+	detail, err := db.GetWorkloadDetail(sourceID)
+	if err != nil {
+		t.Fatalf("GetWorkloadDetail: %v", err)
+	}
+	if len(detail.Links) != 1 || detail.Links[0].TargetWorkloadID != targetID || detail.Links[0].Relation != "spawned_by" {
+		t.Fatalf("link not attached: %+v", detail.Links)
+	}
+	audit, err := db.GetAuditLog(10)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if !strings.Contains(string(rawAudit), "workload.link") || strings.Contains(string(rawAudit), "private parent task summary") {
+		t.Fatalf("unexpected audit log: %s", string(rawAudit))
+	}
+}
+
 func TestAgentRunLivenessAPI(t *testing.T) {
 	db := testServerDB(t)
 	workloadID, err := db.CreateWorkload("sensitive async goal", "codex", "agent-ledger", "zhenzhis/agent-ledger", "feature/private", "", "", 0)

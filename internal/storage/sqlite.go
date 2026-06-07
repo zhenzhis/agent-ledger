@@ -807,6 +807,24 @@ func migrate(db *sql.DB) error {
 				CREATE INDEX IF NOT EXISTS idx_agent_run_events_type_time ON agent_run_events(event_type, timestamp);
 			`,
 		},
+		{
+			"012_workload_links", `
+				CREATE TABLE IF NOT EXISTS workload_links (
+					link_id TEXT PRIMARY KEY,
+					source_workload_id TEXT NOT NULL,
+					target_workload_id TEXT NOT NULL,
+					relation TEXT NOT NULL,
+					reason TEXT DEFAULT '',
+					created_by TEXT DEFAULT '',
+					created_at DATETIME NOT NULL,
+					confidence REAL DEFAULT 1,
+					UNIQUE(source_workload_id, target_workload_id, relation)
+				);
+				CREATE INDEX IF NOT EXISTS idx_workload_links_source ON workload_links(source_workload_id, created_at);
+				CREATE INDEX IF NOT EXISTS idx_workload_links_target ON workload_links(target_workload_id, created_at);
+				CREATE INDEX IF NOT EXISTS idx_workload_links_relation ON workload_links(relation, created_at);
+			`,
+		},
 	}
 	for _, m := range migrations {
 		var done string
