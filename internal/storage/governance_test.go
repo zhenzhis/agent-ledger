@@ -492,6 +492,34 @@ func TestMultiActorApprovalVotesRequireQuorum(t *testing.T) {
 	if !allowed {
 		t.Fatal("approved quorum should authorize matching operation")
 	}
+	strictAllowed, err := db.ApprovalAllowsOperation(ApprovalOperation{RequestID: id, Action: "model.call", Target: "gpt-5.5", Source: "gateway", Model: "gpt-5.5", Project: "agent-ledger"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strictAllowed {
+		t.Fatal("strict context should authorize matching operation")
+	}
+	wrongModel, err := db.ApprovalAllowsOperation(ApprovalOperation{RequestID: id, Action: "model.call", Target: "gpt-5.5", Source: "gateway", Model: "gpt-4.1", Project: "agent-ledger"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wrongModel {
+		t.Fatal("strict context should not allow a different model")
+	}
+	wrongSource, err := db.ApprovalAllowsOperation(ApprovalOperation{RequestID: id, Action: "model.call", Target: "gpt-5.5", Source: "codex", Model: "gpt-5.5", Project: "agent-ledger"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wrongSource {
+		t.Fatal("strict context should not allow a different source")
+	}
+	wrongProject, err := db.ApprovalAllowsOperation(ApprovalOperation{RequestID: id, Action: "model.call", Target: "gpt-5.5", Source: "gateway", Model: "gpt-5.5", Project: "other-project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wrongProject {
+		t.Fatal("strict context should not allow a different project")
+	}
 	rows, err := db.ListApprovalRequests("approved", 10)
 	if err != nil {
 		t.Fatal(err)

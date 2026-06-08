@@ -476,6 +476,23 @@ func TestGatewayPolicyApprovalRequired(t *testing.T) {
 	if len(rows) != 1 || rows[0].Action != "model.call" || rows[0].Target != "openai-chat-completions" || rows[0].Model != "gpt-5.5" {
 		t.Fatalf("unexpected approvals: %+v", rows)
 	}
+	if err := db.ResolveApprovalRequest(rows[0].RequestID, "approved", "admin", "ok"); err != nil {
+		t.Fatalf("approve gateway request: %v", err)
+	}
+	approvedReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/chat/completions?approval_id="+rows[0].RequestID, strings.NewReader(`{"model":"gpt-5.5"}`))
+	approvedReq.Header.Set("Content-Type", "application/json")
+	approvedRR := httptest.NewRecorder()
+	srv.handleOpenAIChatGateway(approvedRR, approvedReq)
+	if approvedRR.Code != http.StatusBadGateway {
+		t.Fatalf("approved matching model should pass policy gate and reach upstream, got %d body=%s", approvedRR.Code, approvedRR.Body.String())
+	}
+	wrongModelReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/chat/completions?approval_id="+rows[0].RequestID, strings.NewReader(`{"model":"gpt-4.1"}`))
+	wrongModelReq.Header.Set("Content-Type", "application/json")
+	wrongModelRR := httptest.NewRecorder()
+	srv.handleOpenAIChatGateway(wrongModelRR, wrongModelReq)
+	if wrongModelRR.Code != http.StatusForbidden {
+		t.Fatalf("approval for one model should not authorize another model, got %d body=%s", wrongModelRR.Code, wrongModelRR.Body.String())
+	}
 }
 
 func testGatewayConfig(upstream string) config.GatewayConfig {

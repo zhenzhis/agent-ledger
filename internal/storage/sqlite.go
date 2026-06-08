@@ -194,6 +194,16 @@ type ApprovalRequest struct {
 	DecisionNote           string `json:"decision_note"`
 }
 
+// ApprovalOperation describes the operation context an approved request must match.
+type ApprovalOperation struct {
+	RequestID string
+	Action    string
+	Target    string
+	Source    string
+	Model     string
+	Project   string
+}
+
 // ApprovalVote is one local actor decision on an approval request.
 type ApprovalVote struct {
 	RequestID string `json:"request_id"`

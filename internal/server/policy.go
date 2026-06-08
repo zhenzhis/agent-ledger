@@ -127,7 +127,14 @@ func (s *Server) evaluateOperationPolicy(w http.ResponseWriter, r *http.Request,
 		if approvalID == "" {
 			approvalID = r.Header.Get("X-Agent-Ledger-Approval")
 		}
-		allowed, err := s.db.ApprovalAllows(approvalID, action, target)
+		allowed, err := s.db.ApprovalAllowsOperation(storage.ApprovalOperation{
+			RequestID: approvalID,
+			Action:    action,
+			Target:    target,
+			Source:    source,
+			Model:     model,
+			Project:   project,
+		})
 		if err != nil {
 			serverError(w, err)
 			return false

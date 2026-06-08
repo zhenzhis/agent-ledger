@@ -312,7 +312,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 
 手动扫描、清理重扫、价格同步、导入和费用重算默认只允许本机访问；暴露到网络前必须配置 auth token 或反向代理访问控制。
 
-当策略返回 `require_approval` 时，Agent Ledger 会写入本地 pending 审批请求并返回 id。Admin 可通过 `POST /api/policy/approvals` 或 `agent-ledger policy resolve` 投批准/拒绝票；默认法定人数为 1，`required_approvals` 可要求多名审批人达成 quorum 后，原操作再带 `approval_id=<id>` 或 `X-Agent-Ledger-Approval: <id>` 重试。Policy rule 还可以携带 `approvers`、`escalate_after` 与 `escalate_to`；这些字段会作为本地审批路由元数据保存，并生成 `due_at` 与 `overdue` 证据，供 Dashboard、Webhook 摘要和执行报告使用。
+当策略返回 `require_approval` 时，Agent Ledger 会写入本地 pending 审批请求并返回 id。Admin 可通过 `POST /api/policy/approvals` 或 `agent-ledger policy resolve` 投批准/拒绝票；默认法定人数为 1，`required_approvals` 可要求多名审批人达成 quorum 后，原操作再带 `approval_id=<id>` 或 `X-Agent-Ledger-Approval: <id>` 重试。审批复用会匹配 action/target；当原请求带有 source、model、project 时也会一并校验，因此实时 gateway 的某个模型审批不能被其他模型复用。Policy rule 还可以携带 `approvers`、`escalate_after` 与 `escalate_to`；这些字段会作为本地审批路由元数据保存，并生成 `due_at` 与 `overdue` 证据，供 Dashboard、Webhook 摘要和执行报告使用。
 
 ## MCP 工具接口
 

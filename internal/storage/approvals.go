@@ -202,13 +202,62 @@ func (d *DB) ApprovalAllows(requestID, action, target string) (bool, error) {
 	if status != "approved" {
 		return false, nil
 	}
-	if !strings.EqualFold(storedAction, action) {
+	if !strings.EqualFold(strings.TrimSpace(storedAction), strings.TrimSpace(action)) {
 		return false, nil
 	}
 	if storedTarget != "" && target != "" && storedTarget != target {
 		return false, nil
 	}
 	return true, nil
+}
+
+// ApprovalAllowsOperation reports whether a previously approved request can authorize a matching operation retry.
+func (d *DB) ApprovalAllowsOperation(op ApprovalOperation) (bool, error) {
+	if strings.TrimSpace(op.RequestID) == "" {
+		return false, nil
+	}
+	var storedAction, storedTarget, storedSource, storedModel, storedProject, status string
+	err := d.db.QueryRow(`SELECT action,target,source,model,project,status FROM approval_requests WHERE request_id=?`, op.RequestID).Scan(&storedAction, &storedTarget, &storedSource, &storedModel, &storedProject, &status)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if status != "approved" {
+		return false, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(storedAction), strings.TrimSpace(op.Action)) {
+		return false, nil
+	}
+	if !approvalContextMatches(storedTarget, op.Target, false) {
+		return false, nil
+	}
+	if !approvalContextMatches(storedSource, op.Source, true) {
+		return false, nil
+	}
+	if !approvalContextMatches(storedModel, op.Model, true) {
+		return false, nil
+	}
+	if !approvalContextMatches(storedProject, op.Project, false) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func approvalContextMatches(stored, incoming string, caseInsensitive bool) bool {
+	stored = strings.TrimSpace(stored)
+	incoming = strings.TrimSpace(incoming)
+	if stored == "" {
+		return true
+	}
+	if incoming == "" {
+		return false
+	}
+	if caseInsensitive {
+		return strings.EqualFold(stored, incoming)
+	}
+	return stored == incoming
 }
 
 func approvalVoters(tx *sql.Tx, requestID, status string) ([]string, error) {
