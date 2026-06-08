@@ -1091,6 +1091,9 @@ func runPolicyCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		if err != nil {
 			return err
 		}
+		if cliBool(args[1:], "--privacy") {
+			redactApprovalRequests(rows)
+		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"status": status, "rows": rows})
 	case "resolve":
 		requestID := firstNonEmptyCLI(cliValue(args[1:], "--id"), cliValue(args[1:], "--request-id"), cliValue(args[1:], "--request_id"))
@@ -1100,14 +1103,25 @@ func runPolicyCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		}
 		voter := firstNonEmptyCLI(cliValue(args[1:], "--voter"), cliValue(args[1:], "--actor"), "cli")
 		requiredApprovals := firstNonEmptyInt(cliInt(args[1:], "--required-approvals", 0), cliInt(args[1:], "--required_approvals", 0))
-		result, err := db.CastApprovalVote(requestID, status, voter, "cli", cliValue(args[1:], "--note"), requiredApprovals)
+		note := cliValue(args[1:], "--note")
+		result, err := db.CastApprovalVote(requestID, status, voter, "cli", note, requiredApprovals)
 		if err != nil {
+			return err
+		}
+		if err := db.AppendAuditLog("local", "cli", "policy.approval."+result.Status, requestID, map[string]string{
+			"approval_votes":     fmt.Sprint(result.ApprovalVotes),
+			"decided":            fmt.Sprint(result.Decided),
+			"note_present":       fmt.Sprint(strings.TrimSpace(note) != ""),
+			"rejection_votes":    fmt.Sprint(result.RejectionVotes),
+			"required_approvals": fmt.Sprint(result.RequiredApprovals),
+			"voter":              voter,
+		}); err != nil {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"ok": true, "result": result})
 	case "evaluate":
 	default:
-		return fmt.Errorf("usage: agent-ledger policy audit [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--format markdown|json]; agent-ledger policy enforcement [--limit n] [--privacy]; agent-ledger policy routes [--due-within 24h] [--limit n] [--privacy] [--format markdown|json]; agent-ledger policy evaluate [--source s] [--model m] [--project p] [--repo r] [--branch b] [--team t] [--action a] [--target x] [--workload-id id] [--run-id id] [--role role] [--record]; agent-ledger policy approvals [--status pending|approved|rejected|all]; agent-ledger policy resolve --id id --status approved|rejected [--voter name] [--required-approvals n] [--note text]")
+		return fmt.Errorf("usage: agent-ledger policy audit [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--format markdown|json]; agent-ledger policy enforcement [--limit n] [--privacy]; agent-ledger policy routes [--due-within 24h] [--limit n] [--privacy] [--format markdown|json]; agent-ledger policy evaluate [--source s] [--model m] [--project p] [--repo r] [--branch b] [--team t] [--action a] [--target x] [--workload-id id] [--run-id id] [--role role] [--record]; agent-ledger policy approvals [--status pending|approved|rejected|all] [--limit n] [--privacy]; agent-ledger policy resolve --id id --status approved|rejected [--voter name] [--required-approvals n] [--note text]")
 	}
 	req := ledgerpolicy.Request{
 		WorkloadID: firstNonEmptyCLI(cliValue(args[1:], "--workload-id"), cliValue(args[1:], "--workload_id")),
@@ -1194,6 +1208,23 @@ func redactPolicyEnforcementReport(report *storage.PolicyEnforcementReport) {
 		report.ApprovalRequests[i].DecisionNote = "<redacted>"
 	}
 	redactAuditRows(report.AuditEvents)
+}
+
+func redactApprovalRequests(rows []storage.ApprovalRequest) {
+	for i := range rows {
+		rows[i].RequestID = "<redacted>"
+		rows[i].PolicyDecisionID = "<redacted>"
+		rows[i].WorkloadID = "<redacted>"
+		rows[i].RunID = "<redacted>"
+		rows[i].Project = "<redacted>"
+		rows[i].Target = "<redacted>"
+		rows[i].ApproverHint = "<redacted>"
+		rows[i].EscalationTarget = "<redacted>"
+		rows[i].Reason = "<redacted>"
+		rows[i].RequestPayload = "<redacted>"
+		rows[i].DecidedBy = "<redacted>"
+		rows[i].DecisionNote = "<redacted>"
+	}
 }
 
 func redactApprovalRouteSummary(report *storage.ApprovalRouteSummary) {

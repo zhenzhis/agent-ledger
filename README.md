@@ -85,7 +85,7 @@ CLI:
 ./agent-ledger bundle export --privacy --signed --out usage-bundle.json
 ./agent-ledger bundle import --file usage-bundle.json --verify
 ./agent-ledger policy evaluate --model gpt-5.5 --action model.call
-./agent-ledger policy approvals
+./agent-ledger policy approvals --privacy
 ./agent-ledger policy enforcement --privacy
 ./agent-ledger policy routes --due-within 24h --privacy
 ./agent-ledger policy resolve --id apr_... --status approved

@@ -203,7 +203,7 @@ func Registry(opts Options) Catalog {
 			Enabled:   opts.PoliciesEnabled,
 			Privacy:   "records rule metadata only; enforcement is delegated to wrappers or gateways",
 			Endpoints: []string{"GET /api/policies/status", "POST /api/policy/evaluate", "GET /api/policy/audit", "GET /api/policy/enforcement", "GET /api/policy/decisions", "GET/POST /api/policy/approvals", "GET /api/policy/approval-routes"},
-			Commands:  []string{"agent-ledger policy evaluate --model gpt-5.5 --action model.call", "agent-ledger policy audit", "agent-ledger policy enforcement --privacy", "agent-ledger policy routes --due-within 24h --privacy", "MCP ledger.approval_routes", "MCP ledger.approvals", "MCP ledger.resolve_approval", "agent-ledger policy approvals", "agent-ledger policy resolve --id apr_... --status approved --voter alice --required-approvals 2"},
+			Commands:  []string{"agent-ledger policy evaluate --model gpt-5.5 --action model.call", "agent-ledger policy audit", "agent-ledger policy enforcement --privacy", "agent-ledger policy routes --due-within 24h --privacy", "MCP ledger.approval_routes", "MCP ledger.approvals", "MCP ledger.resolve_approval", "agent-ledger policy approvals --privacy", "agent-ledger policy resolve --id apr_... --status approved --voter alice --required-approvals 2"},
 			DataClasses: []string{
 				"policy rule metadata", "policy decisions", "approval requests", "approval routing metadata", "approval route summaries", "approval due/overdue evidence", "quorum approval votes", "redacted audit evidence",
 			},
