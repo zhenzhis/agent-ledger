@@ -24,6 +24,9 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	if catalog.Summary.EnabledCollectors == 0 {
 		t.Fatalf("expected enabled collector count: %#v", catalog.Summary)
 	}
+	if fingerprint := CatalogFingerprintFrom(catalog); fingerprint == "" || !strings.HasPrefix(fingerprint, "sha256:") {
+		t.Fatalf("catalog fingerprint missing: %q", fingerprint)
+	}
 	assertCapability(t, catalog, "protocol.canonical_events.http", "implemented", true)
 	assertCapability(t, catalog, "protocol.adapter_conformance", "implemented", true)
 	assertCapability(t, catalog, "protocol.discovery_manifest", "implemented", true)
@@ -114,6 +117,9 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 		manifest.EventExamplesURI != "/api/event-examples" || manifest.AdapterSpecURI != "/api/integrations/adapter-spec" ||
 		manifest.AdapterConformanceURI != "/api/integrations/conformance" {
 		t.Fatalf("discovery missing entrypoints: %#v", manifest)
+	}
+	if manifest.CapabilityCatalogHash == "" || !strings.HasPrefix(manifest.CapabilityCatalogHash, "sha256:") || manifest.CapabilityCatalogHash != CatalogFingerprint(OptionsFromConfig(cfg)) {
+		t.Fatalf("discovery missing catalog hash: %#v", manifest)
 	}
 	if manifest.CanonicalSchemaHash == "" || !strings.HasPrefix(manifest.CanonicalSchemaHash, "sha256:") {
 		t.Fatalf("discovery missing schema hash: %#v", manifest)

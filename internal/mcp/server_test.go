@@ -70,7 +70,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("unexpected windows: %#v", windows)
 	}
 	discoveryPayload := toolTextPayload(t, out[2])
-	if discoveryPayload["contract"] != "agent-ledger.discovery" || discoveryPayload["adapter_spec_hash"] == "" || discoveryPayload["runtime_status_uri"] != "/api/runtime/status" {
+	if discoveryPayload["contract"] != "agent-ledger.discovery" || discoveryPayload["capability_catalog_hash"] == "" || discoveryPayload["adapter_spec_hash"] == "" || discoveryPayload["runtime_status_uri"] != "/api/runtime/status" {
 		t.Fatalf("unexpected discovery payload: %#v", discoveryPayload)
 	}
 }
@@ -113,7 +113,7 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 		t.Fatalf("unexpected runtime resource text: %s", runtimeText)
 	}
 	discoveryText := resourceTextPayload(t, out[5])
-	if !strings.Contains(discoveryText, `"contract": "agent-ledger.discovery"`) || !strings.Contains(discoveryText, `"adapter_spec_hash": "sha256:`) {
+	if !strings.Contains(discoveryText, `"contract": "agent-ledger.discovery"`) || !strings.Contains(discoveryText, `"capability_catalog_hash": "sha256:`) || !strings.Contains(discoveryText, `"adapter_spec_hash": "sha256:`) {
 		t.Fatalf("unexpected discovery resource text: %s", discoveryText)
 	}
 	adapterText := resourceTextPayload(t, out[3])
@@ -376,7 +376,7 @@ func TestMCPReadOnlyAllowsReadToolsAndRejectsWriteTools(t *testing.T) {
 		t.Fatalf("read-only runtime tool returned unexpected payload: %#v", runtimePayload)
 	}
 	discoveryPayload := toolTextPayload(t, readResponses[4])
-	if discoveryPayload["contract"] != "agent-ledger.discovery" || discoveryPayload["read_only"] != true || discoveryPayload["adapter_spec_hash"] == "" {
+	if discoveryPayload["contract"] != "agent-ledger.discovery" || discoveryPayload["read_only"] != true || discoveryPayload["capability_catalog_hash"] == "" || discoveryPayload["adapter_spec_hash"] == "" {
 		t.Fatalf("read-only discovery tool returned unexpected payload: %#v", discoveryPayload)
 	}
 

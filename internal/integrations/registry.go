@@ -1,6 +1,9 @@
 package integrations
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -376,6 +379,21 @@ func Registry(opts Options) Catalog {
 		Summary:        summarize(capabilities),
 		Capabilities:   capabilities,
 	}
+}
+
+// CatalogFingerprint returns a stable hash for the privacy-safe capability
+// catalog so wrappers can cheaply detect tool, protocol, or runtime changes.
+func CatalogFingerprint(opts Options) string {
+	return CatalogFingerprintFrom(Registry(opts))
+}
+
+func CatalogFingerprintFrom(catalog Catalog) string {
+	raw, err := json.Marshal(catalog)
+	if err != nil {
+		panic(err)
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func annotateRuntimeCapabilities(capabilities []Capability, opts Options) {
