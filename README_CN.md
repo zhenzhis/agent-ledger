@@ -66,7 +66,7 @@ CLI：
 ./agent-ledger discovery
 ./agent-ledger integrations
 ./agent-ledger runtime
-./agent-ledger notify webhook --dry-run --severity warning
+./agent-ledger notify webhook --dry-run --severity warning --approval-due-within 24h
 ./agent-ledger otel convert --file spans.json
 ./agent-ledger otel ingest --file spans.json
 ./agent-ledger a2a convert --file task.json
@@ -174,7 +174,7 @@ gateway:
 
 可选 gateway 是本地 provider 代理，支持 OpenAI-compatible Chat Completions、OpenAI Responses 与 Anthropic Messages。它默认关闭，支持 OpenAI-compatible Chat Completions JSON/SSE、OpenAI Responses JSON/SSE，以及 Anthropic Messages JSON/SSE，只从配置的环境变量读取上游 API key，并只记录 token usage 与审计元数据，不保存 request messages 或 response content。OpenAI Responses streaming usage 会从最终 `response.completed` 事件记录。Anthropic Messages streaming usage 会合并 `message_start` 与 `message_delta` SSE 事件中的 usage。对 OpenAI Chat Completions streaming 请求，`include_stream_usage: true` 会在客户端没有显式设置 `stream_options.include_usage` 时请求兼容上游返回最终 usage chunk；如果三方中转拒绝该选项，可设为 `false`。
 
-Webhook 通知默认关闭。显式开启后，`POST /api/notifications/webhook` 与 `agent-ledger notify webhook` 只发送有上限的 workload-event 与 pending approval 脱敏摘要；goal、project、repo、branch、team、approval target、approval reason、event id、workload id、run id、approval request id 都会被隐藏或 hash。可用 `--dry-run` 或 `dry_run=1` 检查即将发送的 payload，不进行外发。
+Webhook 通知默认关闭。显式开启后，`POST /api/notifications/webhook` 与 `agent-ledger notify webhook` 只发送有上限的 workload-event、pending approval 与 approval route 脱敏摘要；goal、project、repo、branch、team、approver route、escalation target、approval target、approval reason、event id、workload id、run id、approval request id 都会被隐藏或 hash。可用 `--dry-run` 或 `dry_run=1` 检查即将发送的 payload，不进行外发。
 
 Gateway 请求可以通过 query 参数或 request `metadata` 附加账本上下文：`agent_ledger.project`、`agent_ledger.goal`、`agent_ledger.workload_id`、`agent_ledger.agent_run_id`、`agent_ledger.session_id`、`agent_ledger.git_branch`。这样 wrapper、MCP 工具和异步 agent 可以把实时模型调用绑定到已有 workload/run，而无需暴露 prompt 内容。
 
@@ -259,7 +259,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/workload-state` | 单个异步 agent workload 的 terminal-state 派生快照 |
 | `GET /api/workload-events` | 面向 monitor、router、通知适配器的本地 workload 状态事件 feed；返回 `cursor`、`generated_at` 与 `ETag`，支持增量轮询 |
 | `GET /api/workload-events/stream` | 面向本地轮询 monitor 与 router subscription 的 SSE workload 状态流；SSE `id` 使用 feed cursor |
-| `POST /api/notifications/webhook` | 显式发送脱敏 workload-event 摘要到配置的 webhook |
+| `POST /api/notifications/webhook?approval_due_within=24h` | 显式发送脱敏 workload-event、approval 与 approval-route 摘要到配置的 webhook |
 | `GET /api/integrations` | 隐私安全的集成能力目录 |
 | `GET /api/integrations/adapter-spec` | 面向未来 Agent CLI、框架、gateway、OTel、A2A 与 provider 集成的机器可读 adapter 契约 |
 | `POST /api/integrations/conformance` | 校验 canonical、provider、provider-stream、OpenTelemetry GenAI 或 A2A adapter fixture，但不写入 SQLite；`strict=true` 会把 provenance warning 视为失败 |

@@ -24,12 +24,14 @@ type WebhookPayload struct {
 	Summary     WebhookSummary              `json:"summary"`
 	Events      []storage.WorkloadFeedEvent `json:"events"`
 	Approvals   []WebhookApproval           `json:"approvals,omitempty"`
+	Routes      *WebhookApprovalRoutes      `json:"approval_routes,omitempty"`
 }
 
 // WebhookSummary contains aggregate counts without local paths or prompt content.
 type WebhookSummary struct {
 	Total            int            `json:"total"`
 	PendingApprovals int            `json:"pending_approvals"`
+	ApprovalRoutes   int            `json:"approval_routes"`
 	ByPhase          map[string]int `json:"by_phase"`
 	BySeverity       map[string]int `json:"by_severity"`
 }
@@ -58,14 +60,41 @@ type WebhookApproval struct {
 	UpdatedAt              string `json:"updated_at,omitempty"`
 }
 
+// WebhookApprovalRoutes is a redacted route rollup for local approval queues.
+type WebhookApprovalRoutes struct {
+	GeneratedAt string                            `json:"generated_at"`
+	DueWithin   string                            `json:"due_within"`
+	Summary     storage.ApprovalRouteSummaryStats `json:"summary"`
+	Routes      []WebhookApprovalRoute            `json:"routes"`
+}
+
+// WebhookApprovalRoute redacts route metadata while keeping dispatch counts useful.
+type WebhookApprovalRoute struct {
+	RouteKeyHash         string   `json:"route_key_hash"`
+	ApproverHash         string   `json:"approver_hash,omitempty"`
+	EscalationTargetHash string   `json:"escalation_target_hash,omitempty"`
+	Pending              int      `json:"pending"`
+	Overdue              int      `json:"overdue"`
+	DueSoon              int      `json:"due_soon"`
+	ApprovalVotes        int      `json:"approval_votes"`
+	RejectionVotes       int      `json:"rejection_votes"`
+	MaxRequiredApprovals int      `json:"max_required_approvals"`
+	DueNext              string   `json:"due_next,omitempty"`
+	Sources              []string `json:"sources,omitempty"`
+	Models               []string `json:"models,omitempty"`
+	Projects             []string `json:"projects,omitempty"`
+	Actions              []string `json:"actions,omitempty"`
+}
+
 // DeliveryResult describes one attempted notification delivery.
 type DeliveryResult struct {
-	Enabled       bool   `json:"enabled"`
-	DryRun        bool   `json:"dry_run"`
-	EventCount    int    `json:"event_count"`
-	ApprovalCount int    `json:"approval_count"`
-	StatusCode    int    `json:"status_code,omitempty"`
-	Message       string `json:"message"`
+	Enabled            bool   `json:"enabled"`
+	DryRun             bool   `json:"dry_run"`
+	EventCount         int    `json:"event_count"`
+	ApprovalCount      int    `json:"approval_count"`
+	ApprovalRouteCount int    `json:"approval_route_count"`
+	StatusCode         int    `json:"status_code,omitempty"`
+	Message            string `json:"message"`
 }
 
 // BuildWebhookPayload creates a privacy-safe notification payload from a workload event feed.
@@ -76,11 +105,23 @@ func BuildWebhookPayload(feed *storage.WorkloadEventFeed, maxEvents int) Webhook
 // BuildWebhookPayloadWithApprovals creates a privacy-safe notification payload
 // from workload events plus pending approval requests.
 func BuildWebhookPayloadWithApprovals(feed *storage.WorkloadEventFeed, approvals []storage.ApprovalRequest, maxEvents int) WebhookPayload {
+	return BuildWebhookPayloadWithApprovalRoutes(feed, approvals, nil, maxEvents)
+}
+
+// BuildWebhookPayloadWithApprovalRoutes creates a privacy-safe notification
+// payload from workload events, pending approval requests, and route rollups.
+func BuildWebhookPayloadWithApprovalRoutes(feed *storage.WorkloadEventFeed, approvals []storage.ApprovalRequest, routes *storage.ApprovalRouteSummary, maxEvents int) WebhookPayload {
 	redacted := RedactWorkloadEventFeed(feed, maxEvents)
 	redactedApprovals := RedactApprovalRequests(approvals, maxEvents)
+	redactedRoutes := RedactApprovalRouteSummary(routes, maxEvents)
+	routeCount := 0
+	if redactedRoutes != nil {
+		routeCount = len(redactedRoutes.Routes)
+	}
 	summary := WebhookSummary{
 		Total:            len(redacted) + len(redactedApprovals),
 		PendingApprovals: len(redactedApprovals),
+		ApprovalRoutes:   routeCount,
 		ByPhase:          map[string]int{},
 		BySeverity:       map[string]int{},
 	}
@@ -95,6 +136,7 @@ func BuildWebhookPayloadWithApprovals(feed *storage.WorkloadEventFeed, approvals
 		Summary:     summary,
 		Events:      redacted,
 		Approvals:   redactedApprovals,
+		Routes:      redactedRoutes,
 	}
 }
 
@@ -167,6 +209,51 @@ func RedactApprovalRequests(approvals []storage.ApprovalRequest, maxApprovals in
 	return out
 }
 
+// RedactApprovalRouteSummary returns bounded approval route rollups without
+// exposing approver names, escalation targets, or project names.
+func RedactApprovalRouteSummary(summary *storage.ApprovalRouteSummary, maxRoutes int) *WebhookApprovalRoutes {
+	if summary == nil || len(summary.Routes) == 0 {
+		return nil
+	}
+	if maxRoutes <= 0 || maxRoutes > 100 {
+		maxRoutes = 20
+	}
+	limit := maxRoutes
+	if len(summary.Routes) < limit {
+		limit = len(summary.Routes)
+	}
+	out := &WebhookApprovalRoutes{
+		GeneratedAt: summary.GeneratedAt,
+		DueWithin:   summary.DueWithin,
+		Summary:     summary.Summary,
+		Routes:      make([]WebhookApprovalRoute, 0, limit),
+	}
+	for i := 0; i < limit; i++ {
+		row := summary.Routes[i]
+		projects := make([]string, 0, len(row.Projects))
+		for range row.Projects {
+			projects = append(projects, "<redacted>")
+		}
+		out.Routes = append(out.Routes, WebhookApprovalRoute{
+			RouteKeyHash:         shortHash(row.RouteKey),
+			ApproverHash:         shortHash(row.Approver),
+			EscalationTargetHash: shortHash(row.EscalationTarget),
+			Pending:              row.Pending,
+			Overdue:              row.Overdue,
+			DueSoon:              row.DueSoon,
+			ApprovalVotes:        row.ApprovalVotes,
+			RejectionVotes:       row.RejectionVotes,
+			MaxRequiredApprovals: row.MaxRequiredApprovals,
+			DueNext:              row.DueNext,
+			Sources:              append([]string(nil), row.Sources...),
+			Models:               append([]string(nil), row.Models...),
+			Projects:             projects,
+			Actions:              append([]string(nil), row.Actions...),
+		})
+	}
+	return out
+}
+
 // SendWebhook sends a redacted notification payload, or returns an explicit disabled/dry-run result.
 func SendWebhook(ctx context.Context, cfg config.WebhookConfig, feed *storage.WorkloadEventFeed, dryRun bool) (*DeliveryResult, error) {
 	return SendWebhookWithApprovals(ctx, cfg, feed, nil, dryRun)
@@ -175,15 +262,22 @@ func SendWebhook(ctx context.Context, cfg config.WebhookConfig, feed *storage.Wo
 // SendWebhookWithApprovals sends a redacted notification payload that may include
 // local pending approval request summaries.
 func SendWebhookWithApprovals(ctx context.Context, cfg config.WebhookConfig, feed *storage.WorkloadEventFeed, approvals []storage.ApprovalRequest, dryRun bool) (*DeliveryResult, error) {
+	return SendWebhookWithApprovalRoutes(ctx, cfg, feed, approvals, nil, dryRun)
+}
+
+// SendWebhookWithApprovalRoutes sends a redacted notification payload that may
+// include local pending approval requests plus approval route rollups.
+func SendWebhookWithApprovalRoutes(ctx context.Context, cfg config.WebhookConfig, feed *storage.WorkloadEventFeed, approvals []storage.ApprovalRequest, routes *storage.ApprovalRouteSummary, dryRun bool) (*DeliveryResult, error) {
 	if cfg.MaxEvents <= 0 || cfg.MaxEvents > 100 {
 		cfg.MaxEvents = 20
 	}
-	payload := BuildWebhookPayloadWithApprovals(feed, approvals, cfg.MaxEvents)
+	payload := BuildWebhookPayloadWithApprovalRoutes(feed, approvals, routes, cfg.MaxEvents)
 	result := &DeliveryResult{
-		Enabled:       cfg.Enabled,
-		DryRun:        dryRun,
-		EventCount:    len(payload.Events),
-		ApprovalCount: len(payload.Approvals),
+		Enabled:            cfg.Enabled,
+		DryRun:             dryRun,
+		EventCount:         len(payload.Events),
+		ApprovalCount:      len(payload.Approvals),
+		ApprovalRouteCount: payload.Summary.ApprovalRoutes,
 	}
 	if dryRun {
 		result.Message = "dry run payload built; webhook not sent"

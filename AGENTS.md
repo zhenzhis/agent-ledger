@@ -24,7 +24,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger discovery                   # print local discovery manifest
 ./agent-ledger integrations                # print privacy-safe integration capability catalog
 ./agent-ledger runtime                     # print runtime mode and read-only/write status
-./agent-ledger notify webhook --dry-run --severity warning # inspect redacted notification payload
+./agent-ledger notify webhook --dry-run --severity warning --approval-due-within 24h # inspect redacted notification payload
 ./agent-ledger otel convert/ingest         # map OpenTelemetry GenAI JSON spans to canonical events
 ./agent-ledger a2a convert/ingest          # map A2A task snapshots/events to canonical events
 ./agent-ledger provider convert/ingest     # map provider usage envelopes to canonical events

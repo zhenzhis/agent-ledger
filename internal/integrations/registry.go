@@ -217,10 +217,10 @@ func Registry(opts Options) Catalog {
 			Status:      "implemented",
 			Maturity:    "local-preview",
 			Enabled:     opts.WebhooksEnabled,
-			Privacy:     "disabled by default; sends bounded redacted workload-event summaries only",
+			Privacy:     "disabled by default; sends bounded redacted workload-event, approval, and approval-route summaries only",
 			Endpoints:   []string{"POST /api/notifications/webhook"},
-			Commands:    []string{"agent-ledger notify webhook --dry-run", "agent-ledger notify webhook --severity warning"},
-			DataClasses: []string{"redacted workload ids", "phase", "severity", "next action", "risk metadata"},
+			Commands:    []string{"agent-ledger notify webhook --dry-run --approval-due-within 24h", "agent-ledger notify webhook --severity warning"},
+			DataClasses: []string{"redacted workload ids", "phase", "severity", "next action", "risk metadata", "redacted approval ids", "hashed approval route metadata"},
 			Limitations: []string{"requires explicit webhooks.enabled and webhooks.url", "does not send prompt content, local paths, project names, branch names, or webhook URL in audit logs"},
 		},
 		{

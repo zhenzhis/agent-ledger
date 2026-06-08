@@ -70,18 +70,21 @@ func TestWebhookNotificationEndpointDryRunIncludesApprovals(t *testing.T) {
 	db := testServerDB(t)
 	now := time.Now().UTC()
 	if _, err := db.CreateApprovalRequest(storage.ApprovalRequest{
-		RequestID:      "apr-private",
-		WorkloadID:     "wl-private-approval",
-		RunID:          "run-private-approval",
-		Source:         "codex",
-		Model:          "gpt-5.5",
-		Project:        "private-project",
-		Action:         "model.call",
-		Target:         "C:/private/workspace",
-		ActorRole:      "operator",
-		Status:         "pending",
-		Reason:         "private approval reason",
-		RequestPayload: `{"prompt":"do-not-send"}`,
+		RequestID:        "apr-private",
+		WorkloadID:       "wl-private-approval",
+		RunID:            "run-private-approval",
+		Source:           "codex",
+		Model:            "gpt-5.5",
+		Project:          "private-project",
+		Action:           "model.call",
+		Target:           "C:/private/workspace",
+		ActorRole:        "operator",
+		Status:           "pending",
+		ApproverHint:     "desk-lead",
+		EscalationTarget: "research-head",
+		DueAt:            now.Add(30 * time.Minute).Format(time.RFC3339Nano),
+		Reason:           "private approval reason",
+		RequestPayload:   `{"prompt":"do-not-send"}`,
 	}); err != nil {
 		t.Fatalf("CreateApprovalRequest: %v", err)
 	}
@@ -99,7 +102,7 @@ func TestWebhookNotificationEndpointDryRunIncludesApprovals(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode dry-run body: %v", err)
 	}
-	if !body.Result.DryRun || body.Result.ApprovalCount != 1 || body.Payload.Summary.PendingApprovals != 1 || len(body.Payload.Approvals) != 1 {
+	if !body.Result.DryRun || body.Result.ApprovalCount != 1 || body.Result.ApprovalRouteCount != 1 || body.Payload.Summary.PendingApprovals != 1 || body.Payload.Summary.ApprovalRoutes != 1 || len(body.Payload.Approvals) != 1 || body.Payload.Routes == nil || len(body.Payload.Routes.Routes) != 1 {
 		t.Fatalf("expected approval notification summary: %+v", body)
 	}
 	approval := body.Payload.Approvals[0]
@@ -107,7 +110,7 @@ func TestWebhookNotificationEndpointDryRunIncludesApprovals(t *testing.T) {
 		t.Fatalf("approval notification was not redacted: %+v", approval)
 	}
 	raw, _ := json.Marshal(body)
-	if strings.Contains(string(raw), "private-project") || strings.Contains(string(raw), "C:/private/workspace") || strings.Contains(string(raw), "do-not-send") {
+	if strings.Contains(string(raw), "private-project") || strings.Contains(string(raw), "C:/private/workspace") || strings.Contains(string(raw), "do-not-send") || strings.Contains(string(raw), "desk-lead") || strings.Contains(string(raw), "research-head") {
 		t.Fatalf("approval notification leaked sensitive data: %s", string(raw))
 	}
 	audit, err := db.GetAuditLog(10)

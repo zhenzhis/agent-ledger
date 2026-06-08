@@ -52,18 +52,32 @@ func (s *Server) handleWebhookNotification(w http.ResponseWriter, r *http.Reques
 		serverError(w, err)
 		return
 	}
+	approvalDueWithin := 24 * time.Hour
+	if raw := firstNonEmpty(r.URL.Query().Get("approval_due_within"), r.URL.Query().Get("due_within")); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil || parsed <= 0 || parsed > 30*24*time.Hour {
+			badRequest(w, fmt.Errorf("invalid approval_due_within: expected duration from 1ns to 720h"))
+			return
+		}
+		approvalDueWithin = parsed
+	}
+	routes, err := s.db.GetApprovalRouteSummary(limit, approvalDueWithin)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	dryRun := r.URL.Query().Get("dry_run") == "1" || r.URL.Query().Get("dry_run") == "true"
-	result, err := notifications.SendWebhookWithApprovals(r.Context(), s.options.Webhooks, feed, approvals, dryRun)
+	result, err := notifications.SendWebhookWithApprovalRoutes(r.Context(), s.options.Webhooks, feed, approvals, routes, dryRun)
 	if err != nil {
 		s.appendAuditLog("local", s.roleFor(r), "notification.webhook.failed", "webhook", map[string]string{"error": err.Error(), "dry_run": fmt.Sprint(dryRun)})
 		badRequest(w, err)
 		return
 	}
-	s.appendAuditLog("local", s.roleFor(r), "notification.webhook", "webhook", map[string]string{"dry_run": fmt.Sprint(dryRun), "events": fmt.Sprint(result.EventCount), "approvals": fmt.Sprint(result.ApprovalCount)})
+	s.appendAuditLog("local", s.roleFor(r), "notification.webhook", "webhook", map[string]string{"dry_run": fmt.Sprint(dryRun), "events": fmt.Sprint(result.EventCount), "approvals": fmt.Sprint(result.ApprovalCount), "approval_routes": fmt.Sprint(result.ApprovalRouteCount)})
 	if dryRun {
 		writeJSON(w, map[string]interface{}{
 			"result":  result,
-			"payload": notifications.BuildWebhookPayloadWithApprovals(feed, approvals, s.options.Webhooks.MaxEvents),
+			"payload": notifications.BuildWebhookPayloadWithApprovalRoutes(feed, approvals, routes, s.options.Webhooks.MaxEvents),
 		})
 		return
 	}

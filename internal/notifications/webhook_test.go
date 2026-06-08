@@ -80,6 +80,42 @@ func TestWebhookPayloadIncludesRedactedApprovalRequests(t *testing.T) {
 	}
 }
 
+func TestWebhookPayloadIncludesRedactedApprovalRoutes(t *testing.T) {
+	routes := &storage.ApprovalRouteSummary{
+		GeneratedAt: "2026-06-07T12:00:00Z",
+		DueWithin:   "1h0m0s",
+		Summary:     storage.ApprovalRouteSummaryStats{Routes: 1, Pending: 2, DueSoon: 1},
+		Routes: []storage.ApprovalRouteRow{{
+			RouteKey:         "desk-lead|research-head",
+			Approver:         "desk-lead",
+			EscalationTarget: "research-head",
+			Pending:          2,
+			DueSoon:          1,
+			Sources:          []string{"codex"},
+			Models:           []string{"gpt-5.5"},
+			Projects:         []string{"private-project"},
+			Actions:          []string{"model.call"},
+		}},
+	}
+	payload := BuildWebhookPayloadWithApprovalRoutes(sampleFeed(), nil, routes, 10)
+	if payload.Summary.ApprovalRoutes != 1 || payload.Routes == nil || len(payload.Routes.Routes) != 1 {
+		t.Fatalf("expected route summary: %+v", payload)
+	}
+	route := payload.Routes.Routes[0]
+	if route.RouteKeyHash == "" || route.RouteKeyHash == "desk-lead|research-head" || route.ApproverHash == "desk-lead" || route.EscalationTargetHash == "research-head" {
+		t.Fatalf("route identifiers were not hashed: %+v", route)
+	}
+	if len(route.Projects) != 1 || route.Projects[0] != "<redacted>" {
+		t.Fatalf("route projects were not redacted: %+v", route)
+	}
+	raw, _ := json.Marshal(payload)
+	for _, forbidden := range []string{"desk-lead", "research-head", "private-project"} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("route payload leaked %q: %s", forbidden, string(raw))
+		}
+	}
+}
+
 func TestWebhookSendsOnlyRedactedSummary(t *testing.T) {
 	var payload WebhookPayload
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

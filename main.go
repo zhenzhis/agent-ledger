@@ -545,11 +545,23 @@ func runNotifyCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		if err != nil {
 			return err
 		}
+		approvalDueWithin := 24 * time.Hour
+		if raw := firstNonEmptyCLI(cliValue(args[1:], "--approval-due-within"), cliValue(args[1:], "--due-within")); raw != "" {
+			parsed, err := time.ParseDuration(raw)
+			if err != nil || parsed <= 0 || parsed > 30*24*time.Hour {
+				return fmt.Errorf("invalid --approval-due-within %q: expected duration from 1ns to 720h", raw)
+			}
+			approvalDueWithin = parsed
+		}
+		routes, err := db.GetApprovalRouteSummary(limit, approvalDueWithin)
+		if err != nil {
+			return err
+		}
 		dryRun := cliBool(args[1:], "--dry-run")
 		if dryRun {
-			return json.NewEncoder(os.Stdout).Encode(notifications.BuildWebhookPayloadWithApprovals(feed, approvals, cfg.Webhooks.MaxEvents))
+			return json.NewEncoder(os.Stdout).Encode(notifications.BuildWebhookPayloadWithApprovalRoutes(feed, approvals, routes, cfg.Webhooks.MaxEvents))
 		}
-		result, err := notifications.SendWebhookWithApprovals(context.Background(), cfg.Webhooks, feed, approvals, false)
+		result, err := notifications.SendWebhookWithApprovalRoutes(context.Background(), cfg.Webhooks, feed, approvals, routes, false)
 		if err != nil {
 			return err
 		}

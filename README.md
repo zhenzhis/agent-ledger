@@ -66,7 +66,7 @@ CLI:
 ./agent-ledger discovery
 ./agent-ledger integrations
 ./agent-ledger runtime
-./agent-ledger notify webhook --dry-run --severity warning
+./agent-ledger notify webhook --dry-run --severity warning --approval-due-within 24h
 ./agent-ledger otel convert --file spans.json
 ./agent-ledger otel ingest --file spans.json
 ./agent-ledger a2a convert --file task.json
@@ -174,7 +174,7 @@ Use `pricing.overrides` for enterprise contracts, relay pricing, regional multip
 
 The optional gateway is a local provider proxy for OpenAI-compatible Chat Completions, OpenAI Responses, and Anthropic Messages. It is disabled by default, supports OpenAI-compatible Chat Completions JSON/SSE, OpenAI Responses JSON/SSE, and Anthropic Messages JSON/SSE, reads upstream API keys from configured environment variables, and records token usage plus audit metadata without storing request messages or response content. OpenAI Responses streaming usage is recorded from final `response.completed` events. Anthropic Messages streaming usage is merged from `message_start` and `message_delta` SSE events. For OpenAI Chat Completions streaming calls, `include_stream_usage: true` asks compatible upstreams for a final usage chunk when the client did not explicitly set `stream_options.include_usage`; set it to `false` for relays that reject that option.
 
-Webhook notifications are disabled by default. When explicitly enabled, `POST /api/notifications/webhook` and `agent-ledger notify webhook` send only bounded workload-event and pending-approval summaries. Goals, projects, repos, branches, teams, approval targets, approval reasons, event ids, workload ids, run ids, and approval request ids are redacted or hashed. Use `--dry-run` or `dry_run=1` to inspect the outgoing payload without sending.
+Webhook notifications are disabled by default. When explicitly enabled, `POST /api/notifications/webhook` and `agent-ledger notify webhook` send only bounded workload-event, pending-approval, and approval-route summaries. Goals, projects, repos, branches, teams, approver routes, escalation targets, approval targets, approval reasons, event ids, workload ids, run ids, and approval request ids are redacted or hashed. Use `--dry-run` or `dry_run=1` to inspect the outgoing payload without sending.
 
 Gateway requests can attach ledger context through query parameters or request `metadata`: `agent_ledger.project`, `agent_ledger.goal`, `agent_ledger.workload_id`, `agent_ledger.agent_run_id`, `agent_ledger.session_id`, and `agent_ledger.git_branch`. This lets wrappers, MCP tools, and async agents bind live model calls to an existing workload/run without exposing prompt content.
 
@@ -259,7 +259,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/workload-state` | Derived terminal-state snapshot for one async agent workload |
 | `GET /api/workload-events` | Derived local workload state feed for monitors, routers, and notification adapters; returns `cursor`, `generated_at`, and `ETag` for incremental polling |
 | `GET /api/workload-events/stream` | Local SSE workload state stream for polling monitors and router subscriptions; emits the feed cursor as the SSE `id` |
-| `POST /api/notifications/webhook` | Explicitly send a redacted workload-event summary to the configured webhook |
+| `POST /api/notifications/webhook?approval_due_within=24h` | Explicitly send redacted workload-event, approval, and approval-route summaries to the configured webhook |
 | `GET /api/integrations` | Privacy-safe integration capability catalog |
 | `GET /api/integrations/adapter-spec` | Machine-readable adapter contract for future agent CLIs, frameworks, gateways, OTel, A2A, and provider integrations |
 | `POST /api/integrations/conformance` | Validate adapter fixtures for canonical, provider, provider-stream, OpenTelemetry GenAI, or A2A compatibility without writing SQLite; `strict=true` turns provenance warnings into failures |
