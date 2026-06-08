@@ -1781,6 +1781,58 @@ select,
   overflow-wrap: anywhere;
 }
 
+.approval-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.approval-voter-field {
+  display: grid;
+  gap: 4px;
+  width: min(190px, 42vw);
+}
+
+.approval-voter-field span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.approval-voter-field input {
+  min-height: 36px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.approval-row {
+  grid-template-columns: minmax(0, 1fr) minmax(178px, auto);
+}
+
+.approval-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.approval-actions .icon-btn {
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.approval-quorum {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .panel-header,
 .ledger-header {
   min-height: 28px;
@@ -1858,6 +1910,19 @@ select,
   .date-range,
   .action-cluster {
     min-width: 0;
+    width: 100%;
+  }
+
+  .approval-header,
+  .approval-row,
+  .approval-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .approval-voter-field,
+  .approval-actions .icon-btn {
     width: 100%;
   }
 

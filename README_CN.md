@@ -19,6 +19,7 @@ Agent Ledger 是 ZhenZhi 基于 [briqt/agent-usage](https://github.com/briqt/age
 - 不读取 prompt 内容，只基于 token、cache、模型、时间和会话元数据解释昂贵 session。
 - 提供预算、burn rate、本地 quota 估算、cache doctor、模型调用次数、异常检测、采集健康。
 - 将底层 session 自动提升为 canonical Workload Ledger，记录 goal、run、model call、tool call、artifact、evaluation 与 policy decision。
+- Web 控制台展示待审批策略请求，支持审批人身份、quorum 进度和批准/拒绝操作。
 - 支持本地审计日志、隐私 preset、导出、Markdown 报告、证据包、团队 showback。
 - 单 Go 二进制，内嵌静态 UI，SQLite 存储。
 

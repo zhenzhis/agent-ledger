@@ -68,6 +68,16 @@ const I18N = {
     costIntelligence: "Cost Intelligence",
     cacheDoctor: "Cache Doctor",
     dataQuality: "Data Quality",
+    approvalQueue: "Approval Queue",
+    approver: "Approver",
+    approverRequired: "Enter an approver name before voting",
+    approve: "Approve",
+    reject: "Reject",
+    approved: "approved",
+    rejected: "rejected",
+    voteRecorded: "Approval vote recorded",
+    noApprovals: "No pending approvals",
+    quorum: "quorum",
     watchdog: "Watchdog",
     auditLog: "Audit Log",
     fleetAttribution: "Fleet Attribution",
@@ -265,6 +275,16 @@ const I18N = {
     costIntelligence: "成本解释",
     cacheDoctor: "Cache Doctor",
     dataQuality: "数据质量",
+    approvalQueue: "审批队列",
+    approver: "审批人",
+    approverRequired: "投票前请输入审批人名称",
+    approve: "批准",
+    reject: "拒绝",
+    approved: "已批准",
+    rejected: "已拒绝",
+    voteRecorded: "审批投票已记录",
+    noApprovals: "暂无待审批请求",
+    quorum: "法定人数",
     watchdog: "Watchdog",
     auditLog: "审计日志",
     fleetAttribution: "Fleet Attribution",
@@ -462,6 +482,7 @@ let state = {
   model: localStorage.getItem("au-model") || "",
   project: localStorage.getItem("au-project") || "",
   ledgerQuery: localStorage.getItem("au-ledgerQuery") || "",
+  approver: localStorage.getItem("au-approver") || "",
   privacy: privacyParam === null ? localStorage.getItem("au-privacy") === "true" : flagEnabled(privacyParam),
   runtime: null,
 };
@@ -650,6 +671,11 @@ function applyRuntimeStatus(runtime) {
     button.title = disabledTitle;
     button.setAttribute("aria-disabled", readOnly ? "true" : "false");
   });
+  const approver = $("approval-voter");
+  if (approver) {
+    approver.disabled = readOnly;
+    approver.title = disabledTitle;
+  }
 }
 
 function buildParams(opts = {}) {
@@ -687,7 +713,12 @@ async function api(path, opts = {}) {
 
 async function postApi(path, opts = {}) {
   const params = buildParams(opts);
-  const res = await fetch(`/api/${path}?${params.toString()}`, { method: "POST" });
+  const request = { method: "POST" };
+  if (opts.body !== undefined) {
+    request.headers = { "Content-Type": "application/json" };
+    request.body = JSON.stringify(opts.body);
+  }
+  const res = await fetch(`/api/${path}?${params.toString()}`, request);
   let body = null;
   try {
     body = await res.json();
@@ -962,6 +993,74 @@ function renderQuality(payload, policyAudit) {
   const provenanceMeta = hasProvenanceSignal ? ` · ${fmt(provenanceEvents)} ${t("records")}` : "";
   const policyMeta = hasAuditSignal ? ` · ${fmt(auditMatches)} ${t("matches")}` : "";
   setText("quality-meta", `${((payload && payload.unpriced_models) || []).length} ${t("unpriced")}${projectionMeta}${provenanceMeta}${policyMeta}`);
+  list.replaceChildren(fragment);
+}
+
+function privacyLabel(value) {
+  if (state.privacy && value) return "<redacted>";
+  return value || "-";
+}
+
+function renderApprovalQueue(payload) {
+  const list = $("approval-list");
+  if (!list) return;
+  const rows = (payload && payload.rows) || [];
+  const fragment = document.createDocumentFragment();
+  const readOnly = Boolean(state.runtime && state.runtime.read_only);
+  if (rows.length === 0) {
+    fragment.appendChild(createMessage(t("noApprovals"), "ops-empty"));
+    setText("approval-meta", "0");
+    list.replaceChildren(fragment);
+    return;
+  }
+  rows.slice(0, 10).forEach((row) => {
+    const requestID = row.request_id || "";
+    const required = Math.max(1, Number(row.required_approvals || 1));
+    const approved = Number(row.approval_votes || 0);
+    const rejected = Number(row.rejection_votes || 0);
+    const title = `${row.action || "-"} · ${row.model || privacyLabel(row.target)}`;
+    const detail = [
+      row.source || "-",
+      privacyLabel(row.project),
+      `${t("quorum")} ${approved}/${required}`,
+      row.created_at ? relTime(row.created_at) : "",
+    ].filter(Boolean).join(" · ");
+
+    const item = document.createElement("div");
+    item.className = "ops-row approval-row severity-warning";
+    const main = document.createElement("div");
+    main.className = "ops-main";
+    const strong = document.createElement("strong");
+    strong.textContent = title;
+    const sub = document.createElement("span");
+    sub.textContent = detail;
+    main.append(strong, sub);
+
+    const actions = document.createElement("div");
+    actions.className = "approval-actions";
+    const voteCount = document.createElement("span");
+    voteCount.className = "approval-quorum";
+    voteCount.textContent = `${approved}/${required} · ${rejected} ${t("rejected")}`;
+    actions.appendChild(voteCount);
+    [
+      ["approved", t("approve")],
+      ["rejected", t("reject")],
+    ].forEach(([status, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `icon-btn approval-vote${status === "rejected" ? " danger" : ""}`;
+      button.dataset.requestId = requestID;
+      button.dataset.status = status;
+      button.dataset.required = String(required);
+      button.disabled = readOnly;
+      button.setAttribute("aria-label", `${label}: ${row.action || requestID}`);
+      button.textContent = label;
+      actions.appendChild(button);
+    });
+    item.append(main, actions);
+    fragment.appendChild(item);
+  });
+  setText("approval-meta", `${rows.length} ${t("approvals")}`);
   list.replaceChildren(fragment);
 }
 
@@ -1374,6 +1473,7 @@ async function refresh(options = {}) {
       pricing: api("pricing/status"),
       quality: api("data-quality"),
       policyAudit: api("policy/audit", { extra: { limit: 20 } }),
+      approvals: api("policy/approvals", { skipModel: true, extra: { status: "pending", limit: 20 } }),
       modelCalls: api("model-calls", { skipModel: true }),
       costIntel: api("cost-intelligence"),
       cacheDoctor: api("cache/doctor"),
@@ -1425,6 +1525,7 @@ async function refresh(options = {}) {
     if (data.quota) renderQuota(data.quota);
     if (data.pricing) renderPricing(data.pricing);
     if (data.quality || data.policyAudit) renderQuality(data.quality, data.policyAudit);
+    if (data.approvals) renderApprovalQueue(data.approvals);
     if (data.modelCalls) renderModelCalls(data.modelCalls);
     if (data.costIntel) renderCostIntelligence(data.costIntel);
     if (data.cacheDoctor) renderCacheDoctor(data.cacheDoctor);
@@ -2002,6 +2103,8 @@ function buildControls() {
   $("filter-project").value = state.ledgerQuery;
   $("filter-project-global").placeholder = t("filterProject");
   $("filter-project-global").value = state.project;
+  $("approval-voter").placeholder = t("approver");
+  $("approval-voter").value = state.approver;
   $("privacy-status").textContent = state.privacy ? t("privacyOn") : t("privacyOff");
   $("btn-privacy").classList.toggle("active", state.privacy);
   $("btn-reset-scan").disabled = !state.source;
@@ -2070,6 +2173,10 @@ $("filter-project").addEventListener("input", () => {
   sessionPage = 1;
   if (projectFilterTimer) clearTimeout(projectFilterTimer);
   projectFilterTimer = setTimeout(() => refresh({ silent: true }), 300);
+});
+
+$("approval-voter").addEventListener("input", (e) => {
+  persist("approver", e.target.value.trim());
 });
 
 $("from").addEventListener("change", (e) => {
@@ -2235,6 +2342,35 @@ $("workload-table").addEventListener("click", (e) => {
     const detail = buildDetailShell();
     row.after(detail.row);
     fetchAndFillWorkloadDetail(detail.content, workloadID);
+  }
+});
+
+$("approval-list").addEventListener("click", async (e) => {
+  const button = e.target.closest(".approval-vote");
+  if (!button) return;
+  const voter = ($("approval-voter").value || "").trim();
+  if (!voter) {
+    showStatus(t("approverRequired"), "error");
+    $("approval-voter").focus();
+    return;
+  }
+  persist("approver", voter);
+  button.disabled = true;
+  try {
+    await postApi("policy/approvals", {
+      body: {
+        request_id: button.dataset.requestId,
+        status: button.dataset.status,
+        voter,
+        required_approvals: Number(button.dataset.required || 1),
+        note: "UI approval queue vote",
+      },
+    });
+    await refresh();
+    showStatus(t("voteRecorded"));
+  } catch (err) {
+    showStatus(`${t("actionFailed")}: ${err.message}`, "error");
+    button.disabled = false;
   }
 });
 

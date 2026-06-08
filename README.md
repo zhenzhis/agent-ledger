@@ -19,6 +19,7 @@ The project has been renamed from `agent-usage` to `agent-ledger`. Old local dat
 - Explains expensive sessions without reading prompt content.
 - Tracks budgets, burn rate, local quota estimates, cache health, model call counts, anomalies, and source health.
 - Promotes raw sessions into a canonical Workload Ledger with goal, run, model-call, tool-call, artifact, evaluation, and policy-decision tables.
+- Surfaces pending policy approvals in the web console with approver identity, quorum progress, and approve/reject actions.
 - Provides local audit logs, privacy presets, exports, reports, evidence bundles, and team showback data.
 - Runs as one Go binary with embedded static UI and SQLite.
 
