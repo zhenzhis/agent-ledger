@@ -327,6 +327,7 @@ MCP `tools/list` 会返回标准风格的 `annotations.readOnlyHint`，以及 `_
 当前工具：
 
 - `ledger.current_budget`
+- `ledger.runtime_status`
 - `ledger.start_workload`
 - `ledger.start_run`
 - `ledger.close_workload`
@@ -362,6 +363,7 @@ MCP `tools/list` 会返回标准风格的 `annotations.readOnlyHint`，以及 `_
 - `agent-ledger://schema/canonical-event-examples`
 - `agent-ledger://integrations/catalog`
 - `agent-ledger://integrations/adapter-contract`
+- `agent-ledger://runtime/status`
 - `agent-ledger://budget/current`，支持 `window`、`source`、`model`、`project` 查询参数
 - `agent-ledger://workloads/recent`，包含 workload summary rows 与派生 terminal-state snapshots，支持 `from`、`to`、`source`、`model`、`project`、`status`、`q`、`limit`、`offset`、`stale_after`
 - `agent-ledger://workloads/feed`，包含供本地 monitor 和 router 使用的 cursor-stable workload state events，支持 `from`、`to`、`source`、`model`、`project`、`phase`、`severity`、`limit`、`stale_after`

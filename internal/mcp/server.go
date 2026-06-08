@@ -280,6 +280,7 @@ func tools() []map[string]interface{} {
 			"model":   stringSchema(),
 			"project": stringSchema(),
 		}),
+		tool("ledger.runtime_status", "Return process-level runtime mode, read-only state, background task state, and write-operation status.", map[string]interface{}{}),
 		tool("ledger.start_workload", "Create a workload and optionally attach an initial agent run.", map[string]interface{}{
 			"goal":       requiredStringSchema(),
 			"source":     stringSchema(),
@@ -570,6 +571,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://schema/canonical-event-examples", "Canonical Event Examples", "Privacy-safe templates for all supported canonical event types.", "application/json"),
 		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
 		resource("agent-ledger://integrations/adapter-contract", "Adapter Contract", "Machine-readable contract for writing privacy-safe Agent Ledger adapters.", "application/json"),
+		resource("agent-ledger://runtime/status", "Runtime Status", "Process-level observer/control-plane mode, read-only state, background task state, and write-operation status.", "application/json"),
 		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows; supports window/source/model/project query parameters.", "application/json"),
 		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries and terminal-state snapshots from the local ledger; supports from/to/source/model/project/status/q/limit/offset/stale_after query parameters.", "application/json"),
 		resource("agent-ledger://workloads/feed", "Workload Event Feed", "Cursor-stable metadata-only workload state feed for local monitors and agent routers; supports from/to/source/model/project/phase/severity/limit/stale_after query parameters.", "application/json"),
@@ -620,6 +622,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 	switch name {
 	case "ledger.current_budget":
 		return s.toolCurrentBudget(args)
+	case "ledger.runtime_status":
+		return s.runtimeStatus(), nil
 	case "ledger.start_workload":
 		return s.toolStartWorkload(args)
 	case "ledger.start_run":
@@ -751,6 +755,26 @@ func mcpToolRequiresWrite(name string, args json.RawMessage) bool {
 	}
 }
 
+func (s *Server) runtimeStatus() *storage.RuntimeStatus {
+	if s.cfg != nil && s.cfg.RBAC.ReadOnly {
+		return &storage.RuntimeStatus{
+			Mode:             "observer",
+			ReadOnly:         true,
+			WriteOperations:  "disabled",
+			BackgroundTasks:  "disabled",
+			DisabledFeatures: []string{"background collectors", "pricing sync", "cost recalculation", "manual scans", "imports", "write APIs", "write MCP tools", "derived GET writebacks"},
+			Message:          "read-only observer mode: local state is not mutated by this process",
+		}
+	}
+	return &storage.RuntimeStatus{
+		Mode:            "control-plane",
+		ReadOnly:        false,
+		WriteOperations: "enabled",
+		BackgroundTasks: "enabled",
+		Message:         "write operations and background collectors are enabled",
+	}
+}
+
 func (s *Server) readResource(uri string) (interface{}, error) {
 	payload, err := s.resourcePayload(uri)
 	if err != nil {
@@ -787,6 +811,8 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 		return integrations.Registry(integrations.OptionsFromConfig(s.cfg)), nil
 	case "agent-ledger://integrations/adapter-contract":
 		return integrations.AdapterContractSpec(), nil
+	case "agent-ledger://runtime/status":
+		return s.runtimeStatus(), nil
 	case "agent-ledger://budget/current":
 		return s.resourceBudget(values)
 	case "agent-ledger://workloads/recent":

@@ -327,6 +327,7 @@ MCP `tools/list` includes standard-style `annotations.readOnlyHint` plus `_meta.
 Current tools:
 
 - `ledger.current_budget`
+- `ledger.runtime_status`
 - `ledger.start_workload`
 - `ledger.start_run`
 - `ledger.close_workload`
@@ -362,6 +363,7 @@ Current resources:
 - `agent-ledger://schema/canonical-event-examples`
 - `agent-ledger://integrations/catalog`
 - `agent-ledger://integrations/adapter-contract`
+- `agent-ledger://runtime/status`
 - `agent-ledger://budget/current` with optional `window`, `source`, `model`, and `project` query parameters
 - `agent-ledger://workloads/recent` with summary rows and derived terminal-state snapshots; supports `from`, `to`, `source`, `model`, `project`, `status`, `q`, `limit`, `offset`, and `stale_after`
 - `agent-ledger://workloads/feed` with cursor-stable workload state events for local monitors and routers; supports `from`, `to`, `source`, `model`, `project`, `phase`, `severity`, `limit`, and `stale_after`
