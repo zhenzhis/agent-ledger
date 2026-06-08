@@ -215,6 +215,8 @@ const I18N = {
     ledgerProjection: "Ledger Projection",
     adapterProvenance: "Adapter Provenance",
     policyAudit: "Policy Audit",
+    dashboardConsistency: "Dashboard Consistency",
+    delta: "delta",
     checked: "checked",
     matches: "matches",
     blocks: "blocks",
@@ -426,6 +428,8 @@ const I18N = {
     ledgerProjection: "账本投影",
     adapterProvenance: "适配器溯源",
     policyAudit: "策略审计",
+    dashboardConsistency: "看板一致性",
+    delta: "差值",
     checked: "已检查",
     matches: "匹配",
     blocks: "阻断",
@@ -939,7 +943,7 @@ function renderPricing(payload) {
   list.replaceChildren(fragment);
 }
 
-function renderQuality(payload, policyAudit) {
+function renderQuality(payload, policyAudit, dashboardConsistency = []) {
   const list = $("quality-list");
   if (!list) return;
   const fragment = document.createDocumentFragment();
@@ -961,7 +965,9 @@ function renderQuality(payload, policyAudit) {
   const auditApprovals = Number((policyAudit && policyAudit.approvals) || 0);
   const auditWarnings = Number((policyAudit && policyAudit.warnings) || 0);
   const hasAuditSignal = Boolean(policyAudit && (auditChecked > 0 || auditMatches > 0));
-  if (rows.length === 0 && !hasProjectionSignal && !hasProvenanceSignal && !hasAuditSignal) {
+  const consistencyRows = dashboardConsistency || [];
+  const hasConsistencySignal = consistencyRows.length > 0;
+  if (rows.length === 0 && !hasProjectionSignal && !hasProvenanceSignal && !hasAuditSignal && !hasConsistencySignal) {
     fragment.appendChild(createMessage(t("noData"), "ops-empty"));
     setText("s-quality", "-");
     setText("s-quality-sub", "-");
@@ -988,20 +994,32 @@ function renderQuality(payload, policyAudit) {
       const detail = `${fmt(auditChecked)} ${t("checked")} · ${fmt(auditBlocks)} ${t("blocks")} · ${fmt(auditApprovals)} ${t("approvals")} · ${fmt(auditWarnings)} ${t("warnings")}`;
       addOpsRow(fragment, t("policyAudit"), detail, auditMatches ? `${fmt(auditMatches)} ${t("matches")}` : "OK", severity);
     }
+    if (hasConsistencySignal) {
+      min = Math.min(min, 0.65);
+      const detail = consistencyRows.slice(0, 3).map((row) => `${row.metric || "-"} ${t("delta")} ${formatConsistencyDelta(row)}`).join(" · ");
+      addOpsRow(fragment, t("dashboardConsistency"), detail, `${fmt(consistencyRows.length)} ${t("issuesLabel")}`, "warning");
+    }
     rows.forEach((row) => {
       min = Math.min(min, Number(row.confidence || 0));
       const sev = row.confidence < 0.7 ? "warning" : "ok";
       addOpsRow(fragment, row.source, row.message || `${row.records || 0} ${t("records")}`, `${(Number(row.confidence || 0) * 100).toFixed(0)}%`, sev);
     });
     setText("s-quality", `${(min * 100).toFixed(0)}%`);
-    const qualityIssues = projectionIssues + auditMatches;
+    const qualityIssues = projectionIssues + auditMatches + consistencyRows.length;
     setText("s-quality-sub", qualityIssues ? `${rows.length} ${t("sourcesLabel")} · ${qualityIssues} ${t("issuesLabel")}` : `${rows.length} ${t("sourcesLabel")}`);
   }
   const projectionMeta = hasProjectionSignal ? ` · ${fmt(projection.model_calls || 0)} ${t("projectionCalls")}` : "";
   const provenanceMeta = hasProvenanceSignal ? ` · ${fmt(provenanceEvents)} ${t("records")}` : "";
   const policyMeta = hasAuditSignal ? ` · ${fmt(auditMatches)} ${t("matches")}` : "";
-  setText("quality-meta", `${((payload && payload.unpriced_models) || []).length} ${t("unpriced")}${projectionMeta}${provenanceMeta}${policyMeta}`);
+  const consistencyMeta = hasConsistencySignal ? ` · ${fmt(consistencyRows.length)} ${t("issuesLabel")}` : "";
+  setText("quality-meta", `${((payload && payload.unpriced_models) || []).length} ${t("unpriced")}${projectionMeta}${provenanceMeta}${policyMeta}${consistencyMeta}`);
   list.replaceChildren(fragment);
+}
+
+function formatConsistencyDelta(row) {
+  const metric = String((row && row.metric) || "").toLowerCase();
+  const delta = Number((row && row.delta) || 0);
+  return metric.includes("cost") ? fmtSignedCost(delta) : fmt(delta);
 }
 
 function privacyLabel(value) {
@@ -1538,7 +1556,7 @@ async function refresh(options = {}) {
     if (data.budgets) renderBudgets(data.budgets);
     if (data.quota) renderQuota(data.quota);
     if (data.pricing) renderPricing(data.pricing);
-    if (data.quality || data.policyAudit) renderQuality(data.quality, data.policyAudit);
+    if (data.quality || data.policyAudit || (data.dashboard && data.dashboard.consistency)) renderQuality(data.quality, data.policyAudit, data.dashboard && data.dashboard.consistency);
     if (data.approvals) renderApprovalQueue(data.approvals);
     if (data.modelCalls) renderModelCalls(data.modelCalls);
     if (data.costIntel) renderCostIntelligence(data.costIntel);

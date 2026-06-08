@@ -388,6 +388,7 @@ agent-ledger doctor --format markdown
 如果 KPI 和图表总数不一致：
 
 - Web UI 使用 `GET /api/dashboard` 作为 KPI、token、费用、模型面板的一致性读取入口。
+- Data Quality 面板会直接显示 dashboard consistency 问题，包括 metric、expected/actual 差值和 severity。
 - 价格变更后执行 `POST /api/recalculate-costs?mode=zero`。
 - 如果 Doctor 报告 canonical-to-usage projection 漂移，使用相同 `from`/`to`/`source`/`model`/`project` 范围运行 `agent-ledger projection repair` 或 `POST /api/projections/repair`。该修复是幂等的，会补回缺失投影、对齐 cache/cost 元数据，并重建 aggregates。
 - 如果差异持续，运行 `agent-ledger doctor --format markdown`，查看 projection、dashboard consistency 或 pricing warning。

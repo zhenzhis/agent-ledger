@@ -388,6 +388,7 @@ If Codex, OpenCode, or another source shows no data:
 If KPI totals and charts disagree:
 
 - The web UI uses `GET /api/dashboard` for KPI, token, cost, and model panels so they are read from one storage window.
+- The Data Quality panel surfaces dashboard consistency issues directly with metric, expected/actual delta, and severity.
 - Run `POST /api/recalculate-costs?mode=zero` after pricing changes.
 - If Doctor reports canonical-to-usage projection drift, run `agent-ledger projection repair` or `POST /api/projections/repair` with the same `from`/`to`/`source`/`model`/`project` scope. The repair is idempotent, backfills missing projected usage rows, realigns cache/cost metadata, and rebuilds aggregates.
 - Run `agent-ledger doctor --format markdown` and inspect projection, dashboard consistency, or pricing warnings if a mismatch persists.
