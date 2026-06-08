@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -396,6 +398,64 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 		}
 	}
 	json.NewEncoder(w).Encode(v)
+}
+
+func writeJSONWithETag(w http.ResponseWriter, r *http.Request, v interface{}, etag string) {
+	quotedETag := quoteHTTPETag(etag)
+	if quotedETag != "" {
+		w.Header().Set("ETag", quotedETag)
+		w.Header().Set("Cache-Control", "no-cache")
+		if requestETagMatches(r.Header.Get("If-None-Match"), quotedETag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+	writeJSON(w, v)
+}
+
+func jsonPayloadETag(v interface{}) (string, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func quoteHTTPETag(etag string) string {
+	etag = strings.TrimSpace(etag)
+	if etag == "" {
+		return ""
+	}
+	etag = strings.TrimPrefix(etag, "W/")
+	etag = strings.Trim(etag, `"`)
+	etag = strings.ReplaceAll(etag, `"`, "")
+	if etag == "" {
+		return ""
+	}
+	return `"` + etag + `"`
+}
+
+func requestETagMatches(raw, etag string) bool {
+	if raw == "" || etag == "" {
+		return false
+	}
+	expected := strings.Trim(quoteHTTPETag(etag), `"`)
+	if expected == "" {
+		return false
+	}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "*" {
+			return true
+		}
+		part = strings.TrimPrefix(part, "W/")
+		part = strings.Trim(part, `"`)
+		if part == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func serverError(w http.ResponseWriter, err error) {

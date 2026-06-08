@@ -524,7 +524,7 @@ func (s *Server) handleCanonicalEventSchema(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, storage.CanonicalEventSchema())
+	writeJSONWithETag(w, r, storage.CanonicalEventSchema(), storage.CanonicalEventSchemaFingerprint())
 }
 
 func (s *Server) handleCanonicalEventExamples(w http.ResponseWriter, r *http.Request) {

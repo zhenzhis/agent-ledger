@@ -13,7 +13,8 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, integrations.Registry(s.integrationOptions()))
+	catalog := integrations.Registry(s.integrationOptions())
+	writeJSONWithETag(w, r, catalog, integrations.CatalogFingerprintFrom(catalog))
 }
 
 func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,13 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, integrations.Discovery(s.integrationOptions()))
+	manifest := integrations.Discovery(s.integrationOptions())
+	etag, err := jsonPayloadETag(manifest)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, manifest, etag)
 }
 
 func (s *Server) handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +36,13 @@ func (s *Server) handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, s.runtimeStatus())
+	status := s.runtimeStatus()
+	etag, err := jsonPayloadETag(status)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, status, etag)
 }
 
 func (s *Server) handleAdapterSpec(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +50,7 @@ func (s *Server) handleAdapterSpec(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, integrations.AdapterContractSpec())
+	writeJSONWithETag(w, r, integrations.AdapterContractSpec(), integrations.AdapterContractFingerprint())
 }
 
 func (s *Server) handleAdapterConformance(w http.ResponseWriter, r *http.Request) {
