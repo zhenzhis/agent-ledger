@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -32,6 +33,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapability(t, catalog, "protocol.adapter_conformance", "implemented", true)
 	assertCapability(t, catalog, "protocol.discovery_manifest", "implemented", true)
 	assertCapability(t, catalog, "protocol.contract_bundle", "implemented", true)
+	assertCapability(t, catalog, "protocol.contract_verification", "implemented", true)
 	assertCapability(t, catalog, "protocol.openapi", "implemented", true)
 	assertCapability(t, catalog, "protocol.runtime_status", "implemented", true)
 	assertCapability(t, catalog, "protocol.workload_event_feed", "implemented", true)
@@ -46,13 +48,16 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityCommand(t, catalog, "protocol.adapter_conformance", "agent-ledger adapter spec")
 	assertCapabilityCommand(t, catalog, "protocol.discovery_manifest", "agent-ledger discovery")
 	assertCapabilityCommand(t, catalog, "protocol.contract_bundle", "agent-ledger contracts")
+	assertCapabilityCommand(t, catalog, "protocol.contract_verification", "agent-ledger contracts verify")
 	assertCapabilityCommand(t, catalog, "protocol.openapi", "agent-ledger openapi")
 	assertCapabilityCommand(t, catalog, "protocol.runtime_status", "agent-ledger runtime")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.contracts")
+	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.contracts_verify")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.discovery")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.openapi")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.runtime_status")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://contracts/bundle")
+	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://contracts/verification")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://discovery/manifest")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://contracts/openapi")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://runtime/status")
@@ -101,6 +106,7 @@ func TestRegistryAnnotatesReadOnlyRuntimeCapabilities(t *testing.T) {
 	assertRuntimeCapability(t, catalog, "collector.codex", false, true, false)
 	assertRuntimeCapability(t, catalog, "protocol.adapter_conformance", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.contract_bundle", true, false, true)
+	assertRuntimeCapability(t, catalog, "protocol.contract_verification", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.discovery_manifest", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.openapi", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.runtime_status", true, false, true)
@@ -140,7 +146,7 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	if manifest.AdapterSpecHash == "" || !strings.HasPrefix(manifest.AdapterSpecHash, "sha256:") || manifest.AdapterSpecHash != AdapterContractFingerprint() {
 		t.Fatalf("discovery missing adapter contract hash: %#v", manifest)
 	}
-	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
+	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.contract_verification") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("discovery missing agent protocols: %#v", manifest.Protocols)
 	}
 	for _, protocol := range manifest.Protocols {
@@ -206,7 +212,7 @@ func TestOpenAPISpecIndexesStableControlPlane(t *testing.T) {
 		t.Fatalf("unexpected OpenAPI metadata: %#v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	for _, path := range []string{"/api/contracts", "/api/openapi.json", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workload-events"} {
+	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workload-events"} {
 		if paths[path] == nil {
 			t.Fatalf("OpenAPI missing path %s: %#v", path, paths)
 		}
@@ -215,6 +221,59 @@ func TestOpenAPISpecIndexesStableControlPlane(t *testing.T) {
 	if !strings.HasPrefix(raw, "sha256:") {
 		t.Fatalf("OpenAPI hash missing: %q", raw)
 	}
+}
+
+func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Collectors.Claude.Enabled = true
+	cfg.Collectors.Claude.Paths = []string{"C:/Users/example/.claude/projects"}
+	runtime := EnrichRuntimeStatus(&storage.RuntimeStatus{
+		Mode:            "control-plane",
+		ReadOnly:        false,
+		WriteOperations: "enabled",
+		BackgroundTasks: "enabled",
+		Message:         "test runtime",
+	}, OptionsFromConfig(cfg))
+	report := ContractVerificationReportFor(OptionsFromConfig(cfg), runtime)
+	if report.Contract != "agent-ledger.contract-verification" || report.Version != "v1" || !report.OK || report.Failed != 0 || report.Checked == 0 {
+		t.Fatalf("unexpected verification report: %#v", report)
+	}
+	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
+		t.Fatalf("verification report missing hashes: %#v", report)
+	}
+	for _, name := range []string{"discovery.contract_bundle_uri", "bundle.document.openapi", "openapi.path./api/contracts/verify", "openapi.privacy"} {
+		if !verificationReportHasCheck(report, name) {
+			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
+		}
+	}
+	first := ContractVerificationFingerprintFrom(report)
+	second := ContractVerificationFingerprint(OptionsFromConfig(cfg), runtime)
+	if first == "" || first != second {
+		t.Fatalf("verification fingerprint unstable: %q vs %q", first, second)
+	}
+	raw, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	for _, forbidden := range []string{"C:/Users/example", ".claude/projects"} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("verification report leaked path %q: %s", forbidden, string(raw))
+		}
+	}
+	for _, check := range report.Checks {
+		if !check.OK {
+			t.Fatalf("verification check failed: %#v", check)
+		}
+	}
+}
+
+func verificationReportHasCheck(report ContractVerificationReport, name string) bool {
+	for _, check := range report.Checks {
+		if check.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func contractBundleHasDocument(bundle ContractBundle, id string) bool {

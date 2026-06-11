@@ -65,6 +65,7 @@ CLI：
 ./agent-ledger adapter conformance --kind provider --strict --file fixture.json
 ./agent-ledger discovery
 ./agent-ledger contracts
+./agent-ledger contracts verify
 ./agent-ledger openapi
 ./agent-ledger integrations
 ./agent-ledger runtime
@@ -246,6 +247,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /.well-known/agent-ledger.json` | 面向 agent、wrapper、router 的隐私安全本地 discovery manifest |
 | `GET /api/discovery` | API 命名空间下的同一 discovery manifest |
 | `GET /api/contracts` | 单次握手的契约 bundle，包含稳定文档 URI、hash、缓存语义、CLI 命令和 MCP 入口 |
+| `GET /api/contracts/verify` | 机器可读控制面自检报告，校验 discovery、bundle、OpenAPI、schema、adapter、runtime 与隐私不变量 |
 | `GET /api/openapi.json` | metadata-only OpenAPI 3.1 控制面契约，供 wrapper、router 与 CI 集成 |
 | `GET /api/runtime/status` | 运行模式、只读状态、后台/写操作状态与兼容性 hash |
 | `GET /api/dashboard` | Web dashboard 的一致性 KPI、token、费用与模型数据包 |
@@ -326,13 +328,14 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 
 MCP `tools/list` 会返回标准风格的 `annotations.readOnlyHint`，以及 `_meta.agent_ledger` 字段：`writes_local_state`、`write_mode`（`none`、`always` 或 `conditional`）、`available_in_read_only`、`read_only_behavior`。Router 和多智能体框架应在观测部署中调用工具前读取这些字段。
 
-`GET /api/integrations`、`GET /.well-known/agent-ledger.json`、`agent-ledger integrations`、MCP `ledger.discovery`、MCP `ledger.integrations` 和 `agent-ledger://discovery/manifest` 会暴露运行时能力字段：`writes_local_state`、`available_in_read_only`、`runtime_status`。Discovery manifest 还会以一等字段暴露 `contract_bundle_uri`、`openapi_uri`、`capability_catalog_hash`、`runtime_status_uri`、`canonical_schema_uri`、`canonical_schema_hash`、`event_examples_uri`、`adapter_spec_uri`、`adapter_spec_hash`、`adapter_conformance_uri`，便于轻量 wrapper 自动接入。`GET /api/contracts`、`agent-ledger contracts`、MCP `ledger.contracts` 和 `agent-ledger://contracts/bundle` 会暴露单次握手的 contract bundle，包含文档 URI、hash、缓存语义、CLI 命令与 MCP 入口。`GET /api/openapi.json`、`agent-ledger openapi`、MCP `ledger.openapi` 和 `agent-ledger://contracts/openapi` 会暴露 metadata-only OpenAPI 3.1 文档，用于稳定 REST 控制面接口。`GET /api/integrations/adapter-spec`、`agent-ledger adapter spec`、MCP `ledger.adapter_contract` 和 `agent-ledger://integrations/adapter-contract` 会暴露同一份机器可读 adapter 契约。`GET /api/runtime/status` 与 `agent-ledger runtime` 提供同一个进程级 observer/control-plane 状态，适合探针使用。REST discovery、contract bundle、OpenAPI、catalog、runtime status、adapter spec 和 event schema 端点会返回强 `ETag`，并支持 `If-None-Match` 返回 `304 Not Modified`，让 wrapper 不必重复解析未变化的契约 JSON。Agent router 和 wrapper 应读取这些字段，而不是硬编码 endpoint 假设，尤其是在启用 `rbac.read_only` 时。
+`GET /api/integrations`、`GET /.well-known/agent-ledger.json`、`agent-ledger integrations`、MCP `ledger.discovery`、MCP `ledger.integrations` 和 `agent-ledger://discovery/manifest` 会暴露运行时能力字段：`writes_local_state`、`available_in_read_only`、`runtime_status`。Discovery manifest 还会以一等字段暴露 `contract_bundle_uri`、`openapi_uri`、`capability_catalog_hash`、`runtime_status_uri`、`canonical_schema_uri`、`canonical_schema_hash`、`event_examples_uri`、`adapter_spec_uri`、`adapter_spec_hash`、`adapter_conformance_uri`，便于轻量 wrapper 自动接入。`GET /api/contracts`、`agent-ledger contracts`、MCP `ledger.contracts` 和 `agent-ledger://contracts/bundle` 会暴露单次握手的 contract bundle，包含文档 URI、hash、缓存语义、CLI 命令与 MCP 入口。`GET /api/contracts/verify`、`agent-ledger contracts verify`、MCP `ledger.contracts_verify` 和 `agent-ledger://contracts/verification` 会暴露机器可读自检报告，用于校验 discovery、bundle、OpenAPI、schema、adapter、runtime、只读语义与隐私不变量。`GET /api/openapi.json`、`agent-ledger openapi`、MCP `ledger.openapi` 和 `agent-ledger://contracts/openapi` 会暴露 metadata-only OpenAPI 3.1 文档，用于稳定 REST 控制面接口。`GET /api/integrations/adapter-spec`、`agent-ledger adapter spec`、MCP `ledger.adapter_contract` 和 `agent-ledger://integrations/adapter-contract` 会暴露同一份机器可读 adapter 契约。`GET /api/runtime/status` 与 `agent-ledger runtime` 提供同一个进程级 observer/control-plane 状态，适合探针使用。REST discovery、contract bundle、contract verification、OpenAPI、catalog、runtime status、adapter spec 和 event schema 端点会返回强 `ETag`，并支持 `If-None-Match` 返回 `304 Not Modified`，让 wrapper 不必重复解析未变化的契约 JSON。Agent router 和 wrapper 应读取这些字段，而不是硬编码 endpoint 假设，尤其是在启用 `rbac.read_only` 时。
 
 当前工具：
 
 - `ledger.current_budget`
 - `ledger.discovery`
 - `ledger.contracts`
+- `ledger.contracts_verify`
 - `ledger.openapi`
 - `ledger.runtime_status`
 - `ledger.start_workload`
@@ -368,6 +371,7 @@ MCP `tools/list` 会返回标准风格的 `annotations.readOnlyHint`，以及 `_
 
 - `agent-ledger://discovery/manifest`
 - `agent-ledger://contracts/bundle`
+- `agent-ledger://contracts/verification`
 - `agent-ledger://contracts/openapi`
 - `agent-ledger://schema/canonical-events`
 - `agent-ledger://schema/canonical-event-examples`

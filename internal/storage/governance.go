@@ -293,6 +293,7 @@ func (d *DB) GetAuditLog(limit int) ([]AuditEvent, error) {
 // QueryAuditLog returns local audit events with optional filters. Time filters
 // use the same half-open [from, to) semantics as usage queries.
 func (d *DB) QueryAuditLog(filter AuditLogFilter) ([]AuditEvent, error) {
+	filter.From, filter.To = utcRange(filter.From, filter.To)
 	limit := filter.Limit
 	if limit <= 0 || limit > 5000 {
 		limit = 200
@@ -512,6 +513,7 @@ func (d *DB) GetProjectionQuality(from, to time.Time, source, model, project str
 	if to.IsZero() {
 		to = time.Now().UTC().AddDate(10, 0, 0)
 	}
+	from, to = utcRange(from, to)
 	where := []string{"mc.timestamp >= ?", "mc.timestamp < ?"}
 	args := []interface{}{from, to}
 	if source != "" {
@@ -583,6 +585,7 @@ func (d *DB) RepairUsageProjections(from, to time.Time, source, model, project s
 	if to.IsZero() {
 		to = time.Now().UTC().AddDate(10, 0, 0)
 	}
+	from, to = utcRange(from, to)
 	before, err := d.GetProjectionQuality(from, to, source, model, project)
 	if err != nil {
 		return nil, err
@@ -702,6 +705,7 @@ func (d *DB) RepairUsageProjections(from, to time.Time, source, model, project s
 }
 
 func projectionScopeWhere(from, to time.Time, source, model, project string) (string, []interface{}) {
+	from, to = utcRange(from, to)
 	where := []string{"mc.timestamp >= ?", "mc.timestamp < ?"}
 	args := []interface{}{from, to}
 	if source != "" {
@@ -815,6 +819,7 @@ func projectionMessage(q *ProjectionQuality) string {
 
 // GetModelCalls returns call analytics grouped by model/source/project.
 func (d *DB) GetModelCalls(from, to time.Time, source, model, project string, limit int) ([]ModelCallRow, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
@@ -847,6 +852,7 @@ func (d *DB) GetModelCalls(from, to time.Time, source, model, project string, li
 
 // GetCostIntelligence returns high-cost session explanations and advice.
 func (d *DB) GetCostIntelligence(from, to time.Time, source, model, project string, limit int) ([]CostInsightRow, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
@@ -886,6 +892,7 @@ func (d *DB) GetCostIntelligence(from, to time.Time, source, model, project stri
 
 // GetCacheDoctor returns cache diagnostics.
 func (d *DB) GetCacheDoctor(from, to time.Time, source, model, project string, limit int) ([]CacheDoctorRow, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
@@ -963,6 +970,7 @@ type InsightEventFilter struct {
 
 // GetInsightEventsFiltered returns recent insight events in a scoped window.
 func (d *DB) GetInsightEventsFiltered(filter InsightEventFilter) ([]InsightEvent, error) {
+	filter.From, filter.To = utcRange(filter.From, filter.To)
 	limit := filter.Limit
 	if limit <= 0 || limit > 1000 {
 		limit = 200
@@ -1022,6 +1030,7 @@ func (d *DB) DetectAnomalies(from, to time.Time, multiplier float64, nightStart,
 
 // DetectAnomaliesFiltered stores simple robust-statistics anomaly events for a scoped window.
 func (d *DB) DetectAnomaliesFiltered(from, to time.Time, source, model, project string, multiplier float64, nightStart, nightEnd int) error {
+	from, to = utcRange(from, to)
 	filter, fa := buildUsageFilterAlias("u", source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	rows, err := d.db.Query(`SELECT u.source,u.model,u.project,u.session_id,
@@ -1083,6 +1092,7 @@ func (d *DB) DetectAnomaliesFiltered(from, to time.Time, source, model, project 
 // It uses metadata-only signals: token volume, output ratio, call density,
 // prompt density, cost spikes, cache hit rate, and configured non-working hours.
 func (d *DB) DetectWatchdogEvents(from, to time.Time, source, model, project string, multiplier float64, minCalls, nightStart, nightEnd int) error {
+	from, to = utcRange(from, to)
 	if minCalls <= 0 {
 		minCalls = 8
 	}

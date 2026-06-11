@@ -92,6 +92,35 @@ func TestContractsCLIOutputsBundle(t *testing.T) {
 	}
 }
 
+func TestContractsCLIVerifyOutputsReport(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"contracts", "verify"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI contracts verify: %v", err)
+	}
+	var report map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode contracts verify output: %v\n%s", err, out)
+	}
+	if report["contract"] != "agent-ledger.contract-verification" || report["ok"] != true ||
+		report["failed"] != float64(0) || report["read_only"] != true || report["bundle_hash"] == "" || report["openapi_hash"] == "" {
+		t.Fatalf("unexpected contracts verify output: %+v", report)
+	}
+	checks, ok := report["checks"].([]interface{})
+	if !ok || len(checks) == 0 {
+		t.Fatalf("contracts verify output missing checks: %+v", report)
+	}
+}
+
 func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	db, err := storage.Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {
@@ -115,7 +144,7 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 		t.Fatalf("unexpected openapi output: %+v", spec)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	if paths["/api/openapi.json"] == nil || paths["/api/events/validate"] == nil {
+	if paths["/api/openapi.json"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/events/validate"] == nil {
 		t.Fatalf("openapi output missing expected paths: %+v", paths)
 	}
 }
@@ -263,15 +292,27 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	if err != nil {
 		t.Fatalf("Pipe: %v", err)
 	}
+	outCh := make(chan struct {
+		out []byte
+		err error
+	}, 1)
+	go func() {
+		out, readErr := io.ReadAll(r)
+		outCh <- struct {
+			out []byte
+			err error
+		}{out: out, err: readErr}
+	}()
 	os.Stdout = w
 	runErr := fn()
 	if closeErr := w.Close(); closeErr != nil && runErr == nil {
 		runErr = closeErr
 	}
 	os.Stdout = old
-	out, readErr := io.ReadAll(r)
-	if readErr != nil && runErr == nil {
-		runErr = readErr
+	result := <-outCh
+	if result.err != nil && runErr == nil {
+		runErr = result.err
 	}
-	return string(out), runErr
+	_ = r.Close()
+	return string(result.out), runErr
 }

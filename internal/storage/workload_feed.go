@@ -48,6 +48,7 @@ type WorkloadEventFeed struct {
 
 // GetWorkloadEventFeed returns recent workload state events without reading prompt content.
 func (d *DB) GetWorkloadEventFeed(from, to time.Time, source, model, project, phase, severity string, limit int, staleAfter time.Duration) (*WorkloadEventFeed, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 {
 		limit = 100
 	}

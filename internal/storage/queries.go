@@ -87,6 +87,7 @@ func (d *DB) UpsertSession(s *SessionRecord) error {
 	}
 	s.Project = d.normalizeProject(s.Project, s.CWD)
 	s.GitBranch = normalizeBranch(s.GitBranch)
+	s.StartTime = utcTimestamp(s.StartTime)
 	_, err := d.db.Exec(`INSERT INTO sessions(source,session_id,project,cwd,version,git_branch,start_time,prompts)
 		VALUES(?,?,?,?,?,?,?,?)
 		ON CONFLICT(source,session_id) DO UPDATE SET
@@ -109,6 +110,7 @@ func (d *DB) InsertUsage(r *UsageRecord) error {
 	}
 	r.Project = d.normalizeProject(r.Project, "")
 	r.GitBranch = normalizeBranch(r.GitBranch)
+	r.Timestamp = utcTimestamp(r.Timestamp)
 	_, err := d.db.Exec(`INSERT OR IGNORE INTO usage_records(source,session_id,model,input_tokens,output_tokens,
 		cache_creation_input_tokens,cache_read_input_tokens,reasoning_output_tokens,cost_usd,timestamp,project,git_branch,
 		pricing_source,pricing_model,pricing_confidence,pricing_note)
@@ -129,6 +131,7 @@ func (d *DB) InsertUsageBatch(records []*UsageRecord) error {
 		}
 		r.Project = d.normalizeProject(r.Project, "")
 		r.GitBranch = normalizeBranch(r.GitBranch)
+		r.Timestamp = utcTimestamp(r.Timestamp)
 		filtered = append(filtered, r)
 	}
 	if len(filtered) == 0 {
@@ -188,6 +191,7 @@ func (d *DB) InsertPromptBatch(events []*PromptEvent) error {
 			continue
 		}
 		e.Project = d.normalizeProject(e.Project, "")
+		e.Timestamp = utcTimestamp(e.Timestamp)
 		if _, err := stmt.Exec(e.Source, e.SessionID, e.Model, e.Project, e.Timestamp); err != nil {
 			return err
 		}

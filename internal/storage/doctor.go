@@ -34,6 +34,7 @@ type DoctorReport struct {
 
 // GetDoctorReport returns local diagnostics for "why is my data wrong or empty?"
 func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, source, model, project string) (*DoctorReport, error) {
+	from, to = utcRange(from, to)
 	stats, err := d.GetDashboardStatsFiltered(from, to, source, model, project)
 	if err != nil {
 		return nil, err

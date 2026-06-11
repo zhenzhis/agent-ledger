@@ -438,7 +438,7 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "discovery":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Discovery(integrations.OptionsFromConfig(cfg)))
 	case "contracts":
-		return json.NewEncoder(os.Stdout).Encode(integrations.ContractBundleFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
+		return runContractsCLI(args[1:], cfg)
 	case "openapi":
 		return json.NewEncoder(os.Stdout).Encode(integrations.OpenAPISpecFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
 	case "integrations":
@@ -459,6 +459,20 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return fmt.Errorf("unknown command %q", cmd)
 	}
 	return nil
+}
+
+func runContractsCLI(args []string, cfg *config.Config) error {
+	opts := integrations.OptionsFromConfig(cfg)
+	runtime := server.RuntimeStatusFromConfig(cfg)
+	if len(args) == 0 {
+		return json.NewEncoder(os.Stdout).Encode(integrations.ContractBundleFor(opts, runtime))
+	}
+	switch args[0] {
+	case "verify":
+		return json.NewEncoder(os.Stdout).Encode(integrations.ContractVerificationReportFor(opts, runtime))
+	default:
+		return fmt.Errorf("usage: agent-ledger contracts [verify]")
+	}
 }
 
 func cliCommandRequiresWrite(args []string) bool {

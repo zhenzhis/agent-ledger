@@ -29,6 +29,7 @@ type ChargebackRow struct {
 // authoritative token/cost source; canonical model calls are projected there
 // during ingest and joined with workload ownership metadata for showback.
 func (d *DB) GetChargeback(from, to time.Time, source, model, project string, groups map[string]string, machineName, gitAuthor string, limit int) ([]ChargebackRow, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
@@ -39,6 +40,7 @@ func (d *DB) GetChargeback(from, to time.Time, source, model, project string, gr
 }
 
 func (d *DB) hasUsageRows(from, to time.Time, source, model, project string) bool {
+	from, to = utcRange(from, to)
 	filter, fa := buildUsageFilterAlias("u", source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	var rows int
@@ -49,6 +51,7 @@ func (d *DB) hasUsageRows(from, to time.Time, source, model, project string) boo
 }
 
 func (d *DB) getRawChargeback(from, to time.Time, source, model, project string, groups map[string]string, machineName, gitAuthor string, limit int) ([]ChargebackRow, error) {
+	from, to = utcRange(from, to)
 	filter, fa := buildUsageFilterAlias("u", source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	rows, err := d.db.Query(`SELECT u.source,u.model,COALESCE(NULLIF(w.project,''),u.project,''),COALESCE(w.repo,''),COALESCE(w.owner,''),COALESCE(w.team,''),COUNT(*),
@@ -88,6 +91,7 @@ func (d *DB) getRawChargeback(from, to time.Time, source, model, project string,
 }
 
 func (d *DB) getCanonicalChargeback(from, to time.Time, source, model, project string, groups map[string]string, machineName, gitAuthor string, limit int) ([]ChargebackRow, error) {
+	from, to = utcRange(from, to)
 	where := []string{"mc.timestamp >= ?", "mc.timestamp < ?"}
 	args := []interface{}{from, to}
 	if source != "" {

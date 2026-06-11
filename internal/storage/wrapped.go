@@ -51,6 +51,7 @@ type WrappedReport struct {
 
 // GetAgentWrapped returns a compact period summary for human review and export.
 func (d *DB) GetAgentWrapped(from, to time.Time, period, source, model, project string) (*WrappedReport, error) {
+	from, to = utcRange(from, to)
 	stats, err := d.GetDashboardStatsFiltered(from, to, source, model, project)
 	if err != nil {
 		return nil, err
@@ -99,6 +100,7 @@ func (d *DB) GetAgentWrapped(from, to time.Time, period, source, model, project 
 }
 
 func (d *DB) topWrappedProject(from, to time.Time, source, model, project string) (WrappedProject, bool, error) {
+	from, to = utcRange(from, to)
 	filter, fa := buildUsageFilter(source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	row := d.db.QueryRow(`SELECT COALESCE(NULLIF(project,''),'unknown'),
@@ -120,6 +122,7 @@ func (d *DB) topWrappedProject(from, to time.Time, source, model, project string
 }
 
 func (d *DB) topWrappedDay(from, to time.Time, source, model, project, mode string) (WrappedDay, bool, error) {
+	from, to = utcRange(from, to)
 	filter, fa := buildUsageFilter(source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	order := `tokens DESC, cost_usd DESC`

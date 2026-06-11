@@ -192,6 +192,7 @@ func (d *DB) GetDashboardStatsFiltered(from, to time.Time, source, model, projec
 }
 
 func (d *DB) getDashboardStatsFiltered(from, to time.Time, source, model, project string, useAggregate bool) (*DashboardStats, error) {
+	from, to = utcRange(from, to)
 	s := &DashboardStats{}
 	filter, fa := buildUsageFilter(source, model, project)
 	args := append([]interface{}{from, to}, fa...)
@@ -241,6 +242,7 @@ func isUTCDayAligned(t time.Time) bool {
 // storage mutex, so concurrent scans or cost rebuilds cannot make the visible
 // dashboard modules disagree with each other.
 func (d *DB) GetDashboardBundleFiltered(from, to time.Time, granularity, source, model, project string, tzOffset int) (*DashboardBundle, error) {
+	from, to = utcRange(from, to)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -337,6 +339,7 @@ func (d *DB) GetCostByModel(from, to time.Time, source string) ([]CostByModel, e
 
 // GetCostByModelFiltered returns total cost grouped by model with optional project filtering.
 func (d *DB) GetCostByModelFiltered(from, to time.Time, source, project string) ([]CostByModel, error) {
+	from, to = utcRange(from, to)
 	sf, sa := buildUsageFilter(source, "", project)
 	args := append([]interface{}{from, to}, sa...)
 	rows, err := d.db.Query(`SELECT model, SUM(cost_usd) as cost FROM usage_records
@@ -400,6 +403,7 @@ func (d *DB) GetCostOverTime(from, to time.Time, granularity, source, model stri
 
 // GetCostOverTimeFiltered returns cost grouped by time with optional project filtering.
 func (d *DB) GetCostOverTimeFiltered(from, to time.Time, granularity, source, model, project string, tzOffset int) ([]TimeSeriesPoint, error) {
+	from, to = utcRange(from, to)
 	expr := granularityExpr(granularity, tzOffset)
 	filter, fa := buildUsageFilter(source, model, project)
 	args := append([]interface{}{from, to}, fa...)
@@ -431,6 +435,7 @@ func (d *DB) GetTokensOverTime(from, to time.Time, granularity, source, model st
 
 // GetTokensOverTimeFiltered returns token usage grouped by time with optional project filtering.
 func (d *DB) GetTokensOverTimeFiltered(from, to time.Time, granularity, source, model, project string, tzOffset int) ([]TokenTimeSeriesPoint, error) {
+	from, to = utcRange(from, to)
 	expr := granularityExpr(granularity, tzOffset)
 	filter, fa := buildUsageFilter(source, model, project)
 	args := append([]interface{}{from, to}, fa...)
@@ -523,6 +528,7 @@ func (d *DB) GetSessionsPage(from, to time.Time, source, model, project string, 
 
 // GetSessionsPageSorted returns sessions with server-side search, sorting, and pagination.
 func (d *DB) GetSessionsPageSorted(from, to time.Time, source, model, project, query string, limit, offset int, sortKey, direction string) (*SessionPage, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 {
 		limit = 100
 	}

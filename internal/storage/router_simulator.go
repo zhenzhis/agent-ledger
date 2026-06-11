@@ -65,6 +65,7 @@ type RouterSimulationReport struct {
 // SimulateModelRouting estimates cost if matching usage were routed to
 // targetModel. replacementRatio is clamped by callers and must be in (0,1].
 func (d *DB) SimulateModelRouting(from, to time.Time, source, fromModel, targetModel, project string, replacementRatio float64, limit int) (*RouterSimulationReport, error) {
+	from, to = utcRange(from, to)
 	targetModel = strings.TrimSpace(targetModel)
 	if targetModel == "" {
 		return nil, fmt.Errorf("target model is required")

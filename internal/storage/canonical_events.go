@@ -550,6 +550,7 @@ func prepareCanonicalEvent(event *CanonicalEvent) (map[string]interface{}, strin
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now().UTC()
 	}
+	event.Timestamp = utcTimestamp(event.Timestamp)
 	if event.Confidence <= 0 {
 		event.Confidence = 1
 	}

@@ -51,6 +51,7 @@ type FleetAttributionRow struct {
 
 // GetFleetAttribution returns run-level attribution for multi-agent/fleet work.
 func (d *DB) GetFleetAttribution(from, to time.Time, source, model, project string, limit int) (*FleetAttributionReport, error) {
+	from, to = utcRange(from, to)
 	if err := d.BackfillWorkloadsFromUsage(from, to); err != nil {
 		return nil, err
 	}

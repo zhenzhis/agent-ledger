@@ -44,6 +44,28 @@ type ContractBundle struct {
 	Documents      []ContractDocument `json:"documents"`
 }
 
+type ContractVerificationReport struct {
+	Contract    string                      `json:"contract"`
+	Version     string                      `json:"version"`
+	OK          bool                        `json:"ok"`
+	Checked     int                         `json:"checked"`
+	Failed      int                         `json:"failed"`
+	BundleHash  string                      `json:"bundle_hash"`
+	OpenAPIHash string                      `json:"openapi_hash"`
+	ReadOnly    bool                        `json:"read_only"`
+	Privacy     string                      `json:"privacy"`
+	Checks      []ContractVerificationCheck `json:"checks"`
+}
+
+type ContractVerificationCheck struct {
+	Name     string `json:"name"`
+	OK       bool   `json:"ok"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+	Expected string `json:"expected,omitempty"`
+	Actual   string `json:"actual,omitempty"`
+}
+
 // ContractBundleFor returns the current control-plane contract bundle.
 func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBundle {
 	catalog := Registry(opts)
@@ -185,6 +207,135 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 	return bundle
 }
 
+func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus) ContractVerificationReport {
+	if runtime == nil {
+		runtime = defaultRuntimeStatus(opts)
+	}
+	catalog := Registry(opts)
+	catalogHash := CatalogFingerprintFrom(catalog)
+	discovery := Discovery(opts)
+	openAPI := OpenAPISpecFor(opts, runtime)
+	openAPIHash := OpenAPIFingerprint(opts, runtime)
+	bundle := ContractBundleFor(opts, runtime)
+	checks := []ContractVerificationCheck{}
+	addCheck := func(name string, ok bool, severity, message, expected, actual string) {
+		checks = append(checks, ContractVerificationCheck{
+			Name:     name,
+			OK:       ok,
+			Severity: severity,
+			Message:  message,
+			Expected: expected,
+			Actual:   actual,
+		})
+	}
+
+	addCheck("discovery.contract_bundle_uri", discovery.ContractBundleURI == "/api/contracts", "critical", "discovery points to contract bundle", "/api/contracts", discovery.ContractBundleURI)
+	addCheck("discovery.openapi_uri", discovery.OpenAPIURI == "/api/openapi.json", "critical", "discovery points to OpenAPI contract", "/api/openapi.json", discovery.OpenAPIURI)
+	addCheck("discovery.catalog_hash", discovery.CapabilityCatalogHash == catalogHash, "critical", "discovery catalog hash matches generated catalog", catalogHash, discovery.CapabilityCatalogHash)
+	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
+	addCheck("discovery.adapter_hash", discovery.AdapterSpecHash == AdapterContractFingerprint(), "critical", "discovery adapter hash matches generated adapter contract", AdapterContractFingerprint(), discovery.AdapterSpecHash)
+	addCheck("bundle.hash", bundle.BundleHash == ContractBundleFingerprint(bundle), "critical", "contract bundle hash matches deterministic fingerprint", ContractBundleFingerprint(bundle), bundle.BundleHash)
+
+	requiredDocs := []struct {
+		id   string
+		hash string
+	}{
+		{id: "discovery", hash: hashJSONPayload(discovery)},
+		{id: "contract-bundle", hash: bundle.BundleHash},
+		{id: "openapi", hash: openAPIHash},
+		{id: "capability-catalog", hash: catalogHash},
+		{id: "runtime-status", hash: hashJSONPayload(runtime)},
+		{id: "canonical-event-schema", hash: storage.CanonicalEventSchemaFingerprint()},
+		{id: "adapter-contract", hash: AdapterContractFingerprint()},
+	}
+	for _, required := range requiredDocs {
+		doc, ok := contractDocument(bundle, required.id)
+		actual := ""
+		if ok {
+			actual = doc.Hash
+		}
+		addCheck("bundle.document."+required.id, ok && actual == required.hash, "critical", "bundle document is present and hash matches generated payload", required.hash, actual)
+		if ok {
+			addCheck("bundle.document."+required.id+".read_only", doc.ReadOnlySafe && !doc.WritesLocalState, "critical", "contract document is read-only and does not write local state", "read_only_safe=true,writes_local_state=false", contractDocAccess(doc))
+		}
+	}
+
+	meta, _ := openAPI["x-agent-ledger"].(map[string]interface{})
+	addCheck("openapi.identity", openAPI["openapi"] == "3.1.0" && meta["contract"] == "agent-ledger.control-plane-openapi", "critical", "OpenAPI document has expected identity", "3.1.0 agent-ledger.control-plane-openapi", openAPIIdentity(openAPI, meta))
+	addCheck("openapi.privacy", meta["prompt_content_stored"] == false && meta["usage_data_uploaded"] == false, "critical", "OpenAPI metadata preserves local-first privacy flags", "prompt_content_stored=false,usage_data_uploaded=false", openAPIPrivacy(meta))
+	addCheck("openapi.catalog_hash", contractStringValue(meta["capability_catalog_hash"]) == catalogHash, "critical", "OpenAPI catalog hash matches generated catalog", catalogHash, contractStringValue(meta["capability_catalog_hash"]))
+	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))
+	addCheck("openapi.adapter_hash", contractStringValue(meta["adapter_spec_hash"]) == AdapterContractFingerprint(), "critical", "OpenAPI adapter hash matches generated adapter contract", AdapterContractFingerprint(), contractStringValue(meta["adapter_spec_hash"]))
+
+	paths, _ := openAPI["paths"].(map[string]interface{})
+	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workload-events"} {
+		_, ok := paths[path]
+		addCheck("openapi.path."+path, ok, "warning", "OpenAPI exposes stable control-plane path", path, boolString(ok))
+	}
+
+	failed := 0
+	for _, check := range checks {
+		if !check.OK {
+			failed++
+		}
+	}
+	return ContractVerificationReport{
+		Contract:    "agent-ledger.contract-verification",
+		Version:     "v1",
+		OK:          failed == 0,
+		Checked:     len(checks),
+		Failed:      failed,
+		BundleHash:  bundle.BundleHash,
+		OpenAPIHash: openAPIHash,
+		ReadOnly:    opts.ReadOnly,
+		Privacy:     "metadata-only self-check; no prompts, responses, sessions, secrets, or local paths",
+		Checks:      checks,
+	}
+}
+
+func ContractVerificationFingerprint(opts Options, runtime *storage.RuntimeStatus) string {
+	return hashJSONPayload(ContractVerificationReportFor(opts, runtime))
+}
+
+func ContractVerificationFingerprintFrom(report ContractVerificationReport) string {
+	return hashJSONPayload(report)
+}
+
+func contractDocument(bundle ContractBundle, id string) (ContractDocument, bool) {
+	for _, doc := range bundle.Documents {
+		if doc.ID == id {
+			return doc, true
+		}
+	}
+	return ContractDocument{}, false
+}
+
+func contractDocAccess(doc ContractDocument) string {
+	return "read_only_safe=" + boolString(doc.ReadOnlySafe) + ",writes_local_state=" + boolString(doc.WritesLocalState)
+}
+
+func openAPIIdentity(openAPI map[string]interface{}, meta map[string]interface{}) string {
+	return contractStringValue(openAPI["openapi"]) + " " + contractStringValue(meta["contract"])
+}
+
+func openAPIPrivacy(meta map[string]interface{}) string {
+	return "prompt_content_stored=" + boolString(meta["prompt_content_stored"] == true) + ",usage_data_uploaded=" + boolString(meta["usage_data_uploaded"] == true)
+}
+
+func contractStringValue(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func boolString(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
+}
+
 func defaultRuntimeStatus(opts Options) *storage.RuntimeStatus {
 	if opts.ReadOnly {
 		return EnrichRuntimeStatus(&storage.RuntimeStatus{
@@ -206,6 +357,7 @@ func defaultRuntimeStatus(opts Options) *storage.RuntimeStatus {
 }
 
 func ContractBundleFingerprint(bundle ContractBundle) string {
+	bundle.Documents = append([]ContractDocument(nil), bundle.Documents...)
 	bundle.BundleHash = ""
 	for i := range bundle.Documents {
 		if bundle.Documents[i].ID == "contract-bundle" {

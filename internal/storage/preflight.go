@@ -47,6 +47,7 @@ type preflightSample struct {
 // It uses metadata only: token/cost/call counts and timestamps, never prompt
 // text or model output.
 func (d *DB) EstimatePreflightCost(from, to time.Time, task, source, model, project string, limit int) (*PreflightEstimateReport, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 || limit > 5000 {
 		limit = 2000
 	}
@@ -86,6 +87,7 @@ func (d *DB) EstimatePreflightCost(from, to time.Time, task, source, model, proj
 }
 
 func (d *DB) preflightUsageSamples(from, to time.Time, source, model, project string, limit int) ([]preflightSample, string, error) {
+	from, to = utcRange(from, to)
 	filter, fa := buildUsageFilterAlias("u", source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	args = append(args, limit)
@@ -107,6 +109,7 @@ func (d *DB) preflightUsageSamples(from, to time.Time, source, model, project st
 }
 
 func (d *DB) preflightModelCallSamples(from, to time.Time, source, model, project string, limit int) ([]preflightSample, string, error) {
+	from, to = utcRange(from, to)
 	filter, fa := buildModelCallPreflightFilter(source, model, project)
 	args := append([]interface{}{from, to}, fa...)
 	args = append(args, limit)

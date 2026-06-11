@@ -71,6 +71,29 @@ func TestContractsEndpoint(t *testing.T) {
 	assertETagRevalidates(t, srv.handleContracts, "http://127.0.0.1/api/contracts", rr.Header().Get("ETag"))
 }
 
+func TestContractVerificationEndpoint(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{RBAC: config.RBACConfig{ReadOnly: true}})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/contracts/verify", nil)
+	rr := httptest.NewRecorder()
+	srv.handleContractVerification(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("contract verification status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var report integrations.ContractVerificationReport
+	if err := json.Unmarshal(rr.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode contract verification: %v", err)
+	}
+	if report.Contract != "agent-ledger.contract-verification" || !report.OK || report.Failed != 0 ||
+		report.Checked == 0 || report.BundleHash == "" || report.OpenAPIHash == "" || !report.ReadOnly {
+		t.Fatalf("unexpected contract verification report: %+v", report)
+	}
+	if !contractVerificationHasCheck(report, "openapi.path./api/contracts/verify") {
+		t.Fatalf("verification report missing OpenAPI path check: %+v", report.Checks)
+	}
+	assertETagRevalidates(t, srv.handleContractVerification, "http://127.0.0.1/api/contracts/verify", rr.Header().Get("ETag"))
+}
+
 func TestOpenAPIEndpoint(t *testing.T) {
 	db := testServerDB(t)
 	srv := New(db, "", Options{RBAC: config.RBACConfig{Enabled: true}})
@@ -92,7 +115,7 @@ func TestOpenAPIEndpoint(t *testing.T) {
 		t.Fatalf("unexpected openapi metadata: %+v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	if paths["/api/contracts"] == nil || paths["/api/openapi.json"] == nil || paths["/api/events/validate"] == nil || paths["/api/workload-events"] == nil {
+	if paths["/api/contracts"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/openapi.json"] == nil || paths["/api/events/validate"] == nil || paths["/api/workload-events"] == nil {
 		t.Fatalf("openapi missing expected paths: %+v", paths)
 	}
 	assertETagRevalidates(t, srv.handleOpenAPI, "http://127.0.0.1/api/openapi.json", rr.Header().Get("ETag"))
@@ -142,6 +165,7 @@ func TestControlPlaneEndpointETags(t *testing.T) {
 	}{
 		{name: "integrations", url: "http://127.0.0.1/api/integrations", handler: srv.handleIntegrations},
 		{name: "contracts", url: "http://127.0.0.1/api/contracts", handler: srv.handleContracts},
+		{name: "contract-verification", url: "http://127.0.0.1/api/contracts/verify", handler: srv.handleContractVerification},
 		{name: "openapi", url: "http://127.0.0.1/api/openapi.json", handler: srv.handleOpenAPI},
 		{name: "runtime-status", url: "http://127.0.0.1/api/runtime/status", handler: srv.handleRuntimeStatus},
 		{name: "event-schema", url: "http://127.0.0.1/api/event-schema", handler: srv.handleCanonicalEventSchema},
@@ -178,6 +202,15 @@ func assertETagRevalidates(t *testing.T, handler func(http.ResponseWriter, *http
 	if rr.Body.Len() != 0 {
 		t.Fatalf("304 response should not include a body: %q", rr.Body.String())
 	}
+}
+
+func contractVerificationHasCheck(report integrations.ContractVerificationReport, name string) bool {
+	for _, check := range report.Checks {
+		if check.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func contractBundleHasDocument(bundle integrations.ContractBundle, id string) bool {

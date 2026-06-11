@@ -336,6 +336,7 @@ type ModelRegistryRow struct {
 // BackfillWorkloadsFromUsage derives canonical workload rows from legacy usage/session data.
 // It is idempotent and keeps existing manually created workloads untouched.
 func (d *DB) BackfillWorkloadsFromUsage(from, to time.Time) error {
+	from, to = utcRange(from, to)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	tx, err := d.db.Begin()
@@ -627,6 +628,7 @@ func recordAgentRunHeartbeatTx(tx *sql.Tx, in agentRunHeartbeatInput) (*AgentRun
 	if in.Timestamp.IsZero() {
 		in.Timestamp = time.Now().UTC()
 	}
+	in.Timestamp = utcTimestamp(in.Timestamp)
 	if in.Confidence <= 0 {
 		in.Confidence = 1
 	}
@@ -707,6 +709,7 @@ func recordAgentRunHeartbeatTx(tx *sql.Tx, in agentRunHeartbeatInput) (*AgentRun
 
 // GetWorkloadsPage returns workload summaries derived from canonical model calls.
 func (d *DB) GetWorkloadsPage(from, to time.Time, source, model, project, status, query string, limit, offset int) (*WorkloadPage, error) {
+	from, to = utcRange(from, to)
 	if err := d.BackfillWorkloadsFromUsage(from, to); err != nil {
 		return nil, err
 	}
@@ -913,6 +916,7 @@ func (d *DB) GetWorkloadState(workloadID string, staleAfter time.Duration) (*Wor
 
 // GetWorkloadStates returns bounded terminal-state snapshots for workloads in a window.
 func (d *DB) GetWorkloadStates(from, to time.Time, source, model, project string, limit int, staleAfter time.Duration) ([]WorkloadState, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -1491,6 +1495,7 @@ func (d *DB) getWorkloadSessions(workloadID string) ([]SessionInfo, error) {
 }
 
 func workloadWhere(source, model, project, status, query string, from, to time.Time) (string, []interface{}) {
+	from, to = utcRange(from, to)
 	base := `(EXISTS (SELECT 1 FROM model_calls mx WHERE mx.workload_id=w.workload_id AND mx.timestamp >= ? AND mx.timestamp < ?`
 	args := []interface{}{from, to}
 	if source != "" {

@@ -65,6 +65,7 @@ CLI:
 ./agent-ledger adapter conformance --kind provider --strict --file fixture.json
 ./agent-ledger discovery
 ./agent-ledger contracts
+./agent-ledger contracts verify
 ./agent-ledger openapi
 ./agent-ledger integrations
 ./agent-ledger runtime
@@ -246,6 +247,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /.well-known/agent-ledger.json` | Privacy-safe local discovery manifest for agents, wrappers, and routers |
 | `GET /api/discovery` | Same discovery manifest under the API namespace |
 | `GET /api/contracts` | One-shot contract bundle with stable document URIs, hashes, cache semantics, CLI commands, and MCP entrypoints |
+| `GET /api/contracts/verify` | Machine-readable control-plane self-check for discovery, bundle, OpenAPI, schema, adapter, runtime, and privacy invariants |
 | `GET /api/openapi.json` | Metadata-only OpenAPI 3.1 control-plane contract for wrapper, router, and CI integration |
 | `GET /api/runtime/status` | Runtime mode, read-only state, background/write status, and compatibility hashes |
 | `GET /api/dashboard` | Consistent KPI, token, cost, and model bundle for the web dashboard |
@@ -326,13 +328,14 @@ When a policy returns `require_approval`, Agent Ledger records a local pending a
 
 MCP `tools/list` includes standard-style `annotations.readOnlyHint` plus `_meta.agent_ledger` fields: `writes_local_state`, `write_mode` (`none`, `always`, or `conditional`), `available_in_read_only`, and `read_only_behavior`. Routers and multi-agent frameworks should use these fields before calling tools in observer deployments.
 
-`GET /api/integrations`, `GET /.well-known/agent-ledger.json`, `agent-ledger integrations`, MCP `ledger.discovery`, MCP `ledger.integrations`, and `agent-ledger://discovery/manifest` expose runtime capability fields: `writes_local_state`, `available_in_read_only`, and `runtime_status`. The discovery manifest also exposes first-class `contract_bundle_uri`, `openapi_uri`, `capability_catalog_hash`, `runtime_status_uri`, `canonical_schema_uri`, `canonical_schema_hash`, `event_examples_uri`, `adapter_spec_uri`, `adapter_spec_hash`, and `adapter_conformance_uri` fields for lightweight wrappers. `GET /api/contracts`, `agent-ledger contracts`, MCP `ledger.contracts`, and `agent-ledger://contracts/bundle` expose a one-shot contract bundle with document URIs, hashes, cache semantics, CLI commands, and MCP entrypoints. `GET /api/openapi.json`, `agent-ledger openapi`, MCP `ledger.openapi`, and `agent-ledger://contracts/openapi` expose a metadata-only OpenAPI 3.1 document for stable REST control-plane endpoints. `GET /api/integrations/adapter-spec`, `agent-ledger adapter spec`, MCP `ledger.adapter_contract`, and `agent-ledger://integrations/adapter-contract` expose the same machine-readable adapter contract. `GET /api/runtime/status` and `agent-ledger runtime` provide the same process-level observer/control-plane status for probes. The REST discovery, contract bundle, OpenAPI, catalog, runtime status, adapter spec, and event schema endpoints emit strong `ETag` headers and honor `If-None-Match` with `304 Not Modified`, so wrappers can revalidate contracts without reparsing unchanged JSON. Agent routers and wrappers should use these fields instead of hardcoding endpoint assumptions, especially when `rbac.read_only` is enabled.
+`GET /api/integrations`, `GET /.well-known/agent-ledger.json`, `agent-ledger integrations`, MCP `ledger.discovery`, MCP `ledger.integrations`, and `agent-ledger://discovery/manifest` expose runtime capability fields: `writes_local_state`, `available_in_read_only`, and `runtime_status`. The discovery manifest also exposes first-class `contract_bundle_uri`, `openapi_uri`, `capability_catalog_hash`, `runtime_status_uri`, `canonical_schema_uri`, `canonical_schema_hash`, `event_examples_uri`, `adapter_spec_uri`, `adapter_spec_hash`, and `adapter_conformance_uri` fields for lightweight wrappers. `GET /api/contracts`, `agent-ledger contracts`, MCP `ledger.contracts`, and `agent-ledger://contracts/bundle` expose a one-shot contract bundle with document URIs, hashes, cache semantics, CLI commands, and MCP entrypoints. `GET /api/contracts/verify`, `agent-ledger contracts verify`, MCP `ledger.contracts_verify`, and `agent-ledger://contracts/verification` expose a machine-readable self-check report that validates discovery, bundle, OpenAPI, schema, adapter, runtime, read-only, and privacy invariants. `GET /api/openapi.json`, `agent-ledger openapi`, MCP `ledger.openapi`, and `agent-ledger://contracts/openapi` expose a metadata-only OpenAPI 3.1 document for stable REST control-plane endpoints. `GET /api/integrations/adapter-spec`, `agent-ledger adapter spec`, MCP `ledger.adapter_contract`, and `agent-ledger://integrations/adapter-contract` expose the same machine-readable adapter contract. `GET /api/runtime/status` and `agent-ledger runtime` provide the same process-level observer/control-plane status for probes. The REST discovery, contract bundle, contract verification, OpenAPI, catalog, runtime status, adapter spec, and event schema endpoints emit strong `ETag` headers and honor `If-None-Match` with `304 Not Modified`, so wrappers can revalidate contracts without reparsing unchanged JSON. Agent routers and wrappers should use these fields instead of hardcoding endpoint assumptions, especially when `rbac.read_only` is enabled.
 
 Current tools:
 
 - `ledger.current_budget`
 - `ledger.discovery`
 - `ledger.contracts`
+- `ledger.contracts_verify`
 - `ledger.openapi`
 - `ledger.runtime_status`
 - `ledger.start_workload`
@@ -368,6 +371,7 @@ Current resources:
 
 - `agent-ledger://discovery/manifest`
 - `agent-ledger://contracts/bundle`
+- `agent-ledger://contracts/verification`
 - `agent-ledger://contracts/openapi`
 - `agent-ledger://schema/canonical-events`
 - `agent-ledger://schema/canonical-event-examples`

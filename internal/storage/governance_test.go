@@ -71,6 +71,38 @@ func TestRebuildUsageAggregates(t *testing.T) {
 	}
 }
 
+func TestTimeRangeQueriesNormalizeLocalBoundsToUTC(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ts := time.Date(2026, 6, 11, 17, 0, 0, 0, time.UTC)
+	if err := db.InsertUsage(&UsageRecord{
+		Source: "gateway", SessionID: "s-local-window", Model: "gpt-5.5", InputTokens: 100, OutputTokens: 25, CostUSD: 0.25, Timestamp: ts, Project: "agent-ledger",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	local := time.FixedZone("UTC+2", 2*60*60)
+	from := ts.Add(-time.Minute).In(local)
+	to := ts.Add(time.Minute).In(local)
+	calls, err := db.GetModelCalls(from, to, "gateway", "gpt-5.5", "agent-ledger", 10)
+	if err != nil {
+		t.Fatalf("GetModelCalls: %v", err)
+	}
+	if len(calls) != 1 || calls[0].Calls != 1 || calls[0].Tokens != 125 {
+		t.Fatalf("local bounds failed to match UTC usage row: %+v", calls)
+	}
+	stats, err := db.GetDashboardStatsFiltered(from, to, "gateway", "gpt-5.5", "agent-ledger")
+	if err != nil {
+		t.Fatalf("GetDashboardStatsFiltered: %v", err)
+	}
+	if stats.TotalCalls != 1 || stats.TotalTokens != 125 || stats.TotalCost != 0.25 {
+		t.Fatalf("local bounds failed to match dashboard stats: %+v", stats)
+	}
+}
+
 func TestDataQualityIncludesCanonicalEventProvenance(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {

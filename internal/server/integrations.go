@@ -36,8 +36,21 @@ func (s *Server) handleContracts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	bundle := integrations.ContractBundleFor(s.integrationOptions(), s.runtimeStatus())
+	opts := s.integrationOptions()
+	runtime := s.runtimeStatus()
+	bundle := integrations.ContractBundleFor(opts, runtime)
 	writeJSONWithETag(w, r, bundle, bundle.BundleHash)
+}
+
+func (s *Server) handleContractVerification(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	opts := s.integrationOptions()
+	runtime := s.runtimeStatus()
+	report := integrations.ContractVerificationReportFor(opts, runtime)
+	writeJSONWithETag(w, r, report, integrations.ContractVerificationFingerprintFrom(report))
 }
 
 func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +58,10 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	spec := integrations.OpenAPISpecFor(s.integrationOptions(), s.runtimeStatus())
-	writeJSONWithETag(w, r, spec, integrations.OpenAPIFingerprint(s.integrationOptions(), s.runtimeStatus()))
+	opts := s.integrationOptions()
+	runtime := s.runtimeStatus()
+	spec := integrations.OpenAPISpecFor(opts, runtime)
+	writeJSONWithETag(w, r, spec, integrations.OpenAPIFingerprint(opts, runtime))
 }
 
 func (s *Server) handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {

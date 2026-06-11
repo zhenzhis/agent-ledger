@@ -62,6 +62,7 @@ func (d *DB) BuildOfflineBundle(from, to time.Time, source, model, project, priv
 // BuildOfflineBundleWithOptions builds a privacy-safe offline bundle and can
 // skip recording the bundle digest for read-only control plane deployments.
 func (d *DB) BuildOfflineBundleWithOptions(from, to time.Time, source, model, project, privacyLabel, signingKey, keyID string, limit int, record bool) (*OfflineBundle, []byte, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 {
 		limit = 10000
 	}
@@ -216,6 +217,7 @@ func VerifyOfflineBundle(bundle *OfflineBundle, signingKey string, requireSignat
 
 // GetCanonicalEvents returns metadata-only canonical events for offline export.
 func (d *DB) GetCanonicalEvents(from, to time.Time, source, model, project string, limit int) ([]CanonicalEvent, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 {
 		limit = 10000
 	}

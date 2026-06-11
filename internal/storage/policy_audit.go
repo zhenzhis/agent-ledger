@@ -9,6 +9,7 @@ import (
 // GetPolicyAuditCandidates returns metadata-only historical rows that can be
 // evaluated with the shared local policy evaluator.
 func (d *DB) GetPolicyAuditCandidates(from, to time.Time, source, model, project string, limit int) ([]ledgerpolicy.AuditCandidate, error) {
+	from, to = utcRange(from, to)
 	if limit <= 0 || limit > 5000 {
 		limit = 1000
 	}
@@ -43,6 +44,7 @@ func (d *DB) GetPolicyAuditCandidates(from, to time.Time, source, model, project
 }
 
 func (d *DB) policyAuditUsageCandidates(from, to time.Time, source, model, project string, limit int) ([]ledgerpolicy.AuditCandidate, error) {
+	from, to = utcRange(from, to)
 	q := `SELECT source,model,project,COALESCE(git_branch,''),session_id,
 		COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens),0),
 		COALESCE(SUM(cost_usd),0),COALESCE(MAX(timestamp),'')
@@ -83,6 +85,7 @@ func (d *DB) policyAuditUsageCandidates(from, to time.Time, source, model, proje
 }
 
 func (d *DB) policyAuditToolCandidates(from, to time.Time, source, project string, limit int) ([]ledgerpolicy.AuditCandidate, error) {
+	from, to = utcRange(from, to)
 	q := `SELECT tc.tool_call_id,tc.workload_id,tc.run_id,tc.source,COALESCE(w.project,''),COALESCE(w.repo,''),COALESCE(w.git_branch,''),COALESCE(w.team,''),tc.timestamp,tc.tool_name,tc.status
 		FROM tool_calls tc LEFT JOIN workloads w ON tc.workload_id=w.workload_id
 		WHERE tc.timestamp >= ? AND tc.timestamp < ?`
@@ -119,6 +122,7 @@ func (d *DB) policyAuditToolCandidates(from, to time.Time, source, project strin
 }
 
 func (d *DB) policyAuditWorkloadCandidates(from, to time.Time, source, project string, limit int) ([]ledgerpolicy.AuditCandidate, error) {
+	from, to = utcRange(from, to)
 	q := `SELECT workload_id,source,project,repo,git_branch,team,created_at,status FROM workloads WHERE created_at >= ? AND created_at < ?`
 	args := []interface{}{from, to}
 	if source != "" {
