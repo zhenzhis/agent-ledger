@@ -29,6 +29,7 @@ Agent Ledger 是 ZhenZhi 基于 [briqt/agent-usage](https://github.com/briqt/age
 git clone https://github.com/zhenzhis/agent-ledger.git
 cd agent-ledger
 go build -o agent-ledger .
+cp config.example.yaml config.yaml
 ./agent-ledger
 ```
 
@@ -108,7 +109,7 @@ CLI：
 2. `/etc/agent-ledger/config.yaml`
 3. `./config.yaml`
 
-核心配置：
+建议从 [config.example.yaml](config.example.yaml) 开始。该模板默认本地优先、不包含密钥、默认关闭外发 webhook 与 provider gateway，并覆盖所有企业控制面配置段。核心配置：
 
 ```yaml
 server:

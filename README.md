@@ -29,6 +29,7 @@ The project has been renamed from `agent-usage` to `agent-ledger`. Old local dat
 git clone https://github.com/zhenzhis/agent-ledger.git
 cd agent-ledger
 go build -o agent-ledger .
+cp config.example.yaml config.yaml
 ./agent-ledger
 ```
 
@@ -108,7 +109,7 @@ Config search order:
 2. `/etc/agent-ledger/config.yaml`
 3. `./config.yaml`
 
-Minimal example:
+Start from [config.example.yaml](config.example.yaml). It is local-first, contains no secrets, keeps outbound webhooks and the provider gateway disabled by default, and documents every enterprise control-plane section. Minimal example:
 
 ```yaml
 server:

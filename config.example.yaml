@@ -1,0 +1,155 @@
+# Agent Ledger example configuration.
+# Copy to config.yaml or /etc/agent-ledger/config.yaml and edit local paths.
+# Do not put API keys, webhook secrets, or provider credentials in this file.
+
+server:
+  port: 9800
+  bind_address: "127.0.0.1"
+  auth_token: ""
+  admin_token: ""
+  viewer_token: ""
+
+storage:
+  path: "./agent-ledger.db"
+
+collectors:
+  claude:
+    enabled: true
+    paths:
+      - "~/.claude/projects"
+    scan_interval: 60s
+  codex:
+    enabled: true
+    paths:
+      - "~/.codex/sessions"
+    scan_interval: 60s
+  opencode:
+    enabled: true
+    paths:
+      - "~/.local/share/opencode/opencode.db"
+    scan_interval: 60s
+  openclaw:
+    enabled: false
+    paths:
+      - "~/.openclaw/agents"
+    scan_interval: 60s
+  kiro:
+    enabled: false
+    paths:
+      - "~/.local/share/kiro-cli/data.sqlite3"
+      - "~/.kiro/sessions/cli"
+    scan_interval: 60s
+  pi:
+    enabled: false
+    paths:
+      - "~/.pi/agent/sessions"
+    scan_interval: 60s
+
+pricing:
+  sync_interval: 1h
+  stale_after: 24h
+  mode: official-plus-litellm
+  overrides:
+    # Enterprise contract or relay pricing example. Values are USD per token.
+    # - model: "gpt-5.5"
+    #   input_cost_per_token: 0.00000125
+    #   output_cost_per_token: 0.00001000
+    #   cache_read_input_token_cost: 0.000000125
+    #   cache_creation_input_token_cost: 0.00000125
+    #   source: "local-contract"
+    #   effective_at: "2026-01-01T00:00:00Z"
+
+privacy:
+  default_preset: normal
+  redact_paths: false
+  hash_session_ids: false
+  hide_project_names: false
+  screenshot_mode: false
+
+projects:
+  aliases:
+    # "C:/Users/alice/work/alpha-research": "alpha-research"
+  exclude:
+    # - "C:/Users/alice/tmp"
+
+budgets:
+  enabled: false
+  rules:
+    # - name: daily-global-cost
+    #   period: day
+    #   scope: global
+    #   match: ""
+    #   metric: cost_usd
+    #   limit: 20
+    #   warn_ratio: 0.8
+
+quota:
+  enabled: false
+  plan: custom
+  monthly_budget: 0
+  token_budget: 0
+  prompt_budget: 0
+  reset_day: 1
+  window_5h: true
+  custom_windows:
+    # - name: research-sprint
+    #   duration: 168h
+    #   cost_limit: 250
+    #   token_limit: 0
+    #   prompt_limit: 0
+
+watchdog:
+  enabled: true
+  token_spike_multiplier: 4
+  min_calls: 8
+  night_start_hour: 22
+  night_end_hour: 6
+
+rbac:
+  enabled: false
+  read_only: false
+
+policies:
+  enabled: false
+  require_privacy_export: false
+  rules:
+    # - name: expensive-model-review
+    #   scope: model
+    #   match: gpt-5.5
+    #   action: require_approval
+    #   message: Review expensive model usage
+    #   required_approvals: 2
+    #   approvers: ["desk-lead", "risk"]
+    #   escalate_after: 30m
+    #   escalate_to: ["research-head"]
+
+teams:
+  machine_name: ""
+  git_author: ""
+  groups:
+    # "project:alpha-research": "research"
+    # "path:C:/Users/alice/work/trading": "trading"
+    # "author:alice@example.com": "research"
+
+integrations:
+  otlp_receiver:
+    enabled: false
+    max_body_bytes: 4194304
+    max_spans: 1000
+
+gateway:
+  enabled: false
+  upstream_base_url: "https://api.openai.com"
+  api_key_env: "OPENAI_API_KEY"
+  anthropic_upstream_base_url: "https://api.anthropic.com"
+  anthropic_api_key_env: "ANTHROPIC_API_KEY"
+  include_stream_usage: true
+  max_body_bytes: 4194304
+  max_response_bytes: 33554432
+  timeout: 120s
+
+webhooks:
+  enabled: false
+  url: ""
+  timeout: 10s
+  max_events: 20
