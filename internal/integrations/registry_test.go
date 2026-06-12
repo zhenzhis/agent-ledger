@@ -227,9 +227,15 @@ func TestOpenAPISpecIndexesStableControlPlane(t *testing.T) {
 		t.Fatalf("unexpected OpenAPI metadata: %#v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/admission/check", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workload-events"} {
+	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/admission/check", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workloads", "/api/agent-runs", "/api/workload-events"} {
 		if paths[path] == nil {
 			t.Fatalf("OpenAPI missing path %s: %#v", path, paths)
+		}
+	}
+	rawSpec, _ := json.Marshal(spec)
+	for _, needle := range []string{"Idempotency-Key", "WorkloadCreateRequest", "AgentRunStartRequest", `"409"`} {
+		if !strings.Contains(string(rawSpec), needle) {
+			t.Fatalf("OpenAPI missing %q: %s", needle, string(rawSpec))
 		}
 	}
 	raw := hashJSONPayload(spec)

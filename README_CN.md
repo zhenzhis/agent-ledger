@@ -110,6 +110,7 @@ Workload 与 run 写操作支持稳定幂等键，面向异步 agent router、wr
 - JSON：同一批 endpoint 也可在 body 中传入 `idempotency_key`。
 - CLI：`agent-ledger workload create` 与 `agent-ledger workload start-run` 支持 `--idempotency-key`。
 - MCP：`ledger.start_workload` 与 `ledger.start_run` 支持 `idempotency_key`。
+- OpenAPI：`GET /api/openapi.json` 会描述 workload/run 请求 schema、幂等 headers 与 `409 Conflict` 响应。
 
 第一次请求会写入 workload/run，并且只在 SQLite 中记录 operation、key scope、request hash、result type、result id 与时间戳。同一 key 与同一归一化请求重试时返回原 ID，并带 `idempotent_replay: true`。同一 key 复用到不同输入会明确失败，HTTP 返回 `409 Conflict`，CLI/MCP 返回错误。Agent Ledger 不会在幂等表中保存原始请求体。
 

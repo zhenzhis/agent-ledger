@@ -110,6 +110,7 @@ Workload and run write operations support stable idempotency keys for async agen
 - JSON: pass `idempotency_key` in the request body for the same endpoints.
 - CLI: pass `--idempotency-key` to `agent-ledger workload create` or `agent-ledger workload start-run`.
 - MCP: pass `idempotency_key` to `ledger.start_workload` or `ledger.start_run`.
+- OpenAPI: `GET /api/openapi.json` describes the workload/run request schemas, idempotency headers, and `409 Conflict` response.
 
 The first request writes the workload/run and records only the operation, key scope, request hash, result type, result id, and timestamps in SQLite. A retry with the same key and same normalized request returns the original id with `idempotent_replay: true`. Reusing the same key with different input fails explicitly with HTTP `409 Conflict` or a CLI/MCP error. Agent Ledger never stores the raw idempotency request body in the idempotency table.
 

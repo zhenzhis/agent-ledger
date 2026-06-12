@@ -144,7 +144,7 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 		t.Fatalf("unexpected openapi output: %+v", spec)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	if paths["/api/openapi.json"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/config/status"] == nil || paths["/api/readiness"] == nil || paths["/api/admission/check"] == nil || paths["/api/events/validate"] == nil {
+	if paths["/api/openapi.json"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/config/status"] == nil || paths["/api/readiness"] == nil || paths["/api/admission/check"] == nil || paths["/api/events/validate"] == nil || paths["/api/workloads"] == nil || paths["/api/agent-runs"] == nil {
 		t.Fatalf("openapi output missing expected paths: %+v", paths)
 	}
 }

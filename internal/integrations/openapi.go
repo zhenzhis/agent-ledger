@@ -26,6 +26,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			{"name": "contracts", "description": "Discovery, contract bundle, OpenAPI, runtime, and capability metadata"},
 			{"name": "canonical-events", "description": "Metadata-only canonical event schema, validation, and ingest"},
 			{"name": "adapter-conformance", "description": "Adapter contract and dry-run fixture validation"},
+			{"name": "workload-control", "description": "Retry-safe workload and agent-run control-plane writes"},
 			{"name": "workload-feed", "description": "Cursor-stable workload state feed for local monitors and routers"},
 		},
 		"x-agent-ledger": map[string]interface{}{
@@ -59,6 +60,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/events":                    canonicalEventPostOperation("canonical-events", "Ingest canonical events", "Ingest one or more metadata-only canonical events.", true),
 			"/api/integrations/adapter-spec": getOperation("adapter-conformance", "Get adapter contract", "Machine-readable adapter contract for privacy-safe integrations.", "AdapterContract"),
 			"/api/integrations/conformance":  adapterConformanceOperation(),
+			"/api/workloads":                 workloadsOperation(),
+			"/api/agent-runs":                agentRunsOperation(),
 			"/api/workload-events":           workloadEventsOperation(false),
 			"/api/workload-events/stream":    workloadEventsOperation(true),
 		},
@@ -186,7 +189,58 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				},
 				"ValidationResponse": looseObjectSchema("Validation result for one or more canonical events."),
 				"IngestResponse":     looseObjectSchema("Ingest result for one or more canonical events."),
-				"WorkloadEventFeed":  looseObjectSchema("Cursor-stable workload state feed."),
+				"WorkloadCreateRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"goal"},
+					"properties": map[string]interface{}{
+						"goal":            stringSchema(),
+						"source":          stringSchema(),
+						"project":         stringSchema(),
+						"repo":            stringSchema(),
+						"git_branch":      stringSchema(),
+						"owner":           stringSchema(),
+						"team":            stringSchema(),
+						"budget_usd":      numberSchema(),
+						"idempotency_key": stringSchema(),
+					},
+				},
+				"WorkloadCreateResponse": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"ok", "workload_id", "idempotent_replay"},
+					"properties": map[string]interface{}{
+						"ok":                boolSchema(),
+						"workload_id":       stringSchema(),
+						"idempotent_replay": boolSchema(),
+					},
+				},
+				"AgentRunStartRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"workload_id"},
+					"properties": map[string]interface{}{
+						"workload_id":     stringSchema(),
+						"source":          stringSchema(),
+						"agent_name":      stringSchema(),
+						"command":         stringSchema(),
+						"cwd":             stringSchema(),
+						"idempotency_key": stringSchema(),
+					},
+				},
+				"AgentRunStartResponse": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"ok", "workload_id", "run_id", "status", "idempotent_replay"},
+					"properties": map[string]interface{}{
+						"ok":                boolSchema(),
+						"workload_id":       stringSchema(),
+						"run_id":            stringSchema(),
+						"status":            stringSchema(),
+						"idempotent_replay": boolSchema(),
+					},
+				},
+				"WorkloadEventFeed": looseObjectSchema("Cursor-stable workload state feed."),
 				"Error": map[string]interface{}{
 					"type":       "object",
 					"properties": map[string]interface{}{"error": stringSchema()},
@@ -282,6 +336,68 @@ func adapterConformanceOperation() map[string]interface{} {
 	}
 }
 
+func workloadsOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{"workload-control"},
+			"summary":     "List workloads",
+			"description": "Server-side paginated workload ledger for local dashboards, wrappers, and routers.",
+			"parameters": []map[string]interface{}{
+				queryParam("from", "YYYY-MM-DD lower bound."),
+				queryParam("to", "YYYY-MM-DD upper bound."),
+				queryParam("source", "Optional source filter."),
+				queryParam("model", "Optional model filter."),
+				queryParam("project", "Optional project filter."),
+				queryParam("status", "Optional workload status filter."),
+				queryParam("q", "Optional text filter."),
+				intQueryParam("limit", "Maximum rows."),
+				intQueryParam("offset", "Offset for pagination."),
+				queryParam("cursor", "Cursor alias for offset."),
+			},
+			"responses": map[string]interface{}{
+				"200": jsonResponse(looseObjectSchema("Paginated workload rows.")),
+				"400": jsonResponse("Error"),
+			},
+		},
+		"post": idempotentWriteOperation("workload-control", "Create workload", "Create one local workload. Retries with the same normalized request and idempotency key return the original workload id.", "WorkloadCreateRequest", "WorkloadCreateResponse"),
+	}
+}
+
+func agentRunsOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": idempotentWriteOperation("workload-control", "Start agent run", "Start a run attached to an existing workload. Retries with the same normalized request and idempotency key return the original run id.", "AgentRunStartRequest", "AgentRunStartResponse"),
+	}
+}
+
+func idempotentWriteOperation(tag, summary, description, requestSchema, responseSchema string) map[string]interface{} {
+	return map[string]interface{}{
+		"tags":        []string{tag},
+		"summary":     summary,
+		"description": description,
+		"x-agent-ledger": map[string]interface{}{
+			"writes_local_state": true,
+			"read_only_safe":     false,
+			"idempotency":        "Idempotency-Key header, X-Idempotency-Key header, or idempotency_key JSON field. Same key with different input fails with 409.",
+			"prompt_content":     false,
+		},
+		"parameters": []map[string]interface{}{
+			headerParam("Idempotency-Key", "Stable retry key for this write operation."),
+			headerParam("X-Idempotency-Key", "Alternative stable retry key."),
+		},
+		"requestBody": map[string]interface{}{
+			"required": true,
+			"content": map[string]interface{}{
+				"application/json": map[string]interface{}{"schema": refSchema(requestSchema)},
+			},
+		},
+		"responses": map[string]interface{}{
+			"200": jsonResponse(responseSchema),
+			"400": jsonResponse("Error"),
+			"409": jsonResponse("Error"),
+		},
+	}
+}
+
 func workloadEventsOperation(stream bool) map[string]interface{} {
 	method := map[string]interface{}{
 		"tags":        []string{"workload-feed"},
@@ -337,6 +453,16 @@ func queryParam(name, description string) map[string]interface{} {
 	return map[string]interface{}{
 		"name":        name,
 		"in":          "query",
+		"description": description,
+		"required":    false,
+		"schema":      stringSchema(),
+	}
+}
+
+func headerParam(name, description string) map[string]interface{} {
+	return map[string]interface{}{
+		"name":        name,
+		"in":          "header",
 		"description": description,
 		"required":    false,
 		"schema":      stringSchema(),
