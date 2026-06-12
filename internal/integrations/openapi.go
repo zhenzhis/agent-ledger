@@ -61,6 +61,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/adapter-spec": getOperation("adapter-conformance", "Get adapter contract", "Machine-readable adapter contract for privacy-safe integrations.", "AdapterContract"),
 			"/api/integrations/conformance":  adapterConformanceOperation(),
 			"/api/workloads":                 workloadsOperation(),
+			"/api/workloads/claim-next":      workloadClaimNextOperation(),
 			"/api/workloads/lease":           workloadLeaseAcquireOperation(),
 			"/api/workloads/lease/renew":     workloadLeaseRenewOperation(),
 			"/api/workloads/lease/release":   workloadLeaseReleaseOperation(),
@@ -231,6 +232,24 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"ttl_seconds": map[string]interface{}{"type": "integer", "minimum": 1},
 					},
 				},
+				"WorkloadClaimNextRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"holder"},
+					"properties": map[string]interface{}{
+						"holder":      stringSchema(),
+						"purpose":     stringSchema(),
+						"ttl":         stringSchema(),
+						"ttl_seconds": map[string]interface{}{"type": "integer", "minimum": 1},
+						"source":      stringSchema(),
+						"project":     stringSchema(),
+						"repo":        stringSchema(),
+						"team":        stringSchema(),
+						"owner":       stringSchema(),
+						"status":      stringSchema(),
+						"q":           stringSchema(),
+					},
+				},
 				"WorkloadLeaseRenewRequest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": false,
@@ -276,6 +295,18 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 					"properties": map[string]interface{}{
 						"ok":    boolSchema(),
 						"lease": refSchema("WorkloadLease"),
+					},
+				},
+				"WorkloadClaimNextResponse": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"ok", "empty"},
+					"properties": map[string]interface{}{
+						"ok":          boolSchema(),
+						"empty":       boolSchema(),
+						"workload_id": stringSchema(),
+						"workload":    looseObjectSchema("Claimed workload summary."),
+						"lease":       refSchema("WorkloadLease"),
 					},
 				},
 				"WorkloadLeaseListResponse": map[string]interface{}{
@@ -442,6 +473,17 @@ func workloadLeaseAcquireOperation() map[string]interface{} {
 			"Acquire a short-lived local execution lease before an async router, wrapper, or agent starts work on a workload. The lease token is returned once and is never stored in plaintext.",
 			"WorkloadLeaseAcquireRequest",
 			"WorkloadLeaseResponse",
+		),
+	}
+}
+
+func workloadClaimNextOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": workloadLeaseWriteOperation(
+			"Claim next workload",
+			"Atomically select the next queue-eligible local workload and create a short-lived execution lease in the same SQLite transaction. Empty queues return ok=true and empty=true without a lease.",
+			"WorkloadClaimNextRequest",
+			"WorkloadClaimNextResponse",
 		),
 	}
 }

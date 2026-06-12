@@ -101,6 +101,17 @@ func TestAdmissionClassifiesWorkloadLeases(t *testing.T) {
 	if httpDecision.Allowed || httpDecision.WriteMode != "always" || httpDecision.RequiredRole != "operator" {
 		t.Fatalf("expected HTTP lease acquire to be rejected in read-only mode: %+v", httpDecision)
 	}
+	claimHTTPDecision := EvaluateAdmission(AdmissionInput{
+		Surface:     "http",
+		Method:      "POST",
+		Path:        "/api/workloads/claim-next",
+		Role:        "operator",
+		RBACEnabled: true,
+		ReadOnly:    true,
+	}, fixedAdmissionTime())
+	if claimHTTPDecision.Allowed || claimHTTPDecision.WriteMode != "always" || claimHTTPDecision.RequiredRole != "operator" {
+		t.Fatalf("expected HTTP claim-next to be rejected in read-only mode: %+v", claimHTTPDecision)
+	}
 	mcpDecision := EvaluateAdmission(AdmissionInput{
 		Surface:     "mcp",
 		Tool:        "ledger.acquire_workload_lease",
@@ -109,6 +120,15 @@ func TestAdmissionClassifiesWorkloadLeases(t *testing.T) {
 	}, fixedAdmissionTime())
 	if !mcpDecision.Allowed || !mcpDecision.WritesLocalState || mcpDecision.AvailableInReadOnly {
 		t.Fatalf("expected MCP lease acquire to be a write tool: %+v", mcpDecision)
+	}
+	claimMCPDecision := EvaluateAdmission(AdmissionInput{
+		Surface:     "mcp",
+		Tool:        "ledger.claim_next_workload",
+		Role:        "operator",
+		RBACEnabled: true,
+	}, fixedAdmissionTime())
+	if !claimMCPDecision.Allowed || !claimMCPDecision.WritesLocalState || claimMCPDecision.AvailableInReadOnly {
+		t.Fatalf("expected MCP claim-next to be a write tool: %+v", claimMCPDecision)
 	}
 	listDecision := EvaluateAdmission(AdmissionInput{
 		Surface:     "cli",
@@ -129,6 +149,16 @@ func TestAdmissionClassifiesWorkloadLeases(t *testing.T) {
 	}, fixedAdmissionTime())
 	if renewDecision.Allowed || renewDecision.AvailableInReadOnly {
 		t.Fatalf("expected CLI lease renew to be rejected in read-only mode: %+v", renewDecision)
+	}
+	claimCLI := EvaluateAdmission(AdmissionInput{
+		Surface:     "cli",
+		Command:     "agent-ledger workload claim-next --holder router-a",
+		Role:        "operator",
+		RBACEnabled: true,
+		ReadOnly:    true,
+	}, fixedAdmissionTime())
+	if claimCLI.Allowed || claimCLI.AvailableInReadOnly {
+		t.Fatalf("expected CLI claim-next to be rejected in read-only mode: %+v", claimCLI)
 	}
 }
 

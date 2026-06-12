@@ -42,6 +42,26 @@ type WorkloadLeaseStats struct {
 	NextExpiryAt string `json:"next_expiry_at"`
 }
 
+// WorkloadClaimFilter scopes queue-style workload claims for async routers.
+type WorkloadClaimFilter struct {
+	Source  string `json:"source,omitempty"`
+	Project string `json:"project,omitempty"`
+	Repo    string `json:"repo,omitempty"`
+	Team    string `json:"team,omitempty"`
+	Owner   string `json:"owner,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Query   string `json:"q,omitempty"`
+}
+
+// WorkloadClaimResult is returned by queue-style claim operations.
+type WorkloadClaimResult struct {
+	OK         bool             `json:"ok"`
+	Empty      bool             `json:"empty"`
+	WorkloadID string           `json:"workload_id,omitempty"`
+	Workload   *WorkloadSummary `json:"workload,omitempty"`
+	Lease      *WorkloadLease   `json:"lease,omitempty"`
+}
+
 // WorkloadLeaseConflictError reports that a workload has a non-expired active lease.
 type WorkloadLeaseConflictError struct {
 	WorkloadID string
@@ -102,20 +122,8 @@ func (d *DB) AcquireWorkloadLease(workloadID, holder, purpose string, ttl time.D
 	if err == nil {
 		return nil, &WorkloadLeaseConflictError{WorkloadID: workloadID, ExpiresAt: existing.ExpiresAt}
 	}
-	token := generatedID("lt")
-	lease := &WorkloadLease{
-		LeaseID:    generatedID("lease"),
-		WorkloadID: workloadID,
-		Holder:     holder,
-		Purpose:    purpose,
-		Status:     "active",
-		AcquiredAt: now.Format(time.RFC3339Nano),
-		ExpiresAt:  now.Add(ttl).Format(time.RFC3339Nano),
-		TTLSeconds: int64(ttl.Seconds()),
-		LeaseToken: token,
-	}
-	if _, err := tx.Exec(`INSERT INTO workload_leases(lease_id,workload_id,holder,purpose,status,token_hash,acquired_at,expires_at,confidence)
-		VALUES(?,?,?,?,?,?,?,?,?)`, lease.LeaseID, workloadID, holder, purpose, "active", workloadLeaseTokenHash(token), now, now.Add(ttl), 1.0); err != nil {
+	lease, err := insertWorkloadLeaseTx(tx, workloadID, holder, purpose, ttl, now)
+	if err != nil {
 		return nil, err
 	}
 	_, _ = tx.Exec(`UPDATE workloads SET updated_at=? WHERE workload_id=?`, now, workloadID)
@@ -123,6 +131,119 @@ func (d *DB) AcquireWorkloadLease(workloadID, holder, purpose string, ttl time.D
 		return nil, err
 	}
 	return lease, nil
+}
+
+// ClaimNextWorkload atomically selects the next claimable workload and creates
+// a short-lived execution lease. It is intended for local async routers and
+// workers that need queue semantics without a list-then-acquire race.
+func (d *DB) ClaimNextWorkload(holder, purpose string, ttl time.Duration, filter WorkloadClaimFilter) (*WorkloadClaimResult, error) {
+	holder = strings.TrimSpace(holder)
+	purpose = strings.TrimSpace(purpose)
+	if holder == "" {
+		return nil, fmt.Errorf("holder is required")
+	}
+	if err := validateShortMetadata("holder", holder, 200); err != nil {
+		return nil, err
+	}
+	if err := validateShortMetadata("purpose", purpose, 256); err != nil {
+		return nil, err
+	}
+	if err := validateWorkloadClaimFilter(filter); err != nil {
+		return nil, err
+	}
+	statuses, err := workloadClaimStatuses(filter.Status)
+	if err != nil {
+		return nil, err
+	}
+	ttl = normalizeWorkloadLeaseTTL(ttl)
+	now := time.Now().UTC()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	tx, err := d.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := expireWorkloadLeasesTx(tx, now); err != nil {
+		return nil, err
+	}
+	where := []string{`w.status IN (` + placeholders(len(statuses)) + `)`, `NOT EXISTS (
+			SELECT 1 FROM workload_leases wl
+			WHERE wl.workload_id=w.workload_id AND wl.status='active' AND wl.expires_at > ?
+		)`}
+	args := make([]interface{}, 0, len(statuses)+8)
+	for _, status := range statuses {
+		args = append(args, status)
+	}
+	args = append(args, now)
+	filter.Source = strings.TrimSpace(filter.Source)
+	filter.Project = strings.TrimSpace(filter.Project)
+	filter.Repo = strings.TrimSpace(filter.Repo)
+	filter.Team = strings.TrimSpace(filter.Team)
+	filter.Owner = strings.TrimSpace(filter.Owner)
+	filter.Query = strings.TrimSpace(filter.Query)
+	if filter.Source != "" {
+		where = append(where, "w.source=?")
+		args = append(args, filter.Source)
+	}
+	if filter.Project != "" {
+		where = append(where, "w.project=?")
+		args = append(args, filter.Project)
+	}
+	if filter.Repo != "" {
+		where = append(where, "w.repo=?")
+		args = append(args, filter.Repo)
+	}
+	if filter.Team != "" {
+		where = append(where, "w.team=?")
+		args = append(args, filter.Team)
+	}
+	if filter.Owner != "" {
+		where = append(where, "w.owner=?")
+		args = append(args, filter.Owner)
+	}
+	if filter.Query != "" {
+		like := "%" + strings.ToLower(filter.Query) + "%"
+		where = append(where, `(LOWER(w.goal) LIKE ? OR LOWER(w.project) LIKE ? OR LOWER(w.repo) LIKE ? OR LOWER(w.team) LIKE ? OR LOWER(w.owner) LIKE ?)`)
+		args = append(args, like, like, like, like, like)
+	}
+	var workloadID string
+	err = tx.QueryRow(`SELECT w.workload_id
+		FROM workloads w
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY CASE w.status
+			WHEN 'queued' THEN 0
+			WHEN 'active' THEN 1
+			WHEN 'stalled' THEN 2
+			WHEN 'blocked' THEN 3
+			WHEN 'waiting_approval' THEN 4
+			WHEN 'evaluating' THEN 5
+			WHEN 'running' THEN 6
+			ELSE 9
+		END, w.created_at ASC, w.updated_at ASC, w.workload_id ASC
+		LIMIT 1`, args...).Scan(&workloadID)
+	if err == sql.ErrNoRows {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return &WorkloadClaimResult{OK: true, Empty: true}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	lease, err := insertWorkloadLeaseTx(tx, workloadID, holder, purpose, ttl, now)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = tx.Exec(`UPDATE workloads SET updated_at=? WHERE workload_id=?`, now, workloadID)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	summary, err := d.getWorkloadSummaryByID(workloadID)
+	if err != nil {
+		return nil, err
+	}
+	return &WorkloadClaimResult{OK: true, Empty: false, WorkloadID: workloadID, Workload: summary, Lease: lease}, nil
 }
 
 // RenewWorkloadLease extends an active lease after validating its token.
@@ -261,6 +382,26 @@ func (d *DB) GetWorkloadLeaseStats() (*WorkloadLeaseStats, error) {
 	return stats, nil
 }
 
+func insertWorkloadLeaseTx(tx *sql.Tx, workloadID, holder, purpose string, ttl time.Duration, now time.Time) (*WorkloadLease, error) {
+	token := generatedID("lt")
+	lease := &WorkloadLease{
+		LeaseID:    generatedID("lease"),
+		WorkloadID: workloadID,
+		Holder:     holder,
+		Purpose:    purpose,
+		Status:     "active",
+		AcquiredAt: now.Format(time.RFC3339Nano),
+		ExpiresAt:  now.Add(ttl).Format(time.RFC3339Nano),
+		TTLSeconds: int64(ttl.Seconds()),
+		LeaseToken: token,
+	}
+	if _, err := tx.Exec(`INSERT INTO workload_leases(lease_id,workload_id,holder,purpose,status,token_hash,acquired_at,expires_at,confidence)
+		VALUES(?,?,?,?,?,?,?,?,?)`, lease.LeaseID, workloadID, holder, purpose, "active", workloadLeaseTokenHash(token), now, now.Add(ttl), 1.0); err != nil {
+		return nil, err
+	}
+	return lease, nil
+}
+
 func normalizeWorkloadLeaseTTL(ttl time.Duration) time.Duration {
 	if ttl <= 0 {
 		return defaultWorkloadLeaseTTL
@@ -269,6 +410,70 @@ func normalizeWorkloadLeaseTTL(ttl time.Duration) time.Duration {
 		return maxWorkloadLeaseTTL
 	}
 	return ttl
+}
+
+func workloadClaimStatuses(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{"queued", "active"}, nil
+	}
+	if raw == "*" || strings.EqualFold(raw, "any") || strings.EqualFold(raw, "nonterminal") {
+		return []string{"queued", "active", "stalled", "blocked", "waiting_approval", "evaluating", "running"}, nil
+	}
+	seen := map[string]bool{}
+	var statuses []string
+	for _, part := range strings.Split(raw, ",") {
+		status := strings.TrimSpace(part)
+		if status == "" {
+			continue
+		}
+		if !validWorkloadStatus(status) {
+			return nil, fmt.Errorf("unsupported workload status %q", status)
+		}
+		if terminalWorkloadStatus(status) {
+			return nil, fmt.Errorf("terminal workload status %q is not claimable", status)
+		}
+		if !seen[status] {
+			seen[status] = true
+			statuses = append(statuses, status)
+		}
+	}
+	if len(statuses) == 0 {
+		return nil, fmt.Errorf("at least one claimable status is required")
+	}
+	return statuses, nil
+}
+
+func validateWorkloadClaimFilter(filter WorkloadClaimFilter) error {
+	fields := []struct {
+		name  string
+		value string
+		limit int
+	}{
+		{"source", filter.Source, 128},
+		{"project", filter.Project, 512},
+		{"repo", filter.Repo, 512},
+		{"team", filter.Team, 256},
+		{"owner", filter.Owner, 256},
+		{"q", filter.Query, 512},
+	}
+	for _, field := range fields {
+		if err := validateShortMetadata(field.name, field.value, field.limit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = "?"
+	}
+	return strings.Join(parts, ",")
 }
 
 func workloadLeaseTokenHash(token string) string {

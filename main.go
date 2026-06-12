@@ -1739,6 +1739,8 @@ func runWorkloadCLI(args []string, db *storage.DB) error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"rows": rows, "max_age": maxAge.String(), "stale_only": staleOnly})
+	case "claim-next", "claim":
+		return runWorkloadClaimNextCLI(args[1:], db)
 	case "lease", "leases":
 		return runWorkloadLeaseCLI(args[1:], db)
 	case "context", "record-context":
@@ -1751,6 +1753,26 @@ func runWorkloadCLI(args []string, db *storage.DB) error {
 		return fmt.Errorf("unknown workload command %q", args[0])
 	}
 	return nil
+}
+
+func runWorkloadClaimNextCLI(args []string, db *storage.DB) error {
+	ttl, err := cliLeaseTTL(args)
+	if err != nil {
+		return err
+	}
+	result, err := db.ClaimNextWorkload(cliValue(args, "--holder"), cliValue(args, "--purpose"), ttl, storage.WorkloadClaimFilter{
+		Source:  cliValue(args, "--source"),
+		Project: cliValue(args, "--project"),
+		Repo:    cliValue(args, "--repo"),
+		Team:    cliValue(args, "--team"),
+		Owner:   cliValue(args, "--owner"),
+		Status:  cliValue(args, "--status"),
+		Query:   firstNonEmptyCLI(cliValue(args, "--q"), cliValue(args, "--query")),
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(result)
 }
 
 func runWorkloadContextCLI(args []string, db *storage.DB) error {
@@ -1809,6 +1831,8 @@ func runWorkloadLeaseCLI(args []string, db *storage.DB) error {
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"rows": rows})
 	}
 	switch args[0] {
+	case "claim-next":
+		return runWorkloadClaimNextCLI(args[1:], db)
 	case "acquire", "claim":
 		workloadID := firstNonEmptyCLI(cliValue(args[1:], "--workload-id"), cliValue(args[1:], "--id"))
 		ttl, err := cliLeaseTTL(args[1:])
@@ -1837,7 +1861,7 @@ func runWorkloadLeaseCLI(args []string, db *storage.DB) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"ok": true, "lease": lease})
 	default:
-		return fmt.Errorf("usage: agent-ledger workload lease [list|acquire|renew|release] [--workload-id id] [--holder name] [--purpose text] [--ttl 30m] [--lease-id id] [--lease-token token]")
+		return fmt.Errorf("usage: agent-ledger workload lease [list|claim-next|acquire|renew|release] [--workload-id id] [--holder name] [--purpose text] [--ttl 30m] [--lease-id id] [--lease-token token]")
 	}
 }
 

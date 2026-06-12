@@ -48,6 +48,11 @@ func TestReadOnlyWorkloadLeaseAccess(t *testing.T) {
 	if writeRR.Code != http.StatusForbidden {
 		t.Fatalf("expected read-only lease acquire rejection, got %d body=%s", writeRR.Code, writeRR.Body.String())
 	}
+	claimRR := httptest.NewRecorder()
+	srv.handleWorkloadClaimNext(claimRR, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/claim-next", strings.NewReader(`{"holder":"router-c"}`)))
+	if claimRR.Code != http.StatusForbidden {
+		t.Fatalf("expected read-only claim-next rejection, got %d body=%s", claimRR.Code, claimRR.Body.String())
+	}
 	readRR := httptest.NewRecorder()
 	srv.handleWorkloadLeases(readRR, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/workloads/leases?include_inactive=1", nil))
 	if readRR.Code != http.StatusOK {

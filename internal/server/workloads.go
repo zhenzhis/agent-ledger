@@ -173,6 +173,74 @@ func (s *Server) handleWorkloadLink(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"ok": true, "link_id": linkID, "source_workload_id": payload.SourceWorkloadID, "target_workload_id": payload.TargetWorkloadID})
 }
 
+func (s *Server) handleWorkloadClaimNext(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
+		return
+	}
+	var payload struct {
+		Holder     string `json:"holder"`
+		Purpose    string `json:"purpose"`
+		TTL        string `json:"ttl"`
+		TTLSeconds int64  `json:"ttl_seconds"`
+		Source     string `json:"source"`
+		Project    string `json:"project"`
+		Repo       string `json:"repo"`
+		Team       string `json:"team"`
+		Owner      string `json:"owner"`
+		Status     string `json:"status"`
+		Query      string `json:"q"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		badRequest(w, err)
+		return
+	}
+	ttl, err := workloadLeaseTTL(payload.TTL, payload.TTLSeconds)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	result, err := s.db.ClaimNextWorkload(payload.Holder, payload.Purpose, ttl, storage.WorkloadClaimFilter{
+		Source:  firstNonEmpty(payload.Source, r.URL.Query().Get("source")),
+		Project: firstNonEmpty(payload.Project, r.URL.Query().Get("project")),
+		Repo:    firstNonEmpty(payload.Repo, r.URL.Query().Get("repo")),
+		Team:    firstNonEmpty(payload.Team, r.URL.Query().Get("team")),
+		Owner:   firstNonEmpty(payload.Owner, r.URL.Query().Get("owner")),
+		Status:  firstNonEmpty(payload.Status, r.URL.Query().Get("status")),
+		Query:   firstNonEmpty(payload.Query, r.URL.Query().Get("q")),
+	})
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	if result.Workload != nil {
+		applyWorkloadPrivacy(result.Workload, s.privacyFor(r))
+	}
+	target := firstNonEmpty(result.WorkloadID, "empty")
+	params := map[string]string{
+		"empty":           fmt.Sprint(result.Empty),
+		"holder_present":  fmt.Sprint(payload.Holder != ""),
+		"purpose_present": fmt.Sprint(payload.Purpose != ""),
+		"ttl_seconds":     "0",
+		"source_filter":   fmt.Sprint(firstNonEmpty(payload.Source, r.URL.Query().Get("source")) != ""),
+		"project_filter":  fmt.Sprint(firstNonEmpty(payload.Project, r.URL.Query().Get("project")) != ""),
+		"repo_filter":     fmt.Sprint(firstNonEmpty(payload.Repo, r.URL.Query().Get("repo")) != ""),
+		"team_filter":     fmt.Sprint(firstNonEmpty(payload.Team, r.URL.Query().Get("team")) != ""),
+		"owner_filter":    fmt.Sprint(firstNonEmpty(payload.Owner, r.URL.Query().Get("owner")) != ""),
+		"status_filter":   fmt.Sprint(firstNonEmpty(payload.Status, r.URL.Query().Get("status")) != ""),
+		"query_filter":    fmt.Sprint(firstNonEmpty(payload.Query, r.URL.Query().Get("q")) != ""),
+	}
+	if result.Lease != nil {
+		params["lease_id"] = result.Lease.LeaseID
+		params["ttl_seconds"] = fmt.Sprint(result.Lease.TTLSeconds)
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "workload.claim_next", target, params)
+	writeJSON(w, result)
+}
+
 func (s *Server) handleWorkloadLeaseAcquire(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

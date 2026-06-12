@@ -332,6 +332,19 @@ func tools() []map[string]interface{} {
 			"ttl":         stringSchema(),
 			"ttl_seconds": integerSchema(),
 		}),
+		tool("ledger.claim_next_workload", "Atomically claim the next queue-eligible workload and return a short-lived execution lease.", map[string]interface{}{
+			"holder":      requiredStringSchema(),
+			"purpose":     stringSchema(),
+			"ttl":         stringSchema(),
+			"ttl_seconds": integerSchema(),
+			"source":      stringSchema(),
+			"project":     stringSchema(),
+			"repo":        stringSchema(),
+			"team":        stringSchema(),
+			"owner":       stringSchema(),
+			"status":      stringSchema(),
+			"q":           stringSchema(),
+		}),
 		tool("ledger.renew_workload_lease", "Renew an active workload lease using its lease token.", map[string]interface{}{
 			"lease_id":    requiredStringSchema(),
 			"lease_token": requiredStringSchema(),
@@ -696,6 +709,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolLinkWorkloads(args)
 	case "ledger.acquire_workload_lease":
 		return s.toolAcquireWorkloadLease(args)
+	case "ledger.claim_next_workload":
+		return s.toolClaimNextWorkload(args)
 	case "ledger.renew_workload_lease":
 		return s.toolRenewWorkloadLease(args)
 	case "ledger.release_workload_lease":
@@ -1313,6 +1328,42 @@ func (s *Server) toolAcquireWorkloadLease(args json.RawMessage) (interface{}, er
 		return nil, err
 	}
 	return map[string]interface{}{"ok": true, "lease": lease}, nil
+}
+
+func (s *Server) toolClaimNextWorkload(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		Holder     string `json:"holder"`
+		Purpose    string `json:"purpose"`
+		TTL        string `json:"ttl"`
+		TTLSeconds int64  `json:"ttl_seconds"`
+		Source     string `json:"source"`
+		Project    string `json:"project"`
+		Repo       string `json:"repo"`
+		Team       string `json:"team"`
+		Owner      string `json:"owner"`
+		Status     string `json:"status"`
+		Query      string `json:"q"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	ttl, err := mcpLeaseTTL(in.TTL, in.TTLSeconds)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.db.ClaimNextWorkload(in.Holder, in.Purpose, ttl, storage.WorkloadClaimFilter{
+		Source:  in.Source,
+		Project: in.Project,
+		Repo:    in.Repo,
+		Team:    in.Team,
+		Owner:   in.Owner,
+		Status:  in.Status,
+		Query:   in.Query,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (s *Server) toolRenewWorkloadLease(args json.RawMessage) (interface{}, error) {

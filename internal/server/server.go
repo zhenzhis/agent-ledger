@@ -96,6 +96,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/workloads", s.handleWorkloads)
 	mux.HandleFunc("/api/workloads/close", s.handleWorkloadClose)
 	mux.HandleFunc("/api/workloads/link", s.handleWorkloadLink)
+	mux.HandleFunc("/api/workloads/claim-next", s.handleWorkloadClaimNext)
 	mux.HandleFunc("/api/workloads/lease", s.handleWorkloadLeaseAcquire)
 	mux.HandleFunc("/api/workloads/lease/renew", s.handleWorkloadLeaseRenew)
 	mux.HandleFunc("/api/workloads/lease/release", s.handleWorkloadLeaseRelease)

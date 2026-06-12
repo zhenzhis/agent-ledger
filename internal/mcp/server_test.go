@@ -38,7 +38,7 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 		t.Fatalf("responses=%d want 9", len(out))
 	}
 	tools := out[0]["result"].(map[string]interface{})["tools"].([]interface{})
-	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.link_workloads") || !hasTool(tools, "ledger.acquire_workload_lease") || !hasTool(tools, "ledger.renew_workload_lease") || !hasTool(tools, "ledger.release_workload_lease") || !hasTool(tools, "ledger.workload_leases") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.approval_routes") || !hasTool(tools, "ledger.approvals") || !hasTool(tools, "ledger.resolve_approval") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.workload_feed") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.validate_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.adapter_contract") || !hasTool(tools, "ledger.adapter_conformance") || !hasTool(tools, "ledger.integrations") || !hasTool(tools, "ledger.discovery") || !hasTool(tools, "ledger.contracts") || !hasTool(tools, "ledger.contracts_verify") || !hasTool(tools, "ledger.openapi") || !hasTool(tools, "ledger.runtime_status") || !hasTool(tools, "ledger.config_status") || !hasTool(tools, "ledger.readiness") || !hasTool(tools, "ledger.admission_check") {
+	if !hasTool(tools, "ledger.start_workload") || !hasTool(tools, "ledger.start_run") || !hasTool(tools, "ledger.link_workloads") || !hasTool(tools, "ledger.claim_next_workload") || !hasTool(tools, "ledger.acquire_workload_lease") || !hasTool(tools, "ledger.renew_workload_lease") || !hasTool(tools, "ledger.release_workload_lease") || !hasTool(tools, "ledger.workload_leases") || !hasTool(tools, "ledger.get_policy") || !hasTool(tools, "ledger.policy_audit") || !hasTool(tools, "ledger.approval_routes") || !hasTool(tools, "ledger.approvals") || !hasTool(tools, "ledger.resolve_approval") || !hasTool(tools, "ledger.audit_log") || !hasTool(tools, "ledger.workload_timeline") || !hasTool(tools, "ledger.workload_state") || !hasTool(tools, "ledger.workload_feed") || !hasTool(tools, "ledger.record_tool_call") || !hasTool(tools, "ledger.record_context") || !hasTool(tools, "ledger.record_evaluation") || !hasTool(tools, "ledger.record_event") || !hasTool(tools, "ledger.validate_event") || !hasTool(tools, "ledger.event_schema") || !hasTool(tools, "ledger.event_examples") || !hasTool(tools, "ledger.adapter_contract") || !hasTool(tools, "ledger.adapter_conformance") || !hasTool(tools, "ledger.integrations") || !hasTool(tools, "ledger.discovery") || !hasTool(tools, "ledger.contracts") || !hasTool(tools, "ledger.contracts_verify") || !hasTool(tools, "ledger.openapi") || !hasTool(tools, "ledger.runtime_status") || !hasTool(tools, "ledger.config_status") || !hasTool(tools, "ledger.readiness") || !hasTool(tools, "ledger.admission_check") {
 		t.Fatalf("expected workload and policy tools, got %#v", tools)
 	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
@@ -52,6 +52,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	leaseMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.acquire_workload_lease"))
 	if leaseMeta["write_mode"] != "always" || leaseMeta["writes_local_state"] != true || leaseMeta["available_in_read_only"] != false {
 		t.Fatalf("lease acquire metadata wrong: %#v", leaseMeta)
+	}
+	claimMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.claim_next_workload"))
+	if claimMeta["write_mode"] != "always" || claimMeta["writes_local_state"] != true || claimMeta["available_in_read_only"] != false {
+		t.Fatalf("claim-next metadata wrong: %#v", claimMeta)
 	}
 	leaseListMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.workload_leases"))
 	if leaseListMeta["write_mode"] != "none" || leaseListMeta["writes_local_state"] != false || leaseListMeta["available_in_read_only"] != true {
@@ -518,6 +522,7 @@ func TestMCPReadOnlyAllowsReadToolsAndRejectsWriteTools(t *testing.T) {
 		`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"ledger.resolve_approval","arguments":{"request_id":"apr_x","status":"approved"}}}`,
 		`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"ledger.get_policy","arguments":{"workload_id":"`+workloadID+`","model":"gpt-5.5","action":"model.call"}}}`,
 		`{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"ledger.acquire_workload_lease","arguments":{"workload_id":"`+workloadID+`","holder":"router-a"}}}`,
+		`{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"ledger.claim_next_workload","arguments":{"holder":"router-a"}}}`,
 	)
 	if writeResponses[0]["error"] == nil {
 		t.Fatalf("expected read-only write tool error: %#v", writeResponses[0])
@@ -530,6 +535,9 @@ func TestMCPReadOnlyAllowsReadToolsAndRejectsWriteTools(t *testing.T) {
 	}
 	if writeResponses[3]["error"] == nil {
 		t.Fatalf("expected read-only lease acquire error: %#v", writeResponses[3])
+	}
+	if writeResponses[4]["error"] == nil {
+		t.Fatalf("expected read-only claim-next error: %#v", writeResponses[4])
 	}
 	report, err := db.GetPolicyEnforcementReport(10)
 	if err != nil {
@@ -909,6 +917,26 @@ func TestMCPWorkloadLeaseLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorkload: %v", err)
 	}
+	claimWorkloadID, err := db.CreateWorkload("mcp claim workload", "opencode", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload claim: %v", err)
+	}
+	claimLine, _ := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      0,
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name":      "ledger.claim_next_workload",
+			"arguments": map[string]interface{}{"holder": "router-claim", "purpose": "private claim note", "source": "opencode", "ttl_seconds": 120},
+		},
+	})
+	claimResponse := serveLines(t, srv, string(claimLine))[0]
+	claimed := toolTextPayload(t, claimResponse)
+	claimLease := claimed["lease"].(map[string]interface{})
+	claimToken, _ := claimLease["lease_token"].(string)
+	if claimed["workload_id"] != claimWorkloadID || claimToken == "" {
+		t.Fatalf("unexpected claim-next payload: %#v", claimed)
+	}
 
 	acquireLine, _ := json.Marshal(map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -930,11 +958,11 @@ func TestMCPWorkloadLeaseLifecycle(t *testing.T) {
 	}
 	listed := toolTextPayload(t, responses[1])
 	rawList, _ := json.Marshal(listed)
-	if strings.Contains(string(rawList), leaseToken) {
+	if strings.Contains(string(rawList), leaseToken) || strings.Contains(string(rawList), claimToken) {
 		t.Fatalf("lease list leaked token: %s", rawList)
 	}
 	rows := listed["rows"].([]interface{})
-	if len(rows) != 1 || rows[0].(map[string]interface{})["lease_id"] != leaseID {
+	if len(rows) != 2 {
 		t.Fatalf("unexpected lease rows: %#v", listed)
 	}
 

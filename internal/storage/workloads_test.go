@@ -240,6 +240,66 @@ func TestWorkloadLeaseLifecycle(t *testing.T) {
 	}
 }
 
+func TestClaimNextWorkloadLifecycle(t *testing.T) {
+	db := tempDB(t)
+	firstID, err := db.CreateWorkload("queued first", "codex", "repo-a", "repo-a", "main", "alice", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload first: %v", err)
+	}
+	secondID, err := db.CreateWorkload("queued second", "opencode", "repo-b", "repo-b", "main", "bob", "infra", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload second: %v", err)
+	}
+	closedID, err := db.CreateWorkload("closed claim candidate", "codex", "repo-a", "repo-a", "main", "", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload closed: %v", err)
+	}
+	if err := db.CloseWorkload(closedID, "completed", "done"); err != nil {
+		t.Fatalf("CloseWorkload: %v", err)
+	}
+	first, err := db.ClaimNextWorkload("router-a", "execute private task", time.Minute, WorkloadClaimFilter{Source: "codex"})
+	if err != nil {
+		t.Fatalf("ClaimNextWorkload first: %v", err)
+	}
+	if !first.OK || first.Empty || first.WorkloadID != firstID || first.Lease == nil || first.Lease.LeaseToken == "" || first.Workload == nil {
+		t.Fatalf("unexpected first claim: %+v", first)
+	}
+	var tokenHash string
+	if err := db.db.QueryRow(`SELECT token_hash FROM workload_leases WHERE lease_id=?`, first.Lease.LeaseID).Scan(&tokenHash); err != nil {
+		t.Fatalf("token_hash: %v", err)
+	}
+	if tokenHash == first.Lease.LeaseToken || !strings.HasPrefix(tokenHash, "sha256:") {
+		t.Fatalf("lease token was not hashed: token=%q hash=%q", first.Lease.LeaseToken, tokenHash)
+	}
+	emptyCodex, err := db.ClaimNextWorkload("router-b", "execute", time.Minute, WorkloadClaimFilter{Source: "codex"})
+	if err != nil {
+		t.Fatalf("ClaimNextWorkload empty codex: %v", err)
+	}
+	if !emptyCodex.OK || !emptyCodex.Empty || emptyCodex.Lease != nil || emptyCodex.WorkloadID != "" {
+		t.Fatalf("expected codex queue to be empty after active lease and terminal exclusion: %+v", emptyCodex)
+	}
+	second, err := db.ClaimNextWorkload("router-c", "execute", time.Minute, WorkloadClaimFilter{Team: "infra"})
+	if err != nil {
+		t.Fatalf("ClaimNextWorkload second: %v", err)
+	}
+	if second.WorkloadID != secondID {
+		t.Fatalf("expected team-filtered second workload, got %+v", second)
+	}
+	if _, err := db.ReleaseWorkloadLease(first.Lease.LeaseID, first.Lease.LeaseToken); err != nil {
+		t.Fatalf("ReleaseWorkloadLease first: %v", err)
+	}
+	reclaimed, err := db.ClaimNextWorkload("router-d", "resume", time.Minute, WorkloadClaimFilter{Status: "any", Query: "first"})
+	if err != nil {
+		t.Fatalf("ClaimNextWorkload reclaimed: %v", err)
+	}
+	if reclaimed.WorkloadID != firstID || reclaimed.Lease == nil || reclaimed.Lease.LeaseID == first.Lease.LeaseID {
+		t.Fatalf("expected released workload to be reclaimable with a new lease: %+v", reclaimed)
+	}
+	if _, err := db.ClaimNextWorkload("router-e", "bad", time.Minute, WorkloadClaimFilter{Status: "completed"}); err == nil {
+		t.Fatal("expected terminal status claim rejection")
+	}
+}
+
 func TestWorkloadLeaseReadPathsDoNotExpireByWriteback(t *testing.T) {
 	db := tempDB(t)
 	workloadID, err := db.CreateWorkload("expired lease workload", "codex", "repo-a", "repo-a", "main", "", "research", 0)

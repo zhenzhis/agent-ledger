@@ -316,6 +316,53 @@ func TestWorkloadLeaseAPI(t *testing.T) {
 	}
 }
 
+func TestWorkloadClaimNextAPI(t *testing.T) {
+	db := testServerDB(t)
+	workloadID, err := db.CreateWorkload("claim private workload", "codex", "agent-ledger", "secret/repo", "feature/private", "alice", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	srv := New(db, "", Options{})
+	body, _ := json.Marshal(map[string]interface{}{
+		"holder":      "router-a",
+		"purpose":     "private execution purpose",
+		"source":      "codex",
+		"ttl_seconds": 120,
+	})
+	rr := httptest.NewRecorder()
+	srv.handleWorkloadClaimNext(rr, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/claim-next", bytes.NewReader(body)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var claimed storage.WorkloadClaimResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &claimed); err != nil {
+		t.Fatalf("decode claim-next: %v", err)
+	}
+	if !claimed.OK || claimed.Empty || claimed.WorkloadID != workloadID || claimed.Workload == nil || claimed.Lease == nil || claimed.Lease.LeaseToken == "" {
+		t.Fatalf("unexpected claim-next response: %+v", claimed)
+	}
+	emptyResp := httptest.NewRecorder()
+	srv.handleWorkloadClaimNext(emptyResp, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/claim-next", bytes.NewReader(body)))
+	if emptyResp.Code != http.StatusOK {
+		t.Fatalf("empty claim-next status=%d body=%s", emptyResp.Code, emptyResp.Body.String())
+	}
+	var empty storage.WorkloadClaimResult
+	if err := json.Unmarshal(emptyResp.Body.Bytes(), &empty); err != nil {
+		t.Fatalf("decode empty claim-next: %v", err)
+	}
+	if !empty.OK || !empty.Empty || empty.Lease != nil || empty.WorkloadID != "" {
+		t.Fatalf("expected empty queue response: %+v", empty)
+	}
+	audit, err := db.GetAuditLog(20)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if !strings.Contains(string(rawAudit), "workload.claim_next") || strings.Contains(string(rawAudit), claimed.Lease.LeaseToken) || strings.Contains(string(rawAudit), "private execution purpose") || strings.Contains(string(rawAudit), "secret/repo") {
+		t.Fatalf("unexpected claim audit log: %s", string(rawAudit))
+	}
+}
+
 func TestAgentRunLivenessAPI(t *testing.T) {
 	db := testServerDB(t)
 	workloadID, err := db.CreateWorkload("sensitive async goal", "codex", "agent-ledger", "zhenzhis/agent-ledger", "feature/private", "", "", 0)

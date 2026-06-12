@@ -168,7 +168,7 @@ func AdapterContractSpec() AdapterContract {
 				"agent-ledger otel ingest --file spans.json",
 				"agent-ledger a2a ingest --file task.json",
 			},
-			MCPTools: []string{"ledger.record_event", "ledger.start_workload", "ledger.start_run", "ledger.acquire_workload_lease", "ledger.renew_workload_lease", "ledger.release_workload_lease", "ledger.heartbeat_run", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_evaluation"},
+			MCPTools: []string{"ledger.record_event", "ledger.start_workload", "ledger.start_run", "ledger.claim_next_workload", "ledger.acquire_workload_lease", "ledger.renew_workload_lease", "ledger.release_workload_lease", "ledger.heartbeat_run", "ledger.record_tool_call", "ledger.record_context", "ledger.record_artifact", "ledger.record_evaluation"},
 		},
 		RoadmapCompatibility: []string{
 			"new collectors should emit canonical events before product-specific analytics",

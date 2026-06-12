@@ -218,7 +218,7 @@ func HTTPAccessFor(method, path string, input AdmissionInput) OperationAccess {
 			LocalOrAuthRequired: true,
 			Reason:              "webhook notification may write audit metadata and can send outbound traffic unless dry_run is set",
 		}
-	case "/api/scan", "/api/agent-runs", "/api/agent-runs/heartbeat", "/api/workloads", "/api/workloads/close", "/api/workloads/link", "/api/workloads/lease", "/api/workloads/lease/renew", "/api/workloads/lease/release", "/api/events", "/api/otel/genai", "/api/otlp/v1/traces", "/v1/traces", "/api/a2a/tasks", "/api/provider/calls", "/api/reconciliation/import", "/api/offline-bundle/import":
+	case "/api/scan", "/api/agent-runs", "/api/agent-runs/heartbeat", "/api/workloads", "/api/workloads/close", "/api/workloads/link", "/api/workloads/claim-next", "/api/workloads/lease", "/api/workloads/lease/renew", "/api/workloads/lease/release", "/api/events", "/api/otel/genai", "/api/otlp/v1/traces", "/v1/traces", "/api/a2a/tasks", "/api/provider/calls", "/api/reconciliation/import", "/api/offline-bundle/import":
 		return writeHTTPAccess("operator", "operation writes local ledger state")
 	case "/api/pricing/sync", "/api/pricing/recalculate", "/api/recalculate-costs", "/api/projections/repair":
 		return writeHTTPAccess("admin", "operation mutates pricing, derived costs, or projections")
@@ -248,6 +248,7 @@ func MCPToolAccessFor(name string) OperationAccess {
 		"ledger.start_run",
 		"ledger.close_workload",
 		"ledger.link_workloads",
+		"ledger.claim_next_workload",
 		"ledger.acquire_workload_lease",
 		"ledger.renew_workload_lease",
 		"ledger.release_workload_lease",
