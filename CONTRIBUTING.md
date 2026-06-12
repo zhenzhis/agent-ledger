@@ -44,6 +44,7 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.25.11-alpine sh -c "gofmt -w . &
 - New collectors, wrappers, MCP/A2A bridges, or gateways should normalize into canonical workload events before adding product-specific analytics.
 - Canonical event payloads must contain metadata only. Store hashes, IDs, counts, timings, model names, and status; reject raw prompt, transcript, or model output content.
 - MCP tools must remain local-first, avoid prompt-content access, return explicit JSON-RPC errors, and add tests under `internal/mcp`.
+- Control-plane tokens such as workload lease tokens must be stored only as hashes and covered by tests proving they do not leak through list, readiness, doctor, audit, export, or contract surfaces.
 - Preserve compatibility for existing `usage_records`, `sessions`, and `/api/sessions`; Workload Ledger is an additive layer, not a breaking replacement.
 - Do not read, store, or analyze prompt content for insights.
 - Do not hide pricing failures. Mark records as `unpriced`, `stale`, `fallback`, `fuzzy`, or `source-reported`.

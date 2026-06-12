@@ -157,6 +157,38 @@ func TestGetDoctorReportIncludesControlIdempotencyStats(t *testing.T) {
 	}
 }
 
+func TestGetDoctorReportIncludesWorkloadLeaseStats(t *testing.T) {
+	db := tempDB(t)
+	now := time.Now().UTC()
+	workloadID, err := db.CreateWorkload("doctor lease workload", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	lease, err := db.AcquireWorkloadLease(workloadID, "private-router", "private lease purpose", time.Minute)
+	if err != nil {
+		t.Fatalf("AcquireWorkloadLease: %v", err)
+	}
+	report, err := db.GetDoctorReport(now.Add(-time.Hour), now.Add(time.Hour), time.Hour, "codex", "", "agent-ledger")
+	if err != nil {
+		t.Fatalf("GetDoctorReport: %v", err)
+	}
+	if report.Leases == nil || report.Leases.Active != 1 {
+		t.Fatalf("missing lease stats: %+v", report.Leases)
+	}
+	if !hasDoctorCheck(report.Checks, "workload_leases.ready") {
+		t.Fatalf("missing workload lease check: %+v", report.Checks)
+	}
+	md := FormatDoctorMarkdown(report)
+	for _, forbidden := range []string{lease.LeaseToken, "private-router", "private lease purpose"} {
+		if strings.Contains(md, forbidden) {
+			t.Fatalf("doctor markdown leaked %q: %s", forbidden, md)
+		}
+	}
+	if !strings.Contains(md, "Workload Leases") {
+		t.Fatalf("markdown missing workload leases: %s", md)
+	}
+}
+
 func hasDoctorCheck(checks []DoctorCheck, name string) bool {
 	for _, check := range checks {
 		if check.Name == name {

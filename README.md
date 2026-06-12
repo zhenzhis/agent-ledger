@@ -51,6 +51,9 @@ CLI:
 ./agent-ledger workload list
 ./agent-ledger workload create --goal "review strategy engine" --source codex --project quant --idempotency-key router-task-001
 ./agent-ledger workload start-run --workload-id wl_... --source codex --agent-name codex --idempotency-key router-run-001
+./agent-ledger workload lease acquire --workload-id wl_... --holder codex-router --ttl 30m
+./agent-ledger workload lease renew --lease-id lease_... --lease-token lt_... --ttl 30m
+./agent-ledger workload lease release --lease-id lease_... --lease-token lt_...
 ./agent-ledger workload heartbeat --run-id run_... --status working --phase testing --progress 0.5
 ./agent-ledger workload liveness --max-age 10m --stale-only
 ./agent-ledger workload state --workload-id wl_... --max-age 10m
@@ -113,6 +116,17 @@ Workload and run write operations support stable idempotency keys for async agen
 - OpenAPI: `GET /api/openapi.json` describes the workload/run request schemas, idempotency headers, and `409 Conflict` response.
 
 The first request writes the workload/run and records only the operation, key scope, request hash, result type, result id, and timestamps in SQLite. A retry with the same key and same normalized request returns the original id with `idempotent_replay: true`. Reusing the same key with different input fails explicitly with HTTP `409 Conflict` or a CLI/MCP error. Agent Ledger never stores the raw idempotency request body in the idempotency table.
+
+## Workload Leases
+
+Async routers and long-running agents can acquire a short-lived workload lease before executing a workload:
+
+- REST: `POST /api/workloads/lease`, `POST /api/workloads/lease/renew`, `POST /api/workloads/lease/release`, and `GET /api/workloads/leases`.
+- CLI: `agent-ledger workload lease acquire|renew|release|list`.
+- MCP: `ledger.acquire_workload_lease`, `ledger.renew_workload_lease`, `ledger.release_workload_lease`, and `ledger.workload_leases`.
+- OpenAPI: `GET /api/openapi.json` includes lease request/response schemas and `409 Conflict` for an already active lease.
+
+Only one active lease is allowed per workload. `lease_token` is returned only from the acquire response; list, renew, release, readiness, doctor, audit, and contract surfaces never expose it. SQLite stores a SHA-256 token hash, not the plaintext token. Read paths derive expired status without mutating SQLite, so observer/read-only mode remains read-only.
 
 Strict adapter fixtures are available in `examples/adapter-fixtures/` for canonical events, OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, provider SSE streams, OpenTelemetry GenAI spans, and A2A task snapshots.
 
@@ -247,6 +261,7 @@ Core tables:
 - `canonical_events`: normalized event stream for future collectors, MCP, A2A, and gateways, including schema/source/parser provenance and privacy-safe native references.
 - `workloads`, `agent_runs`, `agent_run_events`, `model_calls`, `tool_calls`: goal/run/heartbeat/call ledger.
 - `control_idempotency`: retry-safe workload/run write ledger with request hashes only.
+- `workload_leases`: short-lived async execution claims with plaintext lease tokens excluded from SQLite.
 - `workload_sessions`: compatibility link from old source-scoped sessions to workloads.
 - `context_refs`, `artifacts`, `evaluations`, `policy_decisions`, `workload_links`: privacy-safe AgentOps context, artifact, outcome, governance, dependency, and lineage records.
 - `usage_records`: raw API-call token and cost data.
@@ -278,6 +293,10 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `POST /api/workloads` | Create a local workload |
 | `POST /api/workloads/close` | Close a workload with status/outcome |
 | `POST /api/workloads/link` | Create a metadata-only dependency or lineage edge between workloads |
+| `POST /api/workloads/lease` | Acquire one short-lived execution lease for a workload |
+| `POST /api/workloads/lease/renew` | Renew an active workload lease using its lease token |
+| `POST /api/workloads/lease/release` | Release an active workload lease using its lease token |
+| `GET /api/workloads/leases` | List workload leases without returning lease tokens |
 | `POST /api/agent-runs` | Start a run attached to an existing workload |
 | `POST /api/agent-runs/heartbeat` | Append metadata-only async run liveness/progress |
 | `GET /api/agent-runs/liveness` | List active runs and stale heartbeat state |
@@ -346,7 +365,7 @@ When a policy returns `require_approval`, Agent Ledger records a local pending a
 
 ## MCP Tool Surface
 
-`agent-ledger mcp` starts a local stdio JSON-RPC tool server for agent frameworks and wrappers. The implementation is intentionally local and privacy-preserving: tools can create or close workloads, link workload dependencies, start runs on existing workloads, append run heartbeats, check run liveness and terminal-state snapshots, read the cursor-stable workload event feed, record tool-call metadata, context refs, hashed artifacts, and quality/evaluation signals, ask for advisory policy decisions, list and vote on local approval requests, read approval route rollups, query local budget state, explain cost, and find similar workloads. Resources expose metadata-only schema, integration, budget, workload, feed, terminal-state, and policy context; resource URIs support query parameters for scoped reads such as `agent-ledger://workloads/feed?severity=warning&source=codex&project=agent-ledger&limit=50`, `agent-ledger://policy/approvals?status=pending&privacy=1`, and `agent-ledger://policy/approval-routes?due_within=24h&privacy=1`. `resources/subscribe` watches the exact subscribed URI locally and emits `notifications/resources/updated` with the latest cursor/hash when that scoped resource changes. Prompts provide reusable workload/cost-review/evidence templates. It does not read prompt content and does not send data to a remote MCP host by itself. MCP, REST, and CLI policy evaluation share the same local evaluator so advisory decisions are consistent across integrations.
+`agent-ledger mcp` starts a local stdio JSON-RPC tool server for agent frameworks and wrappers. The implementation is intentionally local and privacy-preserving: tools can create or close workloads, link workload dependencies, acquire/renew/release workload leases, start runs on existing workloads, append run heartbeats, check run liveness and terminal-state snapshots, read the cursor-stable workload event feed, record tool-call metadata, context refs, hashed artifacts, and quality/evaluation signals, ask for advisory policy decisions, list and vote on local approval requests, read approval route rollups, query local budget state, explain cost, and find similar workloads. Resources expose metadata-only schema, integration, budget, workload, feed, terminal-state, and policy context; resource URIs support query parameters for scoped reads such as `agent-ledger://workloads/feed?severity=warning&source=codex&project=agent-ledger&limit=50`, `agent-ledger://policy/approvals?status=pending&privacy=1`, and `agent-ledger://policy/approval-routes?due_within=24h&privacy=1`. `resources/subscribe` watches the exact subscribed URI locally and emits `notifications/resources/updated` with the latest cursor/hash when that scoped resource changes. Prompts provide reusable workload/cost-review/evidence templates. It does not read prompt content and does not send data to a remote MCP host by itself. MCP, REST, and CLI policy evaluation share the same local evaluator so advisory decisions are consistent across integrations.
 
 MCP `tools/list` includes standard-style `annotations.readOnlyHint` plus `_meta.agent_ledger` fields: `writes_local_state`, `write_mode` (`none`, `always`, or `conditional`), `available_in_read_only`, and `read_only_behavior`. Routers and multi-agent frameworks should use these fields before calling tools in observer deployments.
 
@@ -367,6 +386,10 @@ Current tools:
 - `ledger.start_run`
 - `ledger.close_workload`
 - `ledger.link_workloads`
+- `ledger.acquire_workload_lease`
+- `ledger.renew_workload_lease`
+- `ledger.release_workload_lease`
+- `ledger.workload_leases`
 - `ledger.heartbeat_run`
 - `ledger.run_liveness`
 - `ledger.workload_timeline`
@@ -429,7 +452,7 @@ Start with the one-click doctor:
 agent-ledger doctor --format markdown
 ```
 
-Or open `GET /api/doctor?format=markdown&privacy=1`. The report checks the selected time range, collector health, path existence/readability, last scan errors, pricing freshness, unpriced models, empty usage windows, canonical-to-usage projection consistency, control idempotency health, and workload terminal-state issues such as stale runs or blocked policy decisions.
+Or open `GET /api/doctor?format=markdown&privacy=1`. The report checks the selected time range, collector health, path existence/readability, last scan errors, pricing freshness, unpriced models, empty usage windows, canonical-to-usage projection consistency, control idempotency health, workload lease health, and workload terminal-state issues such as stale runs or blocked policy decisions.
 
 If Codex, OpenCode, or another source shows no data:
 
@@ -456,7 +479,7 @@ If costs differ from a provider invoice:
 
 - Binds to `127.0.0.1` by default.
 - `agent-ledger config status`, `GET /api/config/status`, and MCP `ledger.config_status` are designed for deployment checks and never expose raw paths, auth tokens, API keys, webhook URLs, machine names, authors, prompts, responses, or session ids.
-- `agent-ledger readiness`, `GET /api/readiness`, MCP `ledger.readiness`, and `agent-ledger://readiness` are designed for control-plane probes and expose only status, counts, check identifiers, and remediation hints, including privacy-safe control idempotency key/replay counts.
+- `agent-ledger readiness`, `GET /api/readiness`, MCP `ledger.readiness`, and `agent-ledger://readiness` are designed for control-plane probes and expose only status, counts, check identifiers, and remediation hints, including privacy-safe control idempotency key/replay counts and workload lease counts.
 - `agent-ledger admission check`, `GET /api/admission/check`, MCP `ledger.admission_check`, and `agent-ledger://admission/check` expose operation access decisions only; request bodies, full CLI arguments, raw paths, tokens, prompts, sessions, projects, branches, machine names, and authors are excluded.
 - Reads local agent logs and databases; it does not upload usage data.
 - Pricing sync is the expected outbound request.
@@ -494,7 +517,7 @@ Releases use GoReleaser for platform archives and GitHub Actions for GHCR images
 
 ## Roadmap
 
-Implemented foundation: canonical workload schema, metadata-only canonical event ingest, machine-readable adapter contract, workload dependency/lineage links, retry-safe control operation idempotency for workload/run writes, async run start/heartbeat/liveness ledger, derived workload terminal-state snapshots and local workload event feed/SSE stream, explicit workload evaluation signals, disabled-by-default redacted workload and approval webhook notifications, privacy-safe discovery manifest, contract bundle index, OpenAPI control-plane contract, runtime status probe, privacy-safe config status probe, control-plane readiness probe, operation admission dry-run, canonical-to-usage projection plus repair, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP JSON/protobuf traces receiver, A2A task telemetry mapping, provider usage envelope mapping, optional local OpenAI-compatible Chat Completions JSON/SSE, OpenAI Responses JSON/SSE, and Anthropic Messages JSON/SSE gateway, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, local policy approval requests, quorum-based approval votes, approval routing/escalation metadata, approval route summaries and enforcement evidence, CLI workload/event/policy/router/replay/badge/preflight/projection/config/readiness/admission commands, CLI run wrapper, and local MCP stdio tools/resources/resource-subscriptions/prompts.
+Implemented foundation: canonical workload schema, metadata-only canonical event ingest, machine-readable adapter contract, workload dependency/lineage links, retry-safe control operation idempotency for workload/run writes, short-lived workload leases for async execution claims, async run start/heartbeat/liveness ledger, derived workload terminal-state snapshots and local workload event feed/SSE stream, explicit workload evaluation signals, disabled-by-default redacted workload and approval webhook notifications, privacy-safe discovery manifest, contract bundle index, OpenAPI control-plane contract, runtime status probe, privacy-safe config status probe, control-plane readiness probe, operation admission dry-run, canonical-to-usage projection plus repair, OpenTelemetry GenAI JSON span mapping, optional local OTLP HTTP JSON/protobuf traces receiver, A2A task telemetry mapping, provider usage envelope mapping, optional local OpenAI-compatible Chat Completions JSON/SSE, OpenAI Responses JSON/SSE, and Anthropic Messages JSON/SSE gateway, provider bill reconciliation import, model router simulation, preflight cost estimates, session cost replay, repo cost badges, integration capability catalog, signed offline bundle export/import, legacy session backfill, workload API, workload CSV export, local policy approval requests, quorum-based approval votes, approval routing/escalation metadata, approval route summaries and enforcement evidence, CLI workload/event/policy/router/replay/badge/preflight/projection/config/readiness/admission commands, CLI run wrapper, and local MCP stdio tools/resources/resource-subscriptions/prompts.
 
 Planned integrations: OTLP gRPC receiver conformance, provider-native gateway adapters, Postgres team mode, OIDC/SSO, native MCP subscription transport when host clients support it, and external approval notification adapters.
 

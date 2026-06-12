@@ -177,6 +177,112 @@ func TestControlOperationIdempotencyForWorkloadAndRun(t *testing.T) {
 	}
 }
 
+func TestWorkloadLeaseLifecycle(t *testing.T) {
+	db := tempDB(t)
+	workloadID, err := db.CreateWorkload("lease workload", "codex", "repo-a", "repo-a", "main", "", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	lease, err := db.AcquireWorkloadLease(workloadID, "router-a", "execute", time.Minute)
+	if err != nil {
+		t.Fatalf("AcquireWorkloadLease: %v", err)
+	}
+	if lease.LeaseID == "" || lease.LeaseToken == "" || lease.WorkloadID != workloadID || lease.Status != "active" {
+		t.Fatalf("unexpected lease: %+v", lease)
+	}
+	var tokenHash string
+	if err := db.db.QueryRow(`SELECT token_hash FROM workload_leases WHERE lease_id=?`, lease.LeaseID).Scan(&tokenHash); err != nil {
+		t.Fatalf("token_hash: %v", err)
+	}
+	if tokenHash == lease.LeaseToken || !strings.HasPrefix(tokenHash, "sha256:") {
+		t.Fatalf("lease token was not stored as a sha256 hash: token=%q hash=%q", lease.LeaseToken, tokenHash)
+	}
+	if _, err := db.AcquireWorkloadLease(workloadID, "router-b", "execute", time.Minute); !IsWorkloadLeaseConflict(err) {
+		t.Fatalf("expected lease conflict, got %v", err)
+	}
+	if _, err := db.RenewWorkloadLease(lease.LeaseID, "wrong-token", time.Minute); err == nil {
+		t.Fatal("expected wrong token renewal rejection")
+	}
+	renewed, err := db.RenewWorkloadLease(lease.LeaseID, lease.LeaseToken, 2*time.Minute)
+	if err != nil {
+		t.Fatalf("RenewWorkloadLease: %v", err)
+	}
+	if renewed.LastRenewedAt == "" || renewed.TTLSeconds <= 0 {
+		t.Fatalf("unexpected renewed lease: %+v", renewed)
+	}
+	active, err := db.ListWorkloadLeases(false, 10)
+	if err != nil {
+		t.Fatalf("ListWorkloadLeases active: %v", err)
+	}
+	if len(active) != 1 || active[0].LeaseToken != "" {
+		t.Fatalf("unexpected active leases: %+v", active)
+	}
+	released, err := db.ReleaseWorkloadLease(lease.LeaseID, lease.LeaseToken)
+	if err != nil {
+		t.Fatalf("ReleaseWorkloadLease: %v", err)
+	}
+	if released.Status != "released" || released.ReleasedAt == "" {
+		t.Fatalf("unexpected released lease: %+v", released)
+	}
+	next, err := db.AcquireWorkloadLease(workloadID, "router-b", "resume", time.Minute)
+	if err != nil {
+		t.Fatalf("reacquire after release: %v", err)
+	}
+	if next.LeaseID == lease.LeaseID {
+		t.Fatalf("expected new lease id after release, got %s", next.LeaseID)
+	}
+	stats, err := db.GetWorkloadLeaseStats()
+	if err != nil {
+		t.Fatalf("GetWorkloadLeaseStats: %v", err)
+	}
+	if stats.Active != 1 || stats.Released != 1 || stats.Total != 2 {
+		t.Fatalf("unexpected lease stats: %+v", stats)
+	}
+}
+
+func TestWorkloadLeaseReadPathsDoNotExpireByWriteback(t *testing.T) {
+	db := tempDB(t)
+	workloadID, err := db.CreateWorkload("expired lease workload", "codex", "repo-a", "repo-a", "main", "", "research", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	lease, err := db.AcquireWorkloadLease(workloadID, "router-a", "execute", time.Minute)
+	if err != nil {
+		t.Fatalf("AcquireWorkloadLease: %v", err)
+	}
+	if _, err := db.db.Exec(`UPDATE workload_leases SET expires_at=? WHERE lease_id=?`, time.Now().UTC().Add(-time.Minute), lease.LeaseID); err != nil {
+		t.Fatalf("force expire lease: %v", err)
+	}
+	stats, err := db.GetWorkloadLeaseStats()
+	if err != nil {
+		t.Fatalf("GetWorkloadLeaseStats: %v", err)
+	}
+	if stats.Active != 0 || stats.Expired != 1 {
+		t.Fatalf("unexpected derived stats: %+v", stats)
+	}
+	active, err := db.ListWorkloadLeases(false, 10)
+	if err != nil {
+		t.Fatalf("ListWorkloadLeases active: %v", err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("expired active lease should not be listed as active: %+v", active)
+	}
+	all, err := db.ListWorkloadLeases(true, 10)
+	if err != nil {
+		t.Fatalf("ListWorkloadLeases all: %v", err)
+	}
+	if len(all) != 1 || all[0].Status != "expired" || !all[0].Expired {
+		t.Fatalf("expected derived expired row: %+v", all)
+	}
+	var storedStatus string
+	if err := db.db.QueryRow(`SELECT status FROM workload_leases WHERE lease_id=?`, lease.LeaseID).Scan(&storedStatus); err != nil {
+		t.Fatalf("stored status: %v", err)
+	}
+	if storedStatus != "active" {
+		t.Fatalf("read path mutated stored status: %s", storedStatus)
+	}
+}
+
 func TestLinkWorkloadsCreatesDependencyEdge(t *testing.T) {
 	db := tempDB(t)
 	childID, err := db.CreateWorkload("child goal", "codex", "repo-a", "repo-a", "main", "", "research", 0)

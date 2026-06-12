@@ -89,6 +89,49 @@ func TestAdmissionClassifiesReadOnlyCLISubcommands(t *testing.T) {
 	}
 }
 
+func TestAdmissionClassifiesWorkloadLeases(t *testing.T) {
+	httpDecision := EvaluateAdmission(AdmissionInput{
+		Surface:     "http",
+		Method:      "POST",
+		Path:        "/api/workloads/lease",
+		Role:        "operator",
+		RBACEnabled: true,
+		ReadOnly:    true,
+	}, fixedAdmissionTime())
+	if httpDecision.Allowed || httpDecision.WriteMode != "always" || httpDecision.RequiredRole != "operator" {
+		t.Fatalf("expected HTTP lease acquire to be rejected in read-only mode: %+v", httpDecision)
+	}
+	mcpDecision := EvaluateAdmission(AdmissionInput{
+		Surface:     "mcp",
+		Tool:        "ledger.acquire_workload_lease",
+		Role:        "operator",
+		RBACEnabled: true,
+	}, fixedAdmissionTime())
+	if !mcpDecision.Allowed || !mcpDecision.WritesLocalState || mcpDecision.AvailableInReadOnly {
+		t.Fatalf("expected MCP lease acquire to be a write tool: %+v", mcpDecision)
+	}
+	listDecision := EvaluateAdmission(AdmissionInput{
+		Surface:     "cli",
+		Command:     "agent-ledger workload lease list --limit 10",
+		Role:        "viewer",
+		RBACEnabled: true,
+		ReadOnly:    true,
+	}, fixedAdmissionTime())
+	if !listDecision.Allowed || listDecision.WritesLocalState {
+		t.Fatalf("expected CLI lease list to be read-only: %+v", listDecision)
+	}
+	renewDecision := EvaluateAdmission(AdmissionInput{
+		Surface:     "cli",
+		Command:     "agent-ledger workload lease renew --lease-id lease_1",
+		Role:        "operator",
+		RBACEnabled: true,
+		ReadOnly:    true,
+	}, fixedAdmissionTime())
+	if renewDecision.Allowed || renewDecision.AvailableInReadOnly {
+		t.Fatalf("expected CLI lease renew to be rejected in read-only mode: %+v", renewDecision)
+	}
+}
+
 func TestAdmissionPrivacyAndFingerprint(t *testing.T) {
 	decision := EvaluateAdmission(AdmissionInput{
 		Surface: "cli",

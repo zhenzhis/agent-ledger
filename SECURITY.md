@@ -22,6 +22,7 @@ Agent Ledger runs locally and reads local agent usage files. The default deploym
 - The optional OpenAI-compatible provider gateway is disabled by default. It forwards request bodies only in memory to the configured upstream, reads API keys only from environment variables, and records usage/audit metadata instead of prompt or response content.
 - Local policy evaluation is advisory unless your wrapper or gateway enforces it. Policy decisions record rule metadata, role, workload ID, and action, but must not record prompt text, secrets, or raw tool output.
 - Policy approval requests are local metadata records and authorize only matching action/target retries through an explicit approval id. Webhook summaries hash approval ids and redact project, target, reason, and request payload fields.
+- Workload lease tokens are operational secrets for async routers. Agent Ledger returns a plaintext `lease_token` only from lease acquisition, stores only a SHA-256 token hash, and must not expose lease tokens through list, readiness, doctor, audit, export, evidence, or contract surfaces.
 - Webhooks are disabled by default.
 - Usage data, prompts, local paths, and session IDs are not uploaded by default.
 

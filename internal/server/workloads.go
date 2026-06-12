@@ -58,6 +58,23 @@ func requestIdempotencyKey(r *http.Request, payloadKey string) string {
 	return firstNonEmpty(payloadKey, r.Header.Get("Idempotency-Key"), r.Header.Get("X-Idempotency-Key"), r.URL.Query().Get("idempotency_key"))
 }
 
+func workloadLeaseTTL(raw string, seconds int64) (time.Duration, error) {
+	if strings.TrimSpace(raw) != "" {
+		ttl, err := time.ParseDuration(strings.TrimSpace(raw))
+		if err != nil {
+			return 0, fmt.Errorf("invalid ttl: %w", err)
+		}
+		if ttl <= 0 {
+			return 0, fmt.Errorf("invalid ttl: must be positive")
+		}
+		return ttl, nil
+	}
+	if seconds > 0 {
+		return time.Duration(seconds) * time.Second, nil
+	}
+	return 0, nil
+}
+
 func (s *Server) handleWorkloadCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
 		return
@@ -154,6 +171,121 @@ func (s *Server) handleWorkloadLink(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.db.AppendAuditLog("local", s.roleFor(r), "workload.link", linkID, map[string]string{"relation": payload.Relation})
 	writeJSON(w, map[string]interface{}{"ok": true, "link_id": linkID, "source_workload_id": payload.SourceWorkloadID, "target_workload_id": payload.TargetWorkloadID})
+}
+
+func (s *Server) handleWorkloadLeaseAcquire(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
+		return
+	}
+	var payload struct {
+		WorkloadID string `json:"workload_id"`
+		Holder     string `json:"holder"`
+		Purpose    string `json:"purpose"`
+		TTL        string `json:"ttl"`
+		TTLSeconds int64  `json:"ttl_seconds"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		badRequest(w, err)
+		return
+	}
+	if payload.WorkloadID == "" {
+		payload.WorkloadID = r.URL.Query().Get("workload_id")
+	}
+	ttl, err := workloadLeaseTTL(payload.TTL, payload.TTLSeconds)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	lease, err := s.db.AcquireWorkloadLease(payload.WorkloadID, payload.Holder, payload.Purpose, ttl)
+	if err != nil {
+		if storage.IsWorkloadLeaseConflict(err) {
+			conflict(w, err)
+			return
+		}
+		badRequest(w, err)
+		return
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "workload.lease.acquire", lease.WorkloadID, map[string]string{"lease_id": lease.LeaseID, "purpose_present": fmt.Sprint(payload.Purpose != ""), "ttl_seconds": fmt.Sprint(lease.TTLSeconds), "holder_present": fmt.Sprint(payload.Holder != "")})
+	writeJSON(w, map[string]interface{}{"ok": true, "lease": lease})
+}
+
+func (s *Server) handleWorkloadLeaseRenew(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
+		return
+	}
+	var payload struct {
+		LeaseID    string `json:"lease_id"`
+		LeaseToken string `json:"lease_token"`
+		TTL        string `json:"ttl"`
+		TTLSeconds int64  `json:"ttl_seconds"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		badRequest(w, err)
+		return
+	}
+	ttl, err := workloadLeaseTTL(payload.TTL, payload.TTLSeconds)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	lease, err := s.db.RenewWorkloadLease(payload.LeaseID, payload.LeaseToken, ttl)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "workload.lease.renew", lease.WorkloadID, map[string]string{"lease_id": lease.LeaseID, "ttl_seconds": fmt.Sprint(lease.TTLSeconds)})
+	writeJSON(w, map[string]interface{}{"ok": true, "lease": lease})
+}
+
+func (s *Server) handleWorkloadLeaseRelease(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireLocalOrAuth(w, r) || !s.requireRole(w, r, "operator") {
+		return
+	}
+	var payload struct {
+		LeaseID    string `json:"lease_id"`
+		LeaseToken string `json:"lease_token"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		badRequest(w, err)
+		return
+	}
+	lease, err := s.db.ReleaseWorkloadLease(payload.LeaseID, payload.LeaseToken)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	_ = s.db.AppendAuditLog("local", s.roleFor(r), "workload.lease.release", lease.WorkloadID, map[string]string{"lease_id": lease.LeaseID})
+	writeJSON(w, map[string]interface{}{"ok": true, "lease": lease})
+}
+
+func (s *Server) handleWorkloadLeases(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
+	includeInactive := r.URL.Query().Get("include_inactive") == "1" || r.URL.Query().Get("include_inactive") == "true"
+	leases, err := s.db.ListWorkloadLeases(includeInactive, parseLimit(r, 200))
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	applyWorkloadLeasePrivacy(leases, s.privacyFor(r))
+	writeJSON(w, map[string]interface{}{"rows": leases, "include_inactive": includeInactive})
 }
 
 func (s *Server) handleAgentRuns(w http.ResponseWriter, r *http.Request) {
@@ -683,6 +815,20 @@ func applyWorkloadPagePrivacy(page *storage.WorkloadPage, privacy config.Privacy
 	}
 	for i := range page.Rows {
 		applyWorkloadPrivacy(&page.Rows[i], privacy)
+	}
+}
+
+func applyWorkloadLeasePrivacy(rows []storage.WorkloadLease, privacy config.PrivacyConfig) {
+	for i := range rows {
+		rows[i].LeaseToken = ""
+		if privacy.HashSessionIDs || privacy.ScreenshotMode {
+			rows[i].LeaseID = hashValue(rows[i].LeaseID)
+			rows[i].WorkloadID = hashValue(rows[i].WorkloadID)
+		}
+		if privacy.HideProjectNames || privacy.RedactPaths || privacy.ScreenshotMode {
+			rows[i].Holder = "<redacted>"
+			rows[i].Purpose = "<redacted>"
+		}
 	}
 }
 

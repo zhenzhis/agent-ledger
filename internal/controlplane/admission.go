@@ -218,7 +218,7 @@ func HTTPAccessFor(method, path string, input AdmissionInput) OperationAccess {
 			LocalOrAuthRequired: true,
 			Reason:              "webhook notification may write audit metadata and can send outbound traffic unless dry_run is set",
 		}
-	case "/api/scan", "/api/agent-runs", "/api/agent-runs/heartbeat", "/api/workloads", "/api/workloads/close", "/api/workloads/link", "/api/events", "/api/otel/genai", "/api/otlp/v1/traces", "/v1/traces", "/api/a2a/tasks", "/api/provider/calls", "/api/reconciliation/import", "/api/offline-bundle/import":
+	case "/api/scan", "/api/agent-runs", "/api/agent-runs/heartbeat", "/api/workloads", "/api/workloads/close", "/api/workloads/link", "/api/workloads/lease", "/api/workloads/lease/renew", "/api/workloads/lease/release", "/api/events", "/api/otel/genai", "/api/otlp/v1/traces", "/v1/traces", "/api/a2a/tasks", "/api/provider/calls", "/api/reconciliation/import", "/api/offline-bundle/import":
 		return writeHTTPAccess("operator", "operation writes local ledger state")
 	case "/api/pricing/sync", "/api/pricing/recalculate", "/api/recalculate-costs", "/api/projections/repair":
 		return writeHTTPAccess("admin", "operation mutates pricing, derived costs, or projections")
@@ -248,6 +248,9 @@ func MCPToolAccessFor(name string) OperationAccess {
 		"ledger.start_run",
 		"ledger.close_workload",
 		"ledger.link_workloads",
+		"ledger.acquire_workload_lease",
+		"ledger.renew_workload_lease",
+		"ledger.release_workload_lease",
 		"ledger.heartbeat_run",
 		"ledger.record_tool_call",
 		"ledger.record_artifact",
@@ -310,6 +313,12 @@ func CLICommandAccessFor(command string, input AdmissionInput) OperationAccess {
 		}
 		return OperationAccess{Known: true, WriteMode: "none", AvailableInReadOnly: true, ReadOnlyBehavior: "validation/schema commands are available in read-only mode", RequiredRole: "viewer", Reason: "event command does not write unless ingest is used"}
 	case "workload":
+		if len(parts) > 1 && (parts[1] == "lease" || parts[1] == "leases") {
+			if len(parts) == 2 || readOnlySubcommand(parts[2], []string{"list"}) {
+				return OperationAccess{Known: true, WriteMode: "none", AvailableInReadOnly: true, ReadOnlyBehavior: "workload lease list is available in read-only mode", RequiredRole: "viewer", Reason: "workload lease list reads local ledger state"}
+			}
+			return OperationAccess{Known: true, WritesLocalState: true, WriteMode: "always", AvailableInReadOnly: false, ReadOnlyBehavior: "disabled in read-only mode", RequiredRole: "operator", Reason: "workload lease command writes local ledger state"}
+		}
 		if len(parts) == 1 || readOnlySubcommand(parts[1], []string{"list", "show", "timeline", "state", "status", "feed", "events", "liveness"}) {
 			return OperationAccess{Known: true, WriteMode: "none", AvailableInReadOnly: true, ReadOnlyBehavior: "workload query commands are available in read-only mode", RequiredRole: "viewer", Reason: "workload command reads local ledger state"}
 		}

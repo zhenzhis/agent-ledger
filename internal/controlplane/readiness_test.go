@@ -47,6 +47,14 @@ func TestReadinessReportReadyAndPrivacySafe(t *testing.T) {
 	if _, replayed, err := db.CreateWorkloadIdempotent("private-readiness-key", "readiness idempotency", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0); err != nil || !replayed {
 		t.Fatalf("CreateWorkloadIdempotent replay replayed=%v err=%v", replayed, err)
 	}
+	workloadID, err := db.CreateWorkload("private lease readiness", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	lease, err := db.AcquireWorkloadLease(workloadID, "private-router", "private readiness purpose", time.Minute)
+	if err != nil {
+		t.Fatalf("AcquireWorkloadLease: %v", err)
+	}
 	cfg := config.DefaultConfig()
 	cfg.Storage.Path = "C:/Users/zhang/private/agent-ledger.db"
 	cfg.Collectors.Codex.Paths = []string{"C:/Users/zhang/private/.codex"}
@@ -60,14 +68,21 @@ func TestReadinessReportReadyAndPrivacySafe(t *testing.T) {
 	if report.Summary.IdempotencyKeys != 1 || report.Summary.IdempotencyReplays != 1 {
 		t.Fatalf("missing idempotency summary: %+v", report.Summary)
 	}
+	if report.Summary.ActiveLeases != 1 {
+		t.Fatalf("missing lease summary: %+v", report.Summary)
+	}
 	raw, err := json.Marshal(report)
 	if err != nil {
 		t.Fatalf("marshal readiness: %v", err)
 	}
-	for _, forbidden := range []string{"private-session", "private-project", "C:/Users/zhang/private", "private.example", "private-readiness-key"} {
+	for _, forbidden := range []string{"private-session", "private-project", "C:/Users/zhang/private", "private.example", "private-readiness-key", lease.LeaseToken, "private-router", "private readiness purpose"} {
 		if strings.Contains(string(raw), forbidden) {
 			t.Fatalf("readiness leaked %q: %s", forbidden, raw)
 		}
+	}
+	md := FormatReadinessMarkdown(report)
+	if !strings.Contains(md, "Workload leases") || strings.Contains(md, lease.LeaseToken) {
+		t.Fatalf("unexpected readiness markdown: %s", md)
 	}
 }
 

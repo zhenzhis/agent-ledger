@@ -901,6 +901,26 @@ func migrate(db *sql.DB) error {
 				CREATE INDEX IF NOT EXISTS idx_control_idempotency_operation_created ON control_idempotency(operation, created_at);
 			`,
 		},
+		{
+			"014_workload_leases", `
+				CREATE TABLE IF NOT EXISTS workload_leases (
+					lease_id TEXT PRIMARY KEY,
+					workload_id TEXT NOT NULL,
+					holder TEXT NOT NULL,
+					purpose TEXT DEFAULT '',
+					status TEXT NOT NULL DEFAULT 'active',
+					token_hash TEXT NOT NULL,
+					acquired_at DATETIME NOT NULL,
+					expires_at DATETIME NOT NULL,
+					last_renewed_at DATETIME,
+					released_at DATETIME,
+					confidence REAL DEFAULT 1
+				);
+				CREATE UNIQUE INDEX IF NOT EXISTS idx_workload_leases_active_unique ON workload_leases(workload_id) WHERE status='active';
+				CREATE INDEX IF NOT EXISTS idx_workload_leases_status_expires ON workload_leases(status, expires_at);
+				CREATE INDEX IF NOT EXISTS idx_workload_leases_workload ON workload_leases(workload_id, acquired_at);
+			`,
+		},
 	}
 	for _, m := range migrations {
 		var done string

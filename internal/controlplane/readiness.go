@@ -45,6 +45,9 @@ type ReadinessSummary struct {
 	PromptEvents       int    `json:"prompt_events"`
 	IdempotencyKeys    int    `json:"idempotency_keys"`
 	IdempotencyReplays int    `json:"idempotency_replays"`
+	ActiveLeases       int    `json:"active_leases"`
+	ExpiredLeases      int    `json:"expired_leases"`
+	ReleasedLeases     int    `json:"released_leases"`
 	HealthSources      int    `json:"health_sources"`
 	HealthErrors       int    `json:"health_errors"`
 	PricingSources     int    `json:"pricing_sources"`
@@ -113,6 +116,7 @@ func FormatReadinessMarkdown(report *ReadinessReport) string {
 	fmt.Fprintf(&b, "- Checks: `%d` passing, `%d` critical, `%d` warnings\n", report.Summary.PassingChecks, report.Summary.CriticalFailures, report.Summary.Warnings)
 	fmt.Fprintf(&b, "- Data: `%d` usage records, `%d` prompt events, `%d` health sources\n", report.Summary.UsageRecords, report.Summary.PromptEvents, report.Summary.HealthSources)
 	fmt.Fprintf(&b, "- Control idempotency: `%d` keys, `%d` replays\n", report.Summary.IdempotencyKeys, report.Summary.IdempotencyReplays)
+	fmt.Fprintf(&b, "- Workload leases: `%d` active, `%d` expired, `%d` released\n", report.Summary.ActiveLeases, report.Summary.ExpiredLeases, report.Summary.ReleasedLeases)
 	fmt.Fprintf(&b, "- Pricing: `%d` sources, `%d` stale, `%d` errors\n", report.Summary.PricingSources, report.Summary.PricingStale, report.Summary.PricingErrors)
 	fmt.Fprintf(&b, "- Recommendation: %s\n\n", report.Summary.Recommendation)
 	b.WriteString("## Checks\n\n")
@@ -172,6 +176,15 @@ func addCoreChecks(report *ReadinessReport, db *storage.DB) {
 		report.Summary.IdempotencyKeys = idempotency.TotalKeys
 		report.Summary.IdempotencyReplays = idempotency.ReplayCount
 		report.addCheck("database.control_idempotency_query", true, "critical", "control_idempotency query succeeded", "")
+	}
+	leases, err := db.GetWorkloadLeaseStats()
+	if err != nil {
+		report.addCheck("database.workload_leases_query", false, "critical", "workload_leases query failed", "inspect SQLite schema migrations")
+	} else {
+		report.Summary.ActiveLeases = leases.Active
+		report.Summary.ExpiredLeases = leases.Expired
+		report.Summary.ReleasedLeases = leases.Released
+		report.addCheck("database.workload_leases_query", true, "critical", "workload_leases query succeeded", "")
 	}
 }
 

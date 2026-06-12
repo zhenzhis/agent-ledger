@@ -29,6 +29,10 @@ func TestCLICommandRequiresWriteForNotifyDryRun(t *testing.T) {
 		{name: "policy approvals is read-only", args: []string{"policy", "approvals"}, want: false},
 		{name: "policy approvals privacy is read-only", args: []string{"policy", "approvals", "--privacy"}, want: false},
 		{name: "policy resolve writes", args: []string{"policy", "resolve", "--id", "apr_1", "--status", "approved"}, want: true},
+		{name: "workload lease list is read-only", args: []string{"workload", "lease", "list"}, want: false},
+		{name: "workload leases default list is read-only", args: []string{"workload", "leases"}, want: false},
+		{name: "workload leases with flags is read-only", args: []string{"workload", "leases", "--limit", "50"}, want: false},
+		{name: "workload lease acquire writes", args: []string{"workload", "lease", "acquire", "--workload-id", "wl_1"}, want: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -144,7 +148,7 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 		t.Fatalf("unexpected openapi output: %+v", spec)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	if paths["/api/openapi.json"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/config/status"] == nil || paths["/api/readiness"] == nil || paths["/api/admission/check"] == nil || paths["/api/events/validate"] == nil || paths["/api/workloads"] == nil || paths["/api/agent-runs"] == nil {
+	if paths["/api/openapi.json"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/config/status"] == nil || paths["/api/readiness"] == nil || paths["/api/admission/check"] == nil || paths["/api/events/validate"] == nil || paths["/api/workloads"] == nil || paths["/api/workloads/lease"] == nil || paths["/api/workloads/lease/renew"] == nil || paths["/api/workloads/lease/release"] == nil || paths["/api/workloads/leases"] == nil || paths["/api/agent-runs"] == nil {
 		t.Fatalf("openapi output missing expected paths: %+v", paths)
 	}
 }

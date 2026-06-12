@@ -61,6 +61,10 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/adapter-spec": getOperation("adapter-conformance", "Get adapter contract", "Machine-readable adapter contract for privacy-safe integrations.", "AdapterContract"),
 			"/api/integrations/conformance":  adapterConformanceOperation(),
 			"/api/workloads":                 workloadsOperation(),
+			"/api/workloads/lease":           workloadLeaseAcquireOperation(),
+			"/api/workloads/lease/renew":     workloadLeaseRenewOperation(),
+			"/api/workloads/lease/release":   workloadLeaseReleaseOperation(),
+			"/api/workloads/leases":          workloadLeasesOperation(),
 			"/api/agent-runs":                agentRunsOperation(),
 			"/api/workload-events":           workloadEventsOperation(false),
 			"/api/workload-events/stream":    workloadEventsOperation(true),
@@ -215,6 +219,74 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"idempotent_replay": boolSchema(),
 					},
 				},
+				"WorkloadLeaseAcquireRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"workload_id", "holder"},
+					"properties": map[string]interface{}{
+						"workload_id": stringSchema(),
+						"holder":      stringSchema(),
+						"purpose":     stringSchema(),
+						"ttl":         stringSchema(),
+						"ttl_seconds": map[string]interface{}{"type": "integer", "minimum": 1},
+					},
+				},
+				"WorkloadLeaseRenewRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"lease_id", "lease_token"},
+					"properties": map[string]interface{}{
+						"lease_id":    stringSchema(),
+						"lease_token": stringSchema(),
+						"ttl":         stringSchema(),
+						"ttl_seconds": map[string]interface{}{"type": "integer", "minimum": 1},
+					},
+				},
+				"WorkloadLeaseReleaseRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"lease_id", "lease_token"},
+					"properties": map[string]interface{}{
+						"lease_id":    stringSchema(),
+						"lease_token": stringSchema(),
+					},
+				},
+				"WorkloadLease": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"lease_id":        stringSchema(),
+						"workload_id":     stringSchema(),
+						"holder":          stringSchema(),
+						"purpose":         stringSchema(),
+						"status":          stringSchema(),
+						"acquired_at":     stringSchema(),
+						"expires_at":      stringSchema(),
+						"last_renewed_at": stringSchema(),
+						"released_at":     stringSchema(),
+						"expired":         boolSchema(),
+						"ttl_seconds":     map[string]interface{}{"type": "integer"},
+						"lease_token":     stringSchema(),
+					},
+				},
+				"WorkloadLeaseResponse": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"ok", "lease"},
+					"properties": map[string]interface{}{
+						"ok":    boolSchema(),
+						"lease": refSchema("WorkloadLease"),
+					},
+				},
+				"WorkloadLeaseListResponse": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"rows", "include_inactive"},
+					"properties": map[string]interface{}{
+						"rows":             map[string]interface{}{"type": "array", "items": refSchema("WorkloadLease")},
+						"include_inactive": boolSchema(),
+					},
+				},
 				"AgentRunStartRequest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": false,
@@ -363,9 +435,91 @@ func workloadsOperation() map[string]interface{} {
 	}
 }
 
+func workloadLeaseAcquireOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": workloadLeaseWriteOperation(
+			"Acquire workload lease",
+			"Acquire a short-lived local execution lease before an async router, wrapper, or agent starts work on a workload. The lease token is returned once and is never stored in plaintext.",
+			"WorkloadLeaseAcquireRequest",
+			"WorkloadLeaseResponse",
+		),
+	}
+}
+
+func workloadLeaseRenewOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": workloadLeaseWriteOperation(
+			"Renew workload lease",
+			"Renew an active workload lease using the lease token. Renewal fails explicitly when the token does not match or the lease is no longer active.",
+			"WorkloadLeaseRenewRequest",
+			"WorkloadLeaseResponse",
+		),
+	}
+}
+
+func workloadLeaseReleaseOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": workloadLeaseWriteOperation(
+			"Release workload lease",
+			"Release a workload lease using the lease token. Release is local-only and writes an audit event without storing the token.",
+			"WorkloadLeaseReleaseRequest",
+			"WorkloadLeaseResponse",
+		),
+	}
+}
+
+func workloadLeasesOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{"workload-control"},
+			"summary":     "List workload leases",
+			"description": "List active workload leases for local routers and operators. Lease tokens are never returned by this list endpoint.",
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": false,
+				"read_only_safe":     true,
+				"prompt_content":     false,
+				"lease_tokens":       "not_returned",
+			},
+			"parameters": []map[string]interface{}{
+				boolQueryParam("include_inactive", "Include expired and released leases."),
+				intQueryParam("limit", "Maximum rows."),
+			},
+			"responses": map[string]interface{}{
+				"200": jsonResponse("WorkloadLeaseListResponse"),
+				"400": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
 func agentRunsOperation() map[string]interface{} {
 	return map[string]interface{}{
 		"post": idempotentWriteOperation("workload-control", "Start agent run", "Start a run attached to an existing workload. Retries with the same normalized request and idempotency key return the original run id.", "AgentRunStartRequest", "AgentRunStartResponse"),
+	}
+}
+
+func workloadLeaseWriteOperation(summary, description, requestSchema, responseSchema string) map[string]interface{} {
+	return map[string]interface{}{
+		"tags":        []string{"workload-control"},
+		"summary":     summary,
+		"description": description,
+		"x-agent-ledger": map[string]interface{}{
+			"writes_local_state": true,
+			"read_only_safe":     false,
+			"prompt_content":     false,
+			"lease_tokens":       "plaintext accepted only in request body and returned only from acquire; SQLite stores sha256 hashes",
+		},
+		"requestBody": map[string]interface{}{
+			"required": true,
+			"content": map[string]interface{}{
+				"application/json": map[string]interface{}{"schema": refSchema(requestSchema)},
+			},
+		},
+		"responses": map[string]interface{}{
+			"200": jsonResponse(responseSchema),
+			"400": jsonResponse("Error"),
+			"409": jsonResponse("Error"),
+		},
 	}
 }
 

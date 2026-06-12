@@ -325,6 +325,27 @@ func tools() []map[string]interface{} {
 			"reason":             stringSchema(),
 			"created_by":         stringSchema(),
 		}),
+		tool("ledger.acquire_workload_lease", "Acquire a retry-safe local lease before an async router starts executing a workload.", map[string]interface{}{
+			"workload_id": requiredStringSchema(),
+			"holder":      requiredStringSchema(),
+			"purpose":     stringSchema(),
+			"ttl":         stringSchema(),
+			"ttl_seconds": integerSchema(),
+		}),
+		tool("ledger.renew_workload_lease", "Renew an active workload lease using its lease token.", map[string]interface{}{
+			"lease_id":    requiredStringSchema(),
+			"lease_token": requiredStringSchema(),
+			"ttl":         stringSchema(),
+			"ttl_seconds": integerSchema(),
+		}),
+		tool("ledger.release_workload_lease", "Release an active workload lease using its lease token.", map[string]interface{}{
+			"lease_id":    requiredStringSchema(),
+			"lease_token": requiredStringSchema(),
+		}),
+		tool("ledger.workload_leases", "List active workload leases without exposing lease tokens.", map[string]interface{}{
+			"include_inactive": booleanSchema(),
+			"limit":            integerSchema(),
+		}),
 		tool("ledger.start_run", "Start a new agent run attached to an existing workload.", map[string]interface{}{
 			"workload_id":     requiredStringSchema(),
 			"source":          stringSchema(),
@@ -673,6 +694,14 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolCloseWorkload(args)
 	case "ledger.link_workloads":
 		return s.toolLinkWorkloads(args)
+	case "ledger.acquire_workload_lease":
+		return s.toolAcquireWorkloadLease(args)
+	case "ledger.renew_workload_lease":
+		return s.toolRenewWorkloadLease(args)
+	case "ledger.release_workload_lease":
+		return s.toolReleaseWorkloadLease(args)
+	case "ledger.workload_leases":
+		return s.toolWorkloadLeases(args)
 	case "ledger.heartbeat_run":
 		return s.toolHeartbeatRun(args)
 	case "ledger.run_liveness":
@@ -1262,6 +1291,94 @@ func (s *Server) toolLinkWorkloads(args json.RawMessage) (interface{}, error) {
 		"target_workload_id": in.TargetWorkloadID,
 		"relation":           firstNonEmpty(in.Relation, "relates_to"),
 	}, nil
+}
+
+func (s *Server) toolAcquireWorkloadLease(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		WorkloadID string `json:"workload_id"`
+		Holder     string `json:"holder"`
+		Purpose    string `json:"purpose"`
+		TTL        string `json:"ttl"`
+		TTLSeconds int64  `json:"ttl_seconds"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	ttl, err := mcpLeaseTTL(in.TTL, in.TTLSeconds)
+	if err != nil {
+		return nil, err
+	}
+	lease, err := s.db.AcquireWorkloadLease(in.WorkloadID, in.Holder, in.Purpose, ttl)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"ok": true, "lease": lease}, nil
+}
+
+func (s *Server) toolRenewWorkloadLease(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		LeaseID    string `json:"lease_id"`
+		LeaseToken string `json:"lease_token"`
+		TTL        string `json:"ttl"`
+		TTLSeconds int64  `json:"ttl_seconds"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	ttl, err := mcpLeaseTTL(in.TTL, in.TTLSeconds)
+	if err != nil {
+		return nil, err
+	}
+	lease, err := s.db.RenewWorkloadLease(in.LeaseID, in.LeaseToken, ttl)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"ok": true, "lease": lease}, nil
+}
+
+func (s *Server) toolReleaseWorkloadLease(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		LeaseID    string `json:"lease_id"`
+		LeaseToken string `json:"lease_token"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, err
+	}
+	lease, err := s.db.ReleaseWorkloadLease(in.LeaseID, in.LeaseToken)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"ok": true, "lease": lease}, nil
+}
+
+func (s *Server) toolWorkloadLeases(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		IncludeInactive bool `json:"include_inactive"`
+		Limit           int  `json:"limit"`
+	}
+	_ = json.Unmarshal(args, &in)
+	rows, err := s.db.ListWorkloadLeases(in.IncludeInactive, in.Limit)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"rows": rows, "include_inactive": in.IncludeInactive}, nil
+}
+
+func mcpLeaseTTL(raw string, seconds int64) (time.Duration, error) {
+	if strings.TrimSpace(raw) != "" {
+		ttl, err := time.ParseDuration(strings.TrimSpace(raw))
+		if err != nil {
+			return 0, err
+		}
+		if ttl <= 0 {
+			return 0, fmt.Errorf("ttl must be positive")
+		}
+		return ttl, nil
+	}
+	if seconds > 0 {
+		return time.Duration(seconds) * time.Second, nil
+	}
+	return 0, nil
 }
 
 func (s *Server) toolHeartbeatRun(args json.RawMessage) (interface{}, error) {

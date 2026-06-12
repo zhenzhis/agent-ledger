@@ -28,6 +28,7 @@ type DoctorReport struct {
 	WorkloadStates []WorkloadState          `json:"workload_states,omitempty"`
 	PricingSources []PricingSourceStatus    `json:"pricing_sources"`
 	Idempotency    *ControlIdempotencyStats `json:"idempotency,omitempty"`
+	Leases         *WorkloadLeaseStats      `json:"leases,omitempty"`
 	Checks         []DoctorCheck            `json:"checks"`
 	Summary        string                   `json:"summary"`
 	Runtime        *RuntimeStatus           `json:"runtime,omitempty"`
@@ -64,6 +65,10 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 	if err != nil {
 		return nil, err
 	}
+	leases, err := d.GetWorkloadLeaseStats()
+	if err != nil {
+		return nil, err
+	}
 	report := &DoctorReport{
 		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
 		From:           from.Format(time.RFC3339),
@@ -75,6 +80,7 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 		WorkloadStates: workloadStates,
 		PricingSources: pricingSources,
 		Idempotency:    idempotency,
+		Leases:         leases,
 	}
 	report.Checks = append(report.Checks, usageDoctorChecks(*stats, source, model, project)...)
 	report.Checks = append(report.Checks, ingestionDoctorChecks(health, source)...)
@@ -83,6 +89,7 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 	report.Checks = append(report.Checks, projectionDoctorChecks(projection)...)
 	report.Checks = append(report.Checks, workloadStateDoctorChecks(workloadStates)...)
 	report.Checks = append(report.Checks, idempotencyDoctorChecks(idempotency)...)
+	report.Checks = append(report.Checks, workloadLeaseDoctorChecks(leases)...)
 	report.Summary = doctorSummary(report.Checks)
 	if len(report.Checks) == 0 {
 		report.Checks = append(report.Checks, DoctorCheck{
@@ -93,6 +100,35 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 		report.Summary = "ok"
 	}
 	return report, nil
+}
+
+func workloadLeaseDoctorChecks(stats *WorkloadLeaseStats) []DoctorCheck {
+	if stats == nil {
+		return []DoctorCheck{{
+			Name: "workload_leases.unavailable", Status: "warning", Severity: "warning",
+			Message: "workload lease stats could not be calculated",
+			Action:  "inspect SQLite migrations and workload_leases table access",
+		}}
+	}
+	if stats.Total == 0 {
+		return []DoctorCheck{{
+			Name: "workload_leases.ready", Status: "ok", Severity: "info",
+			Message: "workload lease table is queryable; no leases have been recorded yet",
+			Action:  "use workload lease acquire/renew/release from async routers that coordinate workload execution",
+		}}
+	}
+	if stats.Expired > 0 {
+		return []DoctorCheck{{
+			Name: "workload_leases.expired", Status: "warning", Severity: "warning",
+			Message: fmt.Sprintf("%d workload leases expired before explicit release", stats.Expired),
+			Action:  "inspect router heartbeat and renewal intervals for long-running async workloads",
+		}}
+	}
+	return []DoctorCheck{{
+		Name: "workload_leases.ready", Status: "ok", Severity: "info",
+		Message: fmt.Sprintf("workload lease table is queryable with %d active and %d released leases", stats.Active, stats.Released),
+		Action:  "continue renewing and releasing leases around async workload execution",
+	}}
 }
 
 func idempotencyDoctorChecks(stats *ControlIdempotencyStats) []DoctorCheck {
@@ -329,6 +365,9 @@ func FormatDoctorMarkdown(report *DoctorReport) string {
 	}
 	if report.Idempotency != nil {
 		b.WriteString(fmt.Sprintf("- Control Idempotency: `%d` keys, `%d` replayed requests\n\n", report.Idempotency.TotalKeys, report.Idempotency.ReplayCount))
+	}
+	if report.Leases != nil {
+		b.WriteString(fmt.Sprintf("- Workload Leases: `%d` active, `%d` expired, `%d` released\n\n", report.Leases.Active, report.Leases.Expired, report.Leases.Released))
 	}
 	if len(report.WorkloadStates) > 0 {
 		b.WriteString("## Workload States\n\n| Workload | Phase | Readiness | Progress | Next Action |\n|---|---|---:|---:|---|\n")

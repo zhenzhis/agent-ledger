@@ -31,6 +31,33 @@ func TestReadOnlyRejectsMutationWithoutRBACEnabled(t *testing.T) {
 	}
 }
 
+func TestReadOnlyWorkloadLeaseAccess(t *testing.T) {
+	db := testServerDB(t)
+	workloadID, err := db.CreateWorkload("read-only lease workload", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	lease, err := db.AcquireWorkloadLease(workloadID, "router-a", "execute", time.Minute)
+	if err != nil {
+		t.Fatalf("AcquireWorkloadLease: %v", err)
+	}
+	srv := New(db, "", Options{RBAC: config.RBACConfig{ReadOnly: true}})
+	body := strings.NewReader(`{"workload_id":"` + workloadID + `","holder":"router-b"}`)
+	writeRR := httptest.NewRecorder()
+	srv.handleWorkloadLeaseAcquire(writeRR, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/lease", body))
+	if writeRR.Code != http.StatusForbidden {
+		t.Fatalf("expected read-only lease acquire rejection, got %d body=%s", writeRR.Code, writeRR.Body.String())
+	}
+	readRR := httptest.NewRecorder()
+	srv.handleWorkloadLeases(readRR, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/workloads/leases?include_inactive=1", nil))
+	if readRR.Code != http.StatusOK {
+		t.Fatalf("read-only lease list status=%d body=%s", readRR.Code, readRR.Body.String())
+	}
+	if strings.Contains(readRR.Body.String(), lease.LeaseToken) {
+		t.Fatalf("read-only lease list leaked token: %s", readRR.Body.String())
+	}
+}
+
 func TestReadOnlyAnomaliesEndpointDoesNotWriteDerivedEvents(t *testing.T) {
 	db := testServerDB(t)
 	from := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)

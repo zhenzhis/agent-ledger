@@ -23,6 +23,7 @@ printf '{"source":"local","event_type":"workload.started","payload":{"goal":"rel
 AGENT_LEDGER_BUNDLE_KEY=test-key ./agent-ledger bundle export --signed --privacy > /tmp/agent-ledger-bundle.json
 AGENT_LEDGER_BUNDLE_KEY=test-key ./agent-ledger bundle import --verify < /tmp/agent-ledger-bundle.json
 ./agent-ledger policy evaluate --model gpt-5.5 --action model.call
+./agent-ledger workload lease list
 ```
 
 If available, also run:

@@ -252,6 +252,70 @@ func TestWorkloadLinkAPI(t *testing.T) {
 	}
 }
 
+func TestWorkloadLeaseAPI(t *testing.T) {
+	db := testServerDB(t)
+	workloadID, err := db.CreateWorkload("lease api workload", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	srv := New(db, "", Options{})
+	body, _ := json.Marshal(map[string]interface{}{
+		"workload_id": workloadID,
+		"holder":      "router-a",
+		"purpose":     "execute private task",
+		"ttl_seconds": 120,
+	})
+	first := httptest.NewRecorder()
+	srv.handleWorkloadLeaseAcquire(first, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/lease", bytes.NewReader(body)))
+	if first.Code != http.StatusOK {
+		t.Fatalf("lease acquire status=%d body=%s", first.Code, first.Body.String())
+	}
+	var acquire struct {
+		OK    bool                  `json:"ok"`
+		Lease storage.WorkloadLease `json:"lease"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &acquire); err != nil {
+		t.Fatalf("decode acquire: %v", err)
+	}
+	if !acquire.OK || acquire.Lease.LeaseID == "" || acquire.Lease.LeaseToken == "" || acquire.Lease.WorkloadID != workloadID {
+		t.Fatalf("unexpected acquire response: %+v", acquire)
+	}
+	conflictResp := httptest.NewRecorder()
+	srv.handleWorkloadLeaseAcquire(conflictResp, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/lease", bytes.NewReader(body)))
+	if conflictResp.Code != http.StatusConflict {
+		t.Fatalf("expected lease conflict, got %d body=%s", conflictResp.Code, conflictResp.Body.String())
+	}
+	renewBody, _ := json.Marshal(map[string]interface{}{"lease_id": acquire.Lease.LeaseID, "lease_token": acquire.Lease.LeaseToken, "ttl_seconds": 240})
+	renewResp := httptest.NewRecorder()
+	srv.handleWorkloadLeaseRenew(renewResp, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/lease/renew", bytes.NewReader(renewBody)))
+	if renewResp.Code != http.StatusOK {
+		t.Fatalf("renew status=%d body=%s", renewResp.Code, renewResp.Body.String())
+	}
+	listReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/workloads/leases?privacy=1", nil)
+	listResp := httptest.NewRecorder()
+	srv.handleWorkloadLeases(listResp, listReq)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list leases status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	if strings.Contains(listResp.Body.String(), acquire.Lease.LeaseToken) || strings.Contains(listResp.Body.String(), "router-a") || strings.Contains(listResp.Body.String(), "execute private task") {
+		t.Fatalf("lease list leaked private fields: %s", listResp.Body.String())
+	}
+	releaseBody, _ := json.Marshal(map[string]interface{}{"lease_id": acquire.Lease.LeaseID, "lease_token": acquire.Lease.LeaseToken})
+	releaseResp := httptest.NewRecorder()
+	srv.handleWorkloadLeaseRelease(releaseResp, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/lease/release", bytes.NewReader(releaseBody)))
+	if releaseResp.Code != http.StatusOK {
+		t.Fatalf("release status=%d body=%s", releaseResp.Code, releaseResp.Body.String())
+	}
+	audit, err := db.GetAuditLog(20)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	rawAudit, _ := json.Marshal(audit)
+	if !strings.Contains(string(rawAudit), "workload.lease.acquire") || strings.Contains(string(rawAudit), acquire.Lease.LeaseToken) || strings.Contains(string(rawAudit), "execute private task") {
+		t.Fatalf("unexpected lease audit log: %s", string(rawAudit))
+	}
+}
+
 func TestAgentRunLivenessAPI(t *testing.T) {
 	db := testServerDB(t)
 	workloadID, err := db.CreateWorkload("sensitive async goal", "codex", "agent-ledger", "zhenzhis/agent-ledger", "feature/private", "", "", 0)

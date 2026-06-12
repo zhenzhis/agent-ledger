@@ -577,6 +577,9 @@ func cliCommandRequiresWrite(args []string) bool {
 		}
 		return cliBool(args[2:], "--record")
 	case "workload":
+		if sub == "lease" || sub == "leases" {
+			return len(args) > 2 && args[2] != "list" && !strings.HasPrefix(args[2], "--")
+		}
 		switch sub {
 		case "", "list", "show", "timeline", "state", "status", "feed", "events", "liveness":
 			return false
@@ -1736,6 +1739,8 @@ func runWorkloadCLI(args []string, db *storage.DB) error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"rows": rows, "max_age": maxAge.String(), "stale_only": staleOnly})
+	case "lease", "leases":
+		return runWorkloadLeaseCLI(args[1:], db)
 	case "context", "record-context":
 		return runWorkloadContextCLI(args[1:], db)
 	case "tool", "record-tool":
@@ -1793,6 +1798,65 @@ func runWorkloadContextCLI(args []string, db *storage.DB) error {
 		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(result)
+}
+
+func runWorkloadLeaseCLI(args []string, db *storage.DB) error {
+	if len(args) == 0 || args[0] == "list" || strings.HasPrefix(args[0], "--") {
+		rows, err := db.ListWorkloadLeases(cliBool(args, "--include-inactive"), cliInt(args, "--limit", 200))
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"rows": rows})
+	}
+	switch args[0] {
+	case "acquire", "claim":
+		workloadID := firstNonEmptyCLI(cliValue(args[1:], "--workload-id"), cliValue(args[1:], "--id"))
+		ttl, err := cliLeaseTTL(args[1:])
+		if err != nil {
+			return err
+		}
+		lease, err := db.AcquireWorkloadLease(workloadID, cliValue(args[1:], "--holder"), cliValue(args[1:], "--purpose"), ttl)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"ok": true, "lease": lease})
+	case "renew":
+		ttl, err := cliLeaseTTL(args[1:])
+		if err != nil {
+			return err
+		}
+		lease, err := db.RenewWorkloadLease(cliValue(args[1:], "--lease-id"), cliValue(args[1:], "--lease-token"), ttl)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"ok": true, "lease": lease})
+	case "release":
+		lease, err := db.ReleaseWorkloadLease(cliValue(args[1:], "--lease-id"), cliValue(args[1:], "--lease-token"))
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"ok": true, "lease": lease})
+	default:
+		return fmt.Errorf("usage: agent-ledger workload lease [list|acquire|renew|release] [--workload-id id] [--holder name] [--purpose text] [--ttl 30m] [--lease-id id] [--lease-token token]")
+	}
+}
+
+func cliLeaseTTL(args []string) (time.Duration, error) {
+	if raw := cliValue(args, "--ttl"); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil {
+			return 0, err
+		}
+		if ttl <= 0 {
+			return 0, fmt.Errorf("--ttl must be positive")
+		}
+		return ttl, nil
+	}
+	seconds := cliInt(args, "--ttl-seconds", 0)
+	if seconds > 0 {
+		return time.Duration(seconds) * time.Second, nil
+	}
+	return 0, nil
 }
 
 func runWorkloadToolCLI(args []string, db *storage.DB) error {
