@@ -428,7 +428,7 @@ Canonical event ingest 支持 workload、workload link、run、run heartbeat、m
 agent-ledger doctor --format markdown
 ```
 
-也可以打开 `GET /api/doctor?format=markdown&privacy=1`。诊断报告会检查当前时间窗口、collector health、路径是否存在/可读、最近扫描错误、价格新鲜度、未计价模型、空 usage 窗口、canonical-to-usage projection 一致性，以及 stale run、policy block 等 workload terminal-state 问题。
+也可以打开 `GET /api/doctor?format=markdown&privacy=1`。诊断报告会检查当前时间窗口、collector health、路径是否存在/可读、最近扫描错误、价格新鲜度、未计价模型、空 usage 窗口、canonical-to-usage projection 一致性、control idempotency 健康，以及 stale run、policy block 等 workload terminal-state 问题。
 
 如果 Codex、OpenCode 或其他来源没有数据：
 
@@ -455,7 +455,7 @@ agent-ledger doctor --format markdown
 
 - 默认绑定 `127.0.0.1`。
 - `agent-ledger config status`、`GET /api/config/status` 和 MCP `ledger.config_status` 用于部署检查，不暴露原始路径、auth token、API key、webhook URL、机器名、作者、prompt、response 或 session id。
-- `agent-ledger readiness`、`GET /api/readiness`、MCP `ledger.readiness` 与 `agent-ledger://readiness` 用于控制面探针，只暴露状态、计数、检查标识和修复建议。
+- `agent-ledger readiness`、`GET /api/readiness`、MCP `ledger.readiness` 与 `agent-ledger://readiness` 用于控制面探针，只暴露状态、计数、检查标识和修复建议，包括隐私安全的 control idempotency key/replay 计数。
 - `agent-ledger admission check`、`GET /api/admission/check`、MCP `ledger.admission_check` 与 `agent-ledger://admission/check` 只暴露操作访问决策；不暴露 request body、完整 CLI 参数、原始路径、token、prompt、session、项目、分支、机器名或作者。
 - 只读取本地 agent 日志和数据库，不上传 usage 数据。
 - pricing sync 是默认唯一出站请求。

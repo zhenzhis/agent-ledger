@@ -428,7 +428,7 @@ Start with the one-click doctor:
 agent-ledger doctor --format markdown
 ```
 
-Or open `GET /api/doctor?format=markdown&privacy=1`. The report checks the selected time range, collector health, path existence/readability, last scan errors, pricing freshness, unpriced models, empty usage windows, canonical-to-usage projection consistency, and workload terminal-state issues such as stale runs or blocked policy decisions.
+Or open `GET /api/doctor?format=markdown&privacy=1`. The report checks the selected time range, collector health, path existence/readability, last scan errors, pricing freshness, unpriced models, empty usage windows, canonical-to-usage projection consistency, control idempotency health, and workload terminal-state issues such as stale runs or blocked policy decisions.
 
 If Codex, OpenCode, or another source shows no data:
 
@@ -455,7 +455,7 @@ If costs differ from a provider invoice:
 
 - Binds to `127.0.0.1` by default.
 - `agent-ledger config status`, `GET /api/config/status`, and MCP `ledger.config_status` are designed for deployment checks and never expose raw paths, auth tokens, API keys, webhook URLs, machine names, authors, prompts, responses, or session ids.
-- `agent-ledger readiness`, `GET /api/readiness`, MCP `ledger.readiness`, and `agent-ledger://readiness` are designed for control-plane probes and expose only status, counts, check identifiers, and remediation hints.
+- `agent-ledger readiness`, `GET /api/readiness`, MCP `ledger.readiness`, and `agent-ledger://readiness` are designed for control-plane probes and expose only status, counts, check identifiers, and remediation hints, including privacy-safe control idempotency key/replay counts.
 - `agent-ledger admission check`, `GET /api/admission/check`, MCP `ledger.admission_check`, and `agent-ledger://admission/check` expose operation access decisions only; request bodies, full CLI arguments, raw paths, tokens, prompts, sessions, projects, branches, machine names, and authors are excluded.
 - Reads local agent logs and databases; it does not upload usage data.
 - Pricing sync is the expected outbound request.

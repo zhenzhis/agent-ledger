@@ -18,18 +18,19 @@ type DoctorCheck struct {
 
 // DoctorReport combines ingestion, pricing, quality, and usage checks.
 type DoctorReport struct {
-	GeneratedAt    string                `json:"generated_at"`
-	From           string                `json:"from"`
-	To             string                `json:"to"`
-	Stats          DashboardStats        `json:"stats"`
-	Ingestion      []IngestionHealth     `json:"ingestion"`
-	Quality        *DataQualityReport    `json:"quality"`
-	Projection     *ProjectionQuality    `json:"projection"`
-	WorkloadStates []WorkloadState       `json:"workload_states,omitempty"`
-	PricingSources []PricingSourceStatus `json:"pricing_sources"`
-	Checks         []DoctorCheck         `json:"checks"`
-	Summary        string                `json:"summary"`
-	Runtime        *RuntimeStatus        `json:"runtime,omitempty"`
+	GeneratedAt    string                   `json:"generated_at"`
+	From           string                   `json:"from"`
+	To             string                   `json:"to"`
+	Stats          DashboardStats           `json:"stats"`
+	Ingestion      []IngestionHealth        `json:"ingestion"`
+	Quality        *DataQualityReport       `json:"quality"`
+	Projection     *ProjectionQuality       `json:"projection"`
+	WorkloadStates []WorkloadState          `json:"workload_states,omitempty"`
+	PricingSources []PricingSourceStatus    `json:"pricing_sources"`
+	Idempotency    *ControlIdempotencyStats `json:"idempotency,omitempty"`
+	Checks         []DoctorCheck            `json:"checks"`
+	Summary        string                   `json:"summary"`
+	Runtime        *RuntimeStatus           `json:"runtime,omitempty"`
 }
 
 // GetDoctorReport returns local diagnostics for "why is my data wrong or empty?"
@@ -59,6 +60,10 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 	if err != nil {
 		return nil, err
 	}
+	idempotency, err := d.GetControlIdempotencyStats()
+	if err != nil {
+		return nil, err
+	}
 	report := &DoctorReport{
 		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
 		From:           from.Format(time.RFC3339),
@@ -69,6 +74,7 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 		Projection:     projection,
 		WorkloadStates: workloadStates,
 		PricingSources: pricingSources,
+		Idempotency:    idempotency,
 	}
 	report.Checks = append(report.Checks, usageDoctorChecks(*stats, source, model, project)...)
 	report.Checks = append(report.Checks, ingestionDoctorChecks(health, source)...)
@@ -76,6 +82,7 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 	report.Checks = append(report.Checks, provenanceDoctorChecks(quality)...)
 	report.Checks = append(report.Checks, projectionDoctorChecks(projection)...)
 	report.Checks = append(report.Checks, workloadStateDoctorChecks(workloadStates)...)
+	report.Checks = append(report.Checks, idempotencyDoctorChecks(idempotency)...)
 	report.Summary = doctorSummary(report.Checks)
 	if len(report.Checks) == 0 {
 		report.Checks = append(report.Checks, DoctorCheck{
@@ -86,6 +93,28 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 		report.Summary = "ok"
 	}
 	return report, nil
+}
+
+func idempotencyDoctorChecks(stats *ControlIdempotencyStats) []DoctorCheck {
+	if stats == nil {
+		return []DoctorCheck{{
+			Name: "control_idempotency.unavailable", Status: "warning", Severity: "warning",
+			Message: "control idempotency stats could not be calculated",
+			Action:  "inspect SQLite migrations and control_idempotency table access",
+		}}
+	}
+	if stats.TotalKeys == 0 {
+		return []DoctorCheck{{
+			Name: "control_idempotency.ready", Status: "ok", Severity: "info",
+			Message: "control idempotency table is queryable; no retry keys have been recorded yet",
+			Action:  "pass stable idempotency keys from routers, wrappers, or CI when retrying workload/run writes",
+		}}
+	}
+	return []DoctorCheck{{
+		Name: "control_idempotency.ready", Status: "ok", Severity: "info",
+		Message: fmt.Sprintf("control idempotency table is queryable with %d keys and %d replayed requests", stats.TotalKeys, stats.ReplayCount),
+		Action:  "continue using stable idempotency keys for async agent router retries",
+	}}
 }
 
 func provenanceDoctorChecks(quality *DataQualityReport) []DoctorCheck {
@@ -297,6 +326,9 @@ func FormatDoctorMarkdown(report *DoctorReport) string {
 	}
 	if report.Quality != nil && report.Quality.Provenance != nil {
 		b.WriteString(fmt.Sprintf("- Provenance: `%s` (`%.2f` confidence)\n\n", sanitizeMarkdownCell(report.Quality.Provenance.Message), report.Quality.Provenance.Confidence))
+	}
+	if report.Idempotency != nil {
+		b.WriteString(fmt.Sprintf("- Control Idempotency: `%d` keys, `%d` replayed requests\n\n", report.Idempotency.TotalKeys, report.Idempotency.ReplayCount))
 	}
 	if len(report.WorkloadStates) > 0 {
 		b.WriteString("## Workload States\n\n| Workload | Phase | Readiness | Progress | Next Action |\n|---|---|---:|---:|---|\n")

@@ -132,6 +132,31 @@ func TestGetDoctorReportIncludesWorkloadStateIssues(t *testing.T) {
 	}
 }
 
+func TestGetDoctorReportIncludesControlIdempotencyStats(t *testing.T) {
+	db := tempDB(t)
+	now := time.Now().UTC()
+	if _, _, err := db.CreateWorkloadIdempotent("doctor-idem-key", "doctor idempotency", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0); err != nil {
+		t.Fatalf("CreateWorkloadIdempotent first: %v", err)
+	}
+	if _, replayed, err := db.CreateWorkloadIdempotent("doctor-idem-key", "doctor idempotency", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0); err != nil || !replayed {
+		t.Fatalf("CreateWorkloadIdempotent replay replayed=%v err=%v", replayed, err)
+	}
+	report, err := db.GetDoctorReport(now.Add(-time.Hour), now.Add(time.Hour), time.Hour, "codex", "", "agent-ledger")
+	if err != nil {
+		t.Fatalf("GetDoctorReport: %v", err)
+	}
+	if report.Idempotency == nil || report.Idempotency.TotalKeys != 1 || report.Idempotency.ReplayCount != 1 {
+		t.Fatalf("missing idempotency stats: %+v", report.Idempotency)
+	}
+	if !hasDoctorCheck(report.Checks, "control_idempotency.ready") {
+		t.Fatalf("missing idempotency check: %+v", report.Checks)
+	}
+	md := FormatDoctorMarkdown(report)
+	if !strings.Contains(md, "Control Idempotency") || strings.Contains(md, "doctor-idem-key") {
+		t.Fatalf("unexpected idempotency markdown: %s", md)
+	}
+}
+
 func hasDoctorCheck(checks []DoctorCheck, name string) bool {
 	for _, check := range checks {
 		if check.Name == name {

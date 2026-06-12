@@ -36,22 +36,24 @@ type ReadinessReport struct {
 }
 
 type ReadinessSummary struct {
-	TotalChecks      int    `json:"total_checks"`
-	PassingChecks    int    `json:"passing_checks"`
-	CriticalFailures int    `json:"critical_failures"`
-	Warnings         int    `json:"warnings"`
-	Info             int    `json:"info"`
-	UsageRecords     int    `json:"usage_records"`
-	PromptEvents     int    `json:"prompt_events"`
-	HealthSources    int    `json:"health_sources"`
-	HealthErrors     int    `json:"health_errors"`
-	PricingSources   int    `json:"pricing_sources"`
-	PricingStale     int    `json:"pricing_stale"`
-	PricingErrors    int    `json:"pricing_errors"`
-	ConfigIssues     int    `json:"config_issues"`
-	ContractChecks   int    `json:"contract_checks"`
-	ContractFailures int    `json:"contract_failures"`
-	Recommendation   string `json:"recommendation"`
+	TotalChecks        int    `json:"total_checks"`
+	PassingChecks      int    `json:"passing_checks"`
+	CriticalFailures   int    `json:"critical_failures"`
+	Warnings           int    `json:"warnings"`
+	Info               int    `json:"info"`
+	UsageRecords       int    `json:"usage_records"`
+	PromptEvents       int    `json:"prompt_events"`
+	IdempotencyKeys    int    `json:"idempotency_keys"`
+	IdempotencyReplays int    `json:"idempotency_replays"`
+	HealthSources      int    `json:"health_sources"`
+	HealthErrors       int    `json:"health_errors"`
+	PricingSources     int    `json:"pricing_sources"`
+	PricingStale       int    `json:"pricing_stale"`
+	PricingErrors      int    `json:"pricing_errors"`
+	ConfigIssues       int    `json:"config_issues"`
+	ContractChecks     int    `json:"contract_checks"`
+	ContractFailures   int    `json:"contract_failures"`
+	Recommendation     string `json:"recommendation"`
 }
 
 type ReadinessCheck struct {
@@ -110,6 +112,7 @@ func FormatReadinessMarkdown(report *ReadinessReport) string {
 	fmt.Fprintf(&b, "- Local first: `%t`\n", report.LocalFirst)
 	fmt.Fprintf(&b, "- Checks: `%d` passing, `%d` critical, `%d` warnings\n", report.Summary.PassingChecks, report.Summary.CriticalFailures, report.Summary.Warnings)
 	fmt.Fprintf(&b, "- Data: `%d` usage records, `%d` prompt events, `%d` health sources\n", report.Summary.UsageRecords, report.Summary.PromptEvents, report.Summary.HealthSources)
+	fmt.Fprintf(&b, "- Control idempotency: `%d` keys, `%d` replays\n", report.Summary.IdempotencyKeys, report.Summary.IdempotencyReplays)
 	fmt.Fprintf(&b, "- Pricing: `%d` sources, `%d` stale, `%d` errors\n", report.Summary.PricingSources, report.Summary.PricingStale, report.Summary.PricingErrors)
 	fmt.Fprintf(&b, "- Recommendation: %s\n\n", report.Summary.Recommendation)
 	b.WriteString("## Checks\n\n")
@@ -161,6 +164,14 @@ func addCoreChecks(report *ReadinessReport, db *storage.DB) {
 	} else {
 		report.Summary.PromptEvents = promptEvents
 		report.addCheck("database.prompt_events_query", true, "critical", "prompt_events query succeeded", "")
+	}
+	idempotency, err := db.GetControlIdempotencyStats()
+	if err != nil {
+		report.addCheck("database.control_idempotency_query", false, "critical", "control_idempotency query failed", "inspect SQLite schema migrations")
+	} else {
+		report.Summary.IdempotencyKeys = idempotency.TotalKeys
+		report.Summary.IdempotencyReplays = idempotency.ReplayCount
+		report.addCheck("database.control_idempotency_query", true, "critical", "control_idempotency query succeeded", "")
 	}
 }
 

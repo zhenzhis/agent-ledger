@@ -168,6 +168,13 @@ func TestControlOperationIdempotencyForWorkloadAndRun(t *testing.T) {
 	if runCount != 1 {
 		t.Fatalf("expected one agent run, got %d", runCount)
 	}
+	stats, err := db.GetControlIdempotencyStats()
+	if err != nil {
+		t.Fatalf("GetControlIdempotencyStats: %v", err)
+	}
+	if stats.TotalKeys != 2 || stats.ReplayedKeys != 2 || stats.ReplayCount != 3 || len(stats.Operations) != 2 {
+		t.Fatalf("unexpected idempotency stats: %+v", stats)
+	}
 }
 
 func TestLinkWorkloadsCreatesDependencyEdge(t *testing.T) {
