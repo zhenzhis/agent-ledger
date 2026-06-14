@@ -79,6 +79,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://config/status")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://readiness")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://admission/check")
+	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://workloads/queue")
 
 	cfg.Integrations.OTLPReceiver.Enabled = true
 	cfg.Gateway.Enabled = true

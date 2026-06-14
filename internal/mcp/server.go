@@ -644,6 +644,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://admission/check", "Admission Check", "Privacy-safe dry-run for HTTP, CLI, and MCP operations; supports surface/method/path/command/tool/role/dry_run/record/has_workload_id query parameters.", "application/json"),
 		resource("agent-ledger://budget/current", "Current Budget Windows", "Local quota and budget estimate for 5h/day/week/month windows; supports window/source/model/project query parameters.", "application/json"),
 		resource("agent-ledger://workloads/recent", "Recent Workloads", "Recent workload summaries and terminal-state snapshots from the local ledger; supports from/to/source/model/project/status/q/limit/offset/stale_after query parameters.", "application/json"),
+		resource("agent-ledger://workloads/queue", "Workload Queue", "Read-only workload queue claimability and lease pressure stats; supports source/project/repo/team/owner/status/q query parameters.", "application/json"),
 		resource("agent-ledger://workloads/feed", "Workload Event Feed", "Cursor-stable metadata-only workload state feed for local monitors and agent routers; supports from/to/source/model/project/phase/severity/limit/stale_after query parameters.", "application/json"),
 		resource("agent-ledger://policies/status", "Policy Status", "Local policy configuration summary without prompt or secret content.", "application/json"),
 		resource("agent-ledger://policy/approvals", "Policy Approvals", "Local policy approval queue; supports status, limit, and privacy query parameters.", "application/json"),
@@ -921,6 +922,8 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 		return s.resourceBudget(values)
 	case "agent-ledger://workloads/recent":
 		return s.resourceRecentWorkloads(values)
+	case "agent-ledger://workloads/queue":
+		return s.resourceWorkloadQueue(values)
 	case "agent-ledger://workloads/feed":
 		return s.resourceWorkloadFeed(values)
 	case "agent-ledger://policies/status":
@@ -1019,6 +1022,18 @@ func (s *Server) resourceWorkloadFeed(values url.Values) (*storage.WorkloadEvent
 		values.Get("severity"),
 		boundedQueryInt(values, "limit", 50, 1, 200),
 		staleAfter)
+}
+
+func (s *Server) resourceWorkloadQueue(values url.Values) (*storage.WorkloadQueueStats, error) {
+	return s.db.GetWorkloadQueueStats(storage.WorkloadClaimFilter{
+		Source:  values.Get("source"),
+		Project: values.Get("project"),
+		Repo:    values.Get("repo"),
+		Team:    values.Get("team"),
+		Owner:   values.Get("owner"),
+		Status:  values.Get("status"),
+		Query:   values.Get("q"),
+	})
 }
 
 func (s *Server) resourceApprovalRoutes(values url.Values) (*storage.ApprovalRouteSummary, error) {

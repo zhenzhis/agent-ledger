@@ -177,7 +177,7 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 		t.Fatalf("resource subscriptions should be advertised: %#v", resourceCaps)
 	}
 	resources := out[1]["result"].(map[string]interface{})["resources"].([]interface{})
-	if !hasResource(resources, "agent-ledger://discovery/manifest") || !hasResource(resources, "agent-ledger://contracts/bundle") || !hasResource(resources, "agent-ledger://contracts/verification") || !hasResource(resources, "agent-ledger://contracts/openapi") || !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://runtime/status") || !hasResource(resources, "agent-ledger://config/status") || !hasResource(resources, "agent-ledger://readiness") || !hasResource(resources, "agent-ledger://admission/check") || !hasResource(resources, "agent-ledger://budget/current") || !hasResource(resources, "agent-ledger://workloads/feed") || !hasResource(resources, "agent-ledger://policy/approvals") || !hasResource(resources, "agent-ledger://policy/approval-routes") {
+	if !hasResource(resources, "agent-ledger://discovery/manifest") || !hasResource(resources, "agent-ledger://contracts/bundle") || !hasResource(resources, "agent-ledger://contracts/verification") || !hasResource(resources, "agent-ledger://contracts/openapi") || !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://runtime/status") || !hasResource(resources, "agent-ledger://config/status") || !hasResource(resources, "agent-ledger://readiness") || !hasResource(resources, "agent-ledger://admission/check") || !hasResource(resources, "agent-ledger://budget/current") || !hasResource(resources, "agent-ledger://workloads/queue") || !hasResource(resources, "agent-ledger://workloads/feed") || !hasResource(resources, "agent-ledger://policy/approvals") || !hasResource(resources, "agent-ledger://policy/approval-routes") {
 		t.Fatalf("expected core resources, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
@@ -280,6 +280,25 @@ func TestMCPRecentWorkloadsResourceIncludesState(t *testing.T) {
 	}
 	if payload["stale_after_seconds"] == nil {
 		t.Fatalf("resource missing stale threshold: %#v", payload)
+	}
+}
+
+func TestMCPWorkloadQueueResource(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	srv := New(db, cfg)
+	if _, err := db.CreateWorkload("queue resource workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0); err != nil {
+		t.Fatalf("create workload: %v", err)
+	}
+
+	out := serveLines(t, srv, `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"agent-ledger://workloads/queue?source=codex"}}`)
+	var payload map[string]interface{}
+	text := resourceTextPayload(t, out[0])
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		t.Fatalf("decode queue resource: %v\n%s", err, text)
+	}
+	if payload["ok"] != true || payload["claimable"].(float64) != 1 || payload["active_leases"].(float64) != 0 {
+		t.Fatalf("unexpected queue resource payload: %#v", payload)
 	}
 }
 
