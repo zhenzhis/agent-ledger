@@ -136,7 +136,7 @@ Workload read endpoints for detail, graph, timeline, and terminal-state snapshot
 
 Only one active lease is allowed per workload. `lease_token` is returned only from acquire/claim responses; list, renew, release, readiness, doctor, audit, and contract surfaces never expose it. SQLite stores a SHA-256 token hash, not the plaintext token. Read paths derive expired status without mutating SQLite, so observer/read-only mode remains read-only.
 
-Strict adapter fixtures are available in `examples/adapter-fixtures/` for canonical events, OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, provider SSE streams, OpenTelemetry GenAI spans, OTLP `resourceSpans`, and A2A task snapshots. A local OpenTelemetry Collector example is available in `examples/otel-collector/`.
+Strict adapter fixtures are available in `examples/adapter-fixtures/` for canonical events, OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, provider SSE streams, OpenTelemetry GenAI/OpenInference spans, OTLP `resourceSpans`, and A2A task snapshots. A local OpenTelemetry Collector example is available in `examples/otel-collector/`.
 
 ## Configuration
 

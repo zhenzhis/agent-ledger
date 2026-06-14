@@ -136,7 +136,7 @@ Workload detail、graph、timeline 与 terminal-state snapshot 读端点都是 G
 
 同一个 workload 同时只允许一个 active lease。`lease_token` 只在 acquire/claim 响应中返回；list、renew、release、readiness、doctor、audit 和 contract surface 都不会返回它。SQLite 只保存 SHA-256 token hash，不保存明文 token。读路径只派生过期状态，不写回 SQLite，因此 observer/read-only 模式仍保持只读。
 
-仓库内 `examples/adapter-fixtures/` 提供 canonical events、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages、provider SSE stream、OpenTelemetry GenAI span、OTLP `resourceSpans` 与 A2A task snapshot 的 strict conformance 样例。`examples/otel-collector/` 提供本地 OpenTelemetry Collector 导出示例。
+仓库内 `examples/adapter-fixtures/` 提供 canonical events、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages、provider SSE stream、OpenTelemetry GenAI/OpenInference span、OTLP `resourceSpans` 与 A2A task snapshot 的 strict conformance 样例。`examples/otel-collector/` 提供本地 OpenTelemetry Collector 导出示例。
 
 ## 配置
 

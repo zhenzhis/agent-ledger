@@ -151,6 +151,7 @@ func AdapterContractSpec() AdapterContract {
 				"agent-ledger adapter conformance --kind provider --strict --file examples/adapter-fixtures/provider-openai-response.json",
 				"agent-ledger adapter conformance --kind provider-stream --strict --file examples/adapter-fixtures/provider-anthropic-message-stream.sse",
 				"agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otel-genai-span.json",
+				"agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otel-openinference-span.json",
 				"agent-ledger adapter conformance --kind a2a --strict --file examples/adapter-fixtures/a2a-task.json",
 			},
 		},

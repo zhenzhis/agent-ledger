@@ -1,0 +1,25 @@
+{
+  "trace_id": "trace-openinference-fixture-001",
+  "span_id": "span-openinference-fixture-001",
+  "name": "OpenInference LLM span",
+  "start_time": "2026-06-07T12:05:00Z",
+  "end_time": "2026-06-07T12:05:01Z",
+  "attributes": {
+    "openinference.span.kind": "LLM",
+    "llm.provider": "google",
+    "llm.model_name": "gemini-2.5-pro",
+    "llm.token_count.prompt": 160,
+    "llm.token_count.prompt_details.cache_read": 40,
+    "llm.token_count.prompt_details.cache_write": 10,
+    "llm.token_count.completion": 55,
+    "llm.token_count.completion_details.reasoning": 12,
+    "llm.finish_reason": "stop",
+    "agent_ledger.goal": "Validate OpenInference fixture",
+    "agent_ledger.project": "agent-ledger",
+    "agent_ledger.source": "otel-openinference-fixture",
+    "agent_ledger.source_version": "openinference-fixture@v1",
+    "agent_ledger.parser_version": "agent-ledger-otel-genai@v1",
+    "agent_ledger.raw_ref": "otel:trace-openinference-fixture-001:span-openinference-fixture-001",
+    "agent_ledger.match_type": "source_reported"
+  }
+}

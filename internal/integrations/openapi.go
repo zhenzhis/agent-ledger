@@ -105,7 +105,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/workload-events":                workloadEventsOperation(false),
 			"/api/workload-events/stream":         workloadEventsOperation(true),
 			"/api/fleet-attribution":              filteredReadOperation("dashboard", "Get fleet attribution", "Read heuristic parent/child and parallel agent attribution with privacy filters.", "FleetAttributionReport", append(scopedTimeParams(), intQueryParam("limit", "Maximum fleet rows."))),
-			"/api/otel/genai":                     ecosystemIngestOperation("Ingest OpenTelemetry GenAI spans", "Convert OpenTelemetry GenAI JSON spans into metadata-only canonical events.", "OTelGenAIRequest", "EcosystemIngestResponse", false),
+			"/api/otel/genai":                     ecosystemIngestOperation("Ingest OpenTelemetry GenAI spans", "Convert OpenTelemetry GenAI/OpenInference JSON spans into metadata-only canonical events.", "OTelGenAIRequest", "EcosystemIngestResponse", false),
 			"/api/otlp/v1/traces":                 otlpTracesOperation(),
 			"/v1/traces":                          otlpTracesOperation(),
 			"/api/a2a/tasks":                      ecosystemIngestOperation("Ingest A2A task telemetry", "Convert A2A JSON task snapshots/events into workload, run, artifact, evaluation, and policy metadata events.", "A2ATaskRequest", "EcosystemIngestResponse", false),

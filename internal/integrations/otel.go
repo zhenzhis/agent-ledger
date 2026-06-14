@@ -70,17 +70,23 @@ func ConvertOTelGenAISpans(spans []OTelSpan) ([]storage.CanonicalEvent, error) {
 			continue
 		}
 		attrs := mergedAttrs(span)
-		inputTotal := intAttr(attrs, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.usage.prompt_tokens")
-		cacheRead := intAttr(attrs, "gen_ai.usage.cache_read.input_tokens", "gen_ai.usage.cache_read_input_tokens")
-		cacheWrite := intAttr(attrs, "gen_ai.usage.cache_creation.input_tokens", "gen_ai.usage.cache_creation_input_tokens")
+		inputTotal := intAttr(attrs, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.usage.prompt_tokens", "llm.token_count.prompt", "input_tokens", "prompt_tokens")
+		cacheRead := intAttr(attrs, "gen_ai.usage.cache_read.input_tokens", "gen_ai.usage.cache_read_input_tokens", "llm.token_count.prompt_details.cache_read", "llm.token_count.prompt_details.cache_input", "cache_read_input_tokens", "cache_read_tokens")
+		cacheWrite := intAttr(attrs, "gen_ai.usage.cache_creation.input_tokens", "gen_ai.usage.cache_creation_input_tokens", "llm.token_count.prompt_details.cache_write", "cache_creation_input_tokens", "cache_creation_tokens", "cache_write_input_tokens", "cache_write_tokens")
 		nonCachedInput := inputTotal - cacheRead - cacheWrite
 		if nonCachedInput < 0 {
 			nonCachedInput = 0
 		}
-		output := intAttr(attrs, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.usage.completion_tokens")
-		reasoning := intAttr(attrs, "gen_ai.usage.reasoning.output_tokens", "gen_ai.usage.reasoning_output_tokens")
-		model := stringAttr(attrs, "agent_ledger.model", "gen_ai.response.model", "gen_ai.request.model", "llm.request.model")
-		provider := stringAttr(attrs, "gen_ai.provider.name", "gen_ai.system", "llm.system")
+		output := intAttr(attrs, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.usage.completion_tokens", "llm.token_count.completion", "output_tokens", "completion_tokens")
+		if output == 0 {
+			totalTokens := intAttr(attrs, "gen_ai.usage.total_tokens", "llm.token_count.total", "total_tokens")
+			if totalTokens > inputTotal {
+				output = totalTokens - inputTotal
+			}
+		}
+		reasoning := intAttr(attrs, "gen_ai.usage.reasoning.output_tokens", "gen_ai.usage.reasoning_output_tokens", "llm.token_count.completion_details.reasoning", "reasoning_output_tokens", "reasoning_tokens")
+		model := stringAttr(attrs, "agent_ledger.model", "gen_ai.response.model", "gen_ai.request.model", "llm.request.model", "llm.model_name", "model")
+		provider := stringAttr(attrs, "gen_ai.provider.name", "gen_ai.system", "llm.provider", "llm.system", "provider")
 		goal := stringAttr(attrs, "agent_ledger.goal", "agent.goal", "workload.goal")
 		workloadID := stringAttr(attrs, "agent_ledger.workload_id")
 		if workloadID == "" && goal != "" {
@@ -94,14 +100,14 @@ func ConvertOTelGenAISpans(spans []OTelSpan) ([]storage.CanonicalEvent, error) {
 			"provider":                    provider,
 			"model":                       model,
 			"model_alias":                 stringAttr(attrs, "gen_ai.request.model", "llm.request.model"),
-			"operation":                   stringAttr(attrs, "gen_ai.operation.name", "gen_ai.operation"),
+			"operation":                   stringAttr(attrs, "gen_ai.operation.name", "gen_ai.operation", "openinference.span.kind"),
 			"input_tokens":                nonCachedInput,
 			"cache_read_input_tokens":     cacheRead,
 			"cache_creation_input_tokens": cacheWrite,
 			"output_tokens":               output,
 			"reasoning_output_tokens":     reasoning,
 			"latency_ms":                  span.DurationMS(),
-			"finish_reason":               stringAttr(attrs, "gen_ai.response.finish_reasons", "gen_ai.response.finish_reason"),
+			"finish_reason":               stringAttr(attrs, "gen_ai.response.finish_reasons", "gen_ai.response.finish_reason", "llm.finish_reason"),
 			"pricing_source":              "unpriced",
 			"pricing_confidence":          "opentelemetry-metadata",
 			"otel_span_name":              span.Name,
@@ -254,7 +260,7 @@ func decodeSpanObject(raw json.RawMessage, resourceAttrs map[string]interface{})
 		EndTime:          timeField(obj, "end_time", "endTime", "endTimeUnixNano"),
 		Attributes:       attrs,
 		ResourceAttrs:    cloneAttrs(resourceAttrs),
-		SourceConvention: "opentelemetry.gen_ai",
+		SourceConvention: inferOTelConvention(attrs, resourceAttrs),
 	}
 	return span, nil
 }
@@ -330,11 +336,22 @@ func cloneAttrs(in map[string]interface{}) map[string]interface{} {
 
 func isGenAISpan(span OTelSpan) bool {
 	for key := range mergedAttrs(span) {
-		if strings.HasPrefix(key, "gen_ai.") || strings.HasPrefix(key, "llm.") || strings.HasPrefix(key, "agent_ledger.") {
+		if strings.HasPrefix(key, "gen_ai.") || strings.HasPrefix(key, "llm.") || strings.HasPrefix(key, "openinference.") || strings.HasPrefix(key, "agent_ledger.") {
 			return true
 		}
 	}
 	return false
+}
+
+func inferOTelConvention(attrSets ...map[string]interface{}) string {
+	for _, attrs := range attrSets {
+		for key := range attrs {
+			if strings.HasPrefix(key, "openinference.") || strings.HasPrefix(key, "llm.token_count.") || key == "llm.model_name" {
+				return "openinference"
+			}
+		}
+	}
+	return "opentelemetry.gen_ai"
 }
 
 func stringAttr(attrs map[string]interface{}, keys ...string) string {
