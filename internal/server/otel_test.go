@@ -27,6 +27,50 @@ func TestOTLPReceiverDisabledByDefault(t *testing.T) {
 	}
 }
 
+func TestOTLPReceiverReadOnlyRejectsWrite(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{
+		RBAC: config.RBACConfig{ReadOnly: true},
+		Integrations: config.IntegrationsConfig{
+			OTLPReceiver: config.OTLPReceiverConfig{Enabled: true, MaxBodyBytes: 1 << 20, MaxSpans: 10},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/v1/traces", strings.NewReader(otlpPayload("span-1")))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleOTLPTraces(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected read-only 403, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "read-only mode") {
+		t.Fatalf("expected explicit read-only error, got %s", rr.Body.String())
+	}
+	rows, err := db.GetAuditLog(10)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("read-only OTLP receiver should not write audit rows: %+v", rows)
+	}
+}
+
+func TestOTLPReceiverRejectsOversizedBody(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{Integrations: config.IntegrationsConfig{
+		OTLPReceiver: config.OTLPReceiverConfig{Enabled: true, MaxBodyBytes: 32, MaxSpans: 10},
+	}})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/v1/traces", strings.NewReader(otlpPayload("span-1")))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleOTLPTraces(rr, req)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("expected JSON error content type, got %q", got)
+	}
+}
+
 func TestOTLPReceiverIngestsJSONSpans(t *testing.T) {
 	db := testServerDB(t)
 	srv := New(db, "", Options{Integrations: config.IntegrationsConfig{

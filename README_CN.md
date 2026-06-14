@@ -215,7 +215,7 @@ gateway:
 
 企业合同价、三方中转价、地区倍率和内部折扣请通过 `pricing.overrides` 配置。
 
-可选 gateway 是本地 provider 代理，支持 OpenAI-compatible Chat Completions、OpenAI Responses 与 Anthropic Messages。它默认关闭，支持 OpenAI-compatible Chat Completions JSON/SSE、OpenAI Responses JSON/SSE，以及 Anthropic Messages JSON/SSE，只从配置的环境变量读取上游 API key，并只记录 token usage 与审计元数据，不保存 request messages 或 response content。OpenAI Responses streaming usage 会从最终 `response.completed` 事件记录。Anthropic Messages streaming usage 会合并 `message_start` 与 `message_delta` SSE 事件中的 usage。对 OpenAI Chat Completions streaming 请求，`include_stream_usage: true` 会在客户端没有显式设置 `stream_options.include_usage` 时请求兼容上游返回最终 usage chunk；如果三方中转拒绝该选项，可设为 `false`。
+可选 gateway 是本地 provider 代理，支持 OpenAI-compatible Chat Completions、OpenAI Responses 与 Anthropic Messages。它默认关闭，支持 OpenAI-compatible Chat Completions JSON/SSE、OpenAI Responses JSON/SSE，以及 Anthropic Messages JSON/SSE，只从配置的环境变量读取上游 API key，并只记录 token usage 与审计元数据，不保存 request messages 或 response content。OpenAI Responses streaming usage 会从最终 `response.completed` 事件记录。Anthropic Messages streaming usage 会合并 `message_start` 与 `message_delta` SSE 事件中的 usage。对 OpenAI Chat Completions streaming 请求，`include_stream_usage: true` 会在客户端没有显式设置 `stream_options.include_usage` 时请求兼容上游返回最终 usage chunk；如果三方中转拒绝该选项，可设为 `false`。如果成功的上游响应没有可解析 usage，Agent Ledger 会保留原始上游响应，不伪造 usage row，并返回 `X-Agent-Ledger-Usage-Warning`。
 
 Webhook 通知默认关闭。显式开启后，`POST /api/notifications/webhook` 与 `agent-ledger notify webhook` 只发送有上限的 workload-event、pending approval 与 approval route 脱敏摘要；goal、project、repo、branch、team、approver route、escalation target、approval target、approval reason、event id、workload id、run id、approval request id 都会被隐藏或 hash。可用 `--dry-run` 或 `dry_run=1` 检查即将发送的 payload，不进行外发。
 

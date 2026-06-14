@@ -1762,6 +1762,13 @@ func gatewayOperation(summary, description string) map[string]interface{} {
 			"responses": map[string]interface{}{
 				"200": map[string]interface{}{
 					"description": "Provider-compatible JSON response or SSE stream.",
+					"headers": map[string]interface{}{
+						"X-Agent-Ledger-Usage-Recorded":         headerSchema("true when upstream usage metadata was persisted to the local ledger."),
+						"X-Agent-Ledger-Usage-Events":           headerSchema("Number of canonical usage events produced from the upstream response."),
+						"X-Agent-Ledger-Usage-Warning":          headerSchema("Present when a successful upstream response did not include parseable usage metadata."),
+						"X-Agent-Ledger-Stream-Usage-Requested": headerSchema("true when Agent Ledger added OpenAI stream_options.include_usage to a streaming request."),
+						"X-Agent-Ledger-Upstream-Status":        headerSchema("HTTP status returned by the upstream provider."),
+					},
 					"content": map[string]interface{}{
 						"application/json":  map[string]interface{}{"schema": refSchema("GatewayResponse")},
 						"text/event-stream": map[string]interface{}{"schema": stringSchema()},
@@ -1787,6 +1794,13 @@ func jsonResponse(schema interface{}) map[string]interface{} {
 		"content": map[string]interface{}{
 			"application/json": map[string]interface{}{"schema": ref},
 		},
+	}
+}
+
+func headerSchema(description string) map[string]interface{} {
+	return map[string]interface{}{
+		"description": description,
+		"schema":      stringSchema(),
 	}
 }
 

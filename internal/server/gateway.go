@@ -45,6 +45,11 @@ type gatewayLedgerContext struct {
 
 const defaultAnthropicVersion = "2023-06-01"
 
+const (
+	gatewayUsageWarningMissingNonStream = "missing_or_unparseable_upstream_usage"
+	gatewayUsageWarningMissingStream    = "missing_upstream_stream_usage"
+)
+
 func (s *Server) handleOpenAIChatGateway(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodPost) {
 		return
@@ -140,6 +145,9 @@ func (s *Server) handleOpenAIChatGateway(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
 	w.Header().Set("X-Agent-Ledger-Stream-Usage-Requested", fmt.Sprint(streamUsageRequested))
 	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && !recorded {
+		w.Header().Set("X-Agent-Ledger-Usage-Warning", gatewayUsageWarningMissingNonStream)
+	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(respBody)
 }
@@ -238,6 +246,9 @@ func (s *Server) handleAnthropicMessagesGateway(w http.ResponseWriter, r *http.R
 	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
 	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
 	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && !recorded {
+		w.Header().Set("X-Agent-Ledger-Usage-Warning", gatewayUsageWarningMissingNonStream)
+	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(respBody)
 }
@@ -332,6 +343,9 @@ func (s *Server) handleOpenAIResponsesGateway(w http.ResponseWriter, r *http.Req
 	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
 	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
 	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && !recorded {
+		w.Header().Set("X-Agent-Ledger-Usage-Warning", gatewayUsageWarningMissingNonStream)
+	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(respBody)
 }
@@ -512,13 +526,14 @@ func (s *Server) handleOpenAIChatGatewayStream(w http.ResponseWriter, resp *http
 	w.Header().Set("Cache-Control", firstNonEmpty(resp.Header.Get("Cache-Control"), "no-cache"))
 	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
 	w.Header().Set("X-Agent-Ledger-Stream-Usage-Requested", fmt.Sprint(streamUsageRequested))
-	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events")
+	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events, X-Agent-Ledger-Usage-Warning")
 	w.WriteHeader(resp.StatusCode)
 
 	var usage json.RawMessage
 	responseID := ""
 	responseModel := model
 	var streamed int64
+	usageWarning := ""
 	reader := bufio.NewReader(io.LimitReader(resp.Body, cfg.MaxResponseBytes+1))
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -561,12 +576,16 @@ func (s *Server) handleOpenAIChatGatewayStream(w http.ResponseWriter, resp *http
 			}
 		} else {
 			_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.chat.stream_usage_missing", model, map[string]string{"project": ledgerCtx.Project})
+			usageWarning = gatewayUsageWarningMissingStream
 		}
 	} else {
 		_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.chat.upstream_status", model, map[string]string{"status": fmt.Sprint(resp.StatusCode), "project": ledgerCtx.Project})
 	}
 	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
 	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
+	if usageWarning != "" {
+		w.Header().Set("X-Agent-Ledger-Usage-Warning", usageWarning)
+	}
 }
 
 func (s *Server) handleOpenAIResponsesGatewayStream(w http.ResponseWriter, resp *http.Response, cfg config.GatewayConfig, model string, ledgerCtx gatewayLedgerContext, started time.Time) {
@@ -580,13 +599,14 @@ func (s *Server) handleOpenAIResponsesGatewayStream(w http.ResponseWriter, resp 
 	w.Header().Set("Cache-Control", firstNonEmpty(resp.Header.Get("Cache-Control"), "no-cache"))
 	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
 	w.Header().Set("X-Agent-Ledger-Stream-Usage-Requested", "false")
-	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events")
+	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events, X-Agent-Ledger-Usage-Warning")
 	w.WriteHeader(resp.StatusCode)
 
 	var usage json.RawMessage
 	responseID := ""
 	responseModel := model
 	var streamed int64
+	usageWarning := ""
 	reader := bufio.NewReader(io.LimitReader(resp.Body, cfg.MaxResponseBytes+1))
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -629,12 +649,16 @@ func (s *Server) handleOpenAIResponsesGatewayStream(w http.ResponseWriter, resp 
 			}
 		} else {
 			_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.responses.stream_usage_missing", model, map[string]string{"project": ledgerCtx.Project})
+			usageWarning = gatewayUsageWarningMissingStream
 		}
 	} else {
 		_ = s.db.AppendAuditLog("local", "gateway", "gateway.openai.responses.upstream_status", model, map[string]string{"status": fmt.Sprint(resp.StatusCode), "project": ledgerCtx.Project})
 	}
 	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
 	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
+	if usageWarning != "" {
+		w.Header().Set("X-Agent-Ledger-Usage-Warning", usageWarning)
+	}
 }
 
 func (s *Server) handleAnthropicMessagesGatewayStream(w http.ResponseWriter, resp *http.Response, cfg config.GatewayConfig, model string, ledgerCtx gatewayLedgerContext, started time.Time) {
@@ -648,11 +672,12 @@ func (s *Server) handleAnthropicMessagesGatewayStream(w http.ResponseWriter, res
 	w.Header().Set("Cache-Control", firstNonEmpty(resp.Header.Get("Cache-Control"), "no-cache"))
 	w.Header().Set("X-Agent-Ledger-Upstream-Status", fmt.Sprint(resp.StatusCode))
 	w.Header().Set("X-Agent-Ledger-Stream-Usage-Requested", "false")
-	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events")
+	w.Header().Set("Trailer", "X-Agent-Ledger-Usage-Recorded, X-Agent-Ledger-Usage-Events, X-Agent-Ledger-Usage-Warning")
 	w.WriteHeader(resp.StatusCode)
 
 	var state anthropicStreamUsageState
 	var streamed int64
+	usageWarning := ""
 	reader := bufio.NewReader(io.LimitReader(resp.Body, cfg.MaxResponseBytes+1))
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -684,12 +709,16 @@ func (s *Server) handleAnthropicMessagesGatewayStream(w http.ResponseWriter, res
 			recorded, eventCount = s.recordAnthropicMessagesGatewayUsage(body, firstNonEmpty(state.Model, model), ledgerCtx, started)
 		} else {
 			s.appendAuditLog("local", "gateway", "gateway.anthropic.messages.stream_usage_missing", model, map[string]string{"project": ledgerCtx.Project})
+			usageWarning = gatewayUsageWarningMissingStream
 		}
 	} else {
 		s.appendAuditLog("local", "gateway", "gateway.anthropic.messages.upstream_status", model, map[string]string{"status": fmt.Sprint(resp.StatusCode), "project": ledgerCtx.Project})
 	}
 	w.Header().Set("X-Agent-Ledger-Usage-Recorded", fmt.Sprint(recorded))
 	w.Header().Set("X-Agent-Ledger-Usage-Events", fmt.Sprint(eventCount))
+	if usageWarning != "" {
+		w.Header().Set("X-Agent-Ledger-Usage-Warning", usageWarning)
+	}
 }
 
 type anthropicStreamUsageState struct {

@@ -23,6 +23,89 @@ func TestGatewayDisabledByDefault(t *testing.T) {
 	}
 }
 
+func TestGatewayReadOnlyRejectsWrite(t *testing.T) {
+	db := testServerDB(t)
+	t.Setenv("AGENT_LEDGER_TEST_OPENAI_KEY", "sk-test")
+	srv := New(db, "", Options{
+		RBAC:    config.RBACConfig{ReadOnly: true},
+		Gateway: testGatewayConfig("http://127.0.0.1:1"),
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleOpenAIChatGateway(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected read-only 403, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "read-only mode") {
+		t.Fatalf("expected explicit read-only error, got %s", rr.Body.String())
+	}
+	rows, err := db.GetAuditLog(10)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("read-only gateway should not write audit rows: %+v", rows)
+	}
+}
+
+func TestGatewayMissingUsageIsExplicit(t *testing.T) {
+	db := testServerDB(t)
+	t.Setenv("AGENT_LEDGER_TEST_OPENAI_KEY", "sk-test")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_no_usage","model":"gpt-5.5","choices":[]}`))
+	}))
+	defer upstream.Close()
+	srv := New(db, "", Options{Gateway: testGatewayConfig(upstream.URL)})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleOpenAIChatGateway(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected upstream 200 passthrough, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if rr.Header().Get("X-Agent-Ledger-Usage-Recorded") != "false" || rr.Header().Get("X-Agent-Ledger-Usage-Events") != "0" {
+		t.Fatalf("expected explicit unrecorded usage headers: recorded=%q events=%q", rr.Header().Get("X-Agent-Ledger-Usage-Recorded"), rr.Header().Get("X-Agent-Ledger-Usage-Events"))
+	}
+	if rr.Header().Get("X-Agent-Ledger-Usage-Warning") != gatewayUsageWarningMissingNonStream {
+		t.Fatalf("usage warning=%q want %q", rr.Header().Get("X-Agent-Ledger-Usage-Warning"), gatewayUsageWarningMissingNonStream)
+	}
+	usageRows, err := db.GetModelCalls(time.Now().Add(-time.Hour), time.Now().Add(time.Hour), "gateway", "gpt-5.5", "", 10)
+	if err != nil {
+		t.Fatalf("GetModelCalls: %v", err)
+	}
+	if len(usageRows) != 0 {
+		t.Fatalf("missing upstream usage should not create model calls: %+v", usageRows)
+	}
+}
+
+func TestGatewayStreamMissingUsageIsExplicitTrailer(t *testing.T) {
+	db := testServerDB(t)
+	t.Setenv("AGENT_LEDGER_TEST_OPENAI_KEY", "sk-test")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream_no_usage\",\"model\":\"gpt-5.5\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer upstream.Close()
+	srv := New(db, "", Options{Gateway: testGatewayConfig(upstream.URL)})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/gateway/openai/v1/chat/completions", strings.NewReader(`{"model":"gpt-5.5","stream":true,"messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.handleOpenAIChatGateway(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected upstream 200 passthrough, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	result := rr.Result()
+	if result.Trailer.Get("X-Agent-Ledger-Usage-Recorded") != "false" || result.Trailer.Get("X-Agent-Ledger-Usage-Events") != "0" {
+		t.Fatalf("expected explicit unrecorded usage trailers: recorded=%q events=%q", result.Trailer.Get("X-Agent-Ledger-Usage-Recorded"), result.Trailer.Get("X-Agent-Ledger-Usage-Events"))
+	}
+	if result.Trailer.Get("X-Agent-Ledger-Usage-Warning") != gatewayUsageWarningMissingStream {
+		t.Fatalf("usage warning trailer=%q want %q", result.Trailer.Get("X-Agent-Ledger-Usage-Warning"), gatewayUsageWarningMissingStream)
+	}
+}
+
 func TestGatewayStreamsAndRecordsUsage(t *testing.T) {
 	db := testServerDB(t)
 	t.Setenv("AGENT_LEDGER_TEST_OPENAI_KEY", "sk-test")
