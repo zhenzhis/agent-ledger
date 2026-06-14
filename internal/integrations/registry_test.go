@@ -266,6 +266,9 @@ func TestOpenAPISpecIndexesStableControlPlane(t *testing.T) {
 			if !openAPIOperationHasBearerSecurity(operation) || !openAPIMethodHasResponse(paths, path, method, "401") {
 				t.Fatalf("OpenAPI %s %s missing auth contract: %#v", method, path, operation)
 			}
+			if !openAPIOperationHasAdmissionMetadata(operation) {
+				t.Fatalf("OpenAPI %s %s missing admission metadata: %#v", method, path, operation)
+			}
 		}
 	}
 	for _, path := range []string{"/api/dashboard", "/api/pricing/status", "/api/anomalies", "/api/policy/enforcement", "/api/workloads", "/api/workloads/leases", "/api/event-examples"} {
@@ -517,6 +520,17 @@ func openAPIOperationHasBearerSecurity(operation map[string]interface{}) bool {
 		}
 	}
 	return false
+}
+
+func openAPIOperationHasAdmissionMetadata(operation map[string]interface{}) bool {
+	meta, ok := operation["x-agent-ledger"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	role, roleOK := meta["required_role"].(string)
+	writeMode, writeModeOK := meta["write_mode"].(string)
+	_, readOnlyOK := meta["available_in_read_only"].(bool)
+	return roleOK && role != "" && writeModeOK && writeMode != "" && readOnlyOK
 }
 
 func TestDiscoveryManifestCarriesReadOnlyRuntimeStatus(t *testing.T) {

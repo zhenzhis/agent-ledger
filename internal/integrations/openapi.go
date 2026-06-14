@@ -636,7 +636,7 @@ func addAuthResponsesAndSecurity(spec map[string]interface{}) {
 	if !ok {
 		return
 	}
-	for _, rawPathItem := range paths {
+	for path, rawPathItem := range paths {
 		pathItem, ok := rawPathItem.(map[string]interface{})
 		if !ok {
 			continue
@@ -653,6 +653,7 @@ func addAuthResponsesAndSecurity(spec map[string]interface{}) {
 				operation["x-agent-ledger"] = meta
 			}
 			meta["auth"] = "localhost or bearer token when configured; prompt content and secrets are never part of auth decisions"
+			addOperationAdmissionMetadata(path, method, meta)
 			responses, ok := operation["responses"].(map[string]interface{})
 			if !ok {
 				continue
@@ -661,6 +662,36 @@ func addAuthResponsesAndSecurity(spec map[string]interface{}) {
 				responses["401"] = jsonResponse("Error")
 			}
 		}
+	}
+}
+
+func addOperationAdmissionMetadata(path, method string, meta map[string]interface{}) {
+	role, writeMode, availableInReadOnly := operationAdmissionMetadata(path, method)
+	meta["required_role"] = role
+	meta["write_mode"] = writeMode
+	meta["available_in_read_only"] = availableInReadOnly
+}
+
+func operationAdmissionMetadata(path, method string) (requiredRole, writeMode string, availableInReadOnly bool) {
+	if method == "get" {
+		return "viewer", "none", true
+	}
+	if method != "post" {
+		return "viewer", "unknown", false
+	}
+	switch path {
+	case "/api/events/validate", "/api/integrations/conformance":
+		return "viewer", "none", true
+	case "/api/policy/evaluate":
+		return "operator", "conditional", true
+	case "/api/notifications/webhook":
+		return "operator", "conditional", false
+	case "/api/pricing/sync", "/api/pricing/recalculate", "/api/recalculate-costs", "/api/projections/repair":
+		return "admin", "always", false
+	case "/api/policy/approvals":
+		return "admin", "always", false
+	default:
+		return "operator", "always", false
 	}
 }
 

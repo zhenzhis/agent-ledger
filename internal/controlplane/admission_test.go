@@ -128,6 +128,10 @@ func TestHTTPAdmissionMatchesOpenAPIContractMethods(t *testing.T) {
 			if !access.Known {
 				t.Fatalf("admission does not know OpenAPI operation %s %s: %+v", method, path, access)
 			}
+			meta := openAPIOperationMeta(operation)
+			if meta["required_role"] != access.RequiredRole || meta["write_mode"] != access.WriteMode || meta["available_in_read_only"] != access.AvailableInReadOnly {
+				t.Fatalf("OpenAPI/admission metadata mismatch for %s %s: openapi=%#v admission=%+v", method, path, meta, access)
+			}
 			if method == "get" {
 				if !access.AvailableInReadOnly || access.WritesLocalState {
 					t.Fatalf("GET %s should be read-only in admission: %+v", path, access)
@@ -252,6 +256,14 @@ func TestAdmissionPrivacyAndFingerprint(t *testing.T) {
 	if !strings.Contains(md, "Agent Ledger Admission") || strings.Contains(md, "C:/Users/zhang/private") {
 		t.Fatalf("unexpected markdown: %s", md)
 	}
+}
+
+func openAPIOperationMeta(operation map[string]interface{}) map[string]interface{} {
+	meta, ok := operation["x-agent-ledger"].(map[string]interface{})
+	if !ok {
+		return map[string]interface{}{}
+	}
+	return meta
 }
 
 func openAPIOperationReadOnlySafe(operation map[string]interface{}) bool {
