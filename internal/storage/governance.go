@@ -21,13 +21,14 @@ type UnpricedModel struct {
 
 // QualitySource summarizes source-level trust signals.
 type QualitySource struct {
-	Source            string  `json:"source"`
-	Records           int     `json:"records"`
-	Sessions          int     `json:"sessions"`
-	UnpricedRecords   int     `json:"unpriced_records"`
-	CacheAwareRecords int     `json:"cache_aware_records"`
-	Confidence        float64 `json:"confidence"`
-	Message           string  `json:"message"`
+	Source                    string  `json:"source"`
+	Records                   int     `json:"records"`
+	Sessions                  int     `json:"sessions"`
+	UnpricedRecords           int     `json:"unpriced_records"`
+	EstimatedAggregateRecords int     `json:"estimated_aggregate_records"`
+	CacheAwareRecords         int     `json:"cache_aware_records"`
+	Confidence                float64 `json:"confidence"`
+	Message                   string  `json:"message"`
 }
 
 // DataQualityReport explains why current data is trustworthy or incomplete.
@@ -479,6 +480,7 @@ func (d *DB) GetDataQuality(staleAfter time.Duration) (*DataQualityReport, error
 
 	qRows, err := d.db.Query(`SELECT source, COUNT(*), COUNT(DISTINCT session_id),
 		SUM(CASE WHEN COALESCE(pricing_confidence,'')='unpriced' THEN 1 ELSE 0 END),
+		SUM(CASE WHEN COALESCE(pricing_confidence,'')='estimated-aggregate' THEN 1 ELSE 0 END),
 		SUM(CASE WHEN cache_read_input_tokens>0 OR cache_creation_input_tokens>0 THEN 1 ELSE 0 END)
 		FROM usage_records GROUP BY source ORDER BY source`)
 	if err != nil {
@@ -486,13 +488,14 @@ func (d *DB) GetDataQuality(staleAfter time.Duration) (*DataQualityReport, error
 	}
 	for qRows.Next() {
 		var q QualitySource
-		if err := qRows.Scan(&q.Source, &q.Records, &q.Sessions, &q.UnpricedRecords, &q.CacheAwareRecords); err != nil {
+		if err := qRows.Scan(&q.Source, &q.Records, &q.Sessions, &q.UnpricedRecords, &q.EstimatedAggregateRecords, &q.CacheAwareRecords); err != nil {
 			qRows.Close()
 			return nil, err
 		}
 		score := 1.0
 		if q.Records > 0 {
 			score -= float64(q.UnpricedRecords) / float64(q.Records) * 0.55
+			score -= float64(q.EstimatedAggregateRecords) / float64(q.Records) * 0.35
 			if q.CacheAwareRecords == 0 {
 				score -= 0.1
 			}
@@ -501,8 +504,15 @@ func (d *DB) GetDataQuality(staleAfter time.Duration) (*DataQualityReport, error
 			score = 0
 		}
 		q.Confidence = math.Round(score*100) / 100
+		var messages []string
 		if q.UnpricedRecords > 0 {
-			q.Message = fmt.Sprintf("%d records are unpriced", q.UnpricedRecords)
+			messages = append(messages, fmt.Sprintf("%d records are unpriced", q.UnpricedRecords))
+		}
+		if q.EstimatedAggregateRecords > 0 {
+			messages = append(messages, fmt.Sprintf("%d records use aggregate token estimates", q.EstimatedAggregateRecords))
+		}
+		if len(messages) > 0 {
+			q.Message = strings.Join(messages, "; ")
 		} else {
 			q.Message = "priced and queryable"
 		}

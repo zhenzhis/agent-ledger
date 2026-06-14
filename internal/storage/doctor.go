@@ -85,6 +85,7 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 	report.Checks = append(report.Checks, usageDoctorChecks(*stats, source, model, project)...)
 	report.Checks = append(report.Checks, ingestionDoctorChecks(health, source)...)
 	report.Checks = append(report.Checks, pricingDoctorChecks(pricingSources, quality)...)
+	report.Checks = append(report.Checks, dataQualityDoctorChecks(quality, source)...)
 	report.Checks = append(report.Checks, provenanceDoctorChecks(quality)...)
 	report.Checks = append(report.Checks, projectionDoctorChecks(projection)...)
 	report.Checks = append(report.Checks, workloadStateDoctorChecks(workloadStates)...)
@@ -100,6 +101,29 @@ func (d *DB) GetDoctorReport(from, to time.Time, staleAfter time.Duration, sourc
 		report.Summary = "ok"
 	}
 	return report, nil
+}
+
+func dataQualityDoctorChecks(quality *DataQualityReport, source string) []DoctorCheck {
+	if quality == nil {
+		return nil
+	}
+	var checks []DoctorCheck
+	for _, row := range quality.SourceQuality {
+		if source != "" && row.Source != source {
+			continue
+		}
+		if row.EstimatedAggregateRecords > 0 {
+			checks = append(checks, DoctorCheck{
+				Name:     "quality.estimated_aggregate",
+				Source:   row.Source,
+				Status:   "warning",
+				Severity: "warning",
+				Message:  fmt.Sprintf("%d records use session-level aggregate token estimates", row.EstimatedAggregateRecords),
+				Action:   "treat token totals as estimates; prefer exact JSONL or provider usage events for cost-grade input/output/cache breakdown",
+			})
+		}
+	}
+	return checks
 }
 
 func workloadLeaseDoctorChecks(stats *WorkloadLeaseStats) []DoctorCheck {

@@ -357,7 +357,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/cost-intelligence` | 昂贵会话解释，包含 input/output/cache/reasoning token 构成、每调用/每 Prompt 费用、价格来源与可信状态、未计价/fallback/模糊匹配/source-reported 计数、原因和建议 |
 | `GET /api/cache/doctor` | cache 命中、写入、读取诊断 |
 | `GET /api/doctor?format=markdown` | 一键本地诊断 usage、采集、价格、数据质量与 workload 状态 |
-| `GET /api/data-quality` | 数据可信度报告 |
+| `GET /api/data-quality` | 数据可信度报告，包含未计价、source-reported、fallback 与 aggregate-estimated 记录 |
 | `GET /api/model-calls` | 模型调用次数 |
 | `GET /api/quota/status` | 本地 quota 和 burn-rate 估算 |
 | `GET /api/anomalies` | 异常检测事件 |

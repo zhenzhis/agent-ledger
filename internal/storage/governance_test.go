@@ -215,6 +215,48 @@ func TestRecalcCostsDetailedSkipsEstimatedAggregate(t *testing.T) {
 	}
 }
 
+func TestDataQualitySurfacesEstimatedAggregate(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	if err := db.InsertUsageBatch([]*UsageRecord{
+		{
+			Source: "codex", SessionID: "sqlite-thread", Model: "gpt-5-codex",
+			InputTokens: 900, Timestamp: ts, PricingConfidence: "estimated-aggregate",
+			PricingNote: "codex sqlite thread tokens_used aggregate",
+		},
+		{
+			Source: "codex", SessionID: "exact-thread", Model: "gpt-5-codex",
+			InputTokens: 100, OutputTokens: 50, Timestamp: ts.Add(time.Minute), PricingConfidence: "official",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	quality, err := db.GetDataQuality(time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quality.ConfidenceMix["estimated-aggregate"] != 1 {
+		t.Fatalf("expected estimated aggregate in confidence mix: %+v", quality.ConfidenceMix)
+	}
+	var codex QualitySource
+	for _, source := range quality.SourceQuality {
+		if source.Source == "codex" {
+			codex = source
+			break
+		}
+	}
+	if codex.EstimatedAggregateRecords != 1 || !strings.Contains(codex.Message, "aggregate token estimates") {
+		t.Fatalf("estimated aggregate not surfaced in source quality: %+v", codex)
+	}
+	if codex.Confidence >= 1 {
+		t.Fatalf("expected confidence penalty for estimated aggregate records: %+v", codex)
+	}
+}
+
 func TestCostIntelligenceExplainsPricingAndTokenDrivers(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {

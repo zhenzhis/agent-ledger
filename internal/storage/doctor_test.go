@@ -102,6 +102,34 @@ func TestGetDoctorReportProjectionIssues(t *testing.T) {
 	}
 }
 
+func TestGetDoctorReportEstimatedAggregateQualityIssue(t *testing.T) {
+	db := tempDB(t)
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	if err := db.UpsertSession(&SessionRecord{
+		Source: "codex", SessionID: "sqlite-thread", Project: "agent-ledger", StartTime: ts,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertUsage(&UsageRecord{
+		Source: "codex", SessionID: "sqlite-thread", Model: "gpt-5-codex",
+		InputTokens: 900, Project: "agent-ledger", Timestamp: ts, PricingConfidence: "estimated-aggregate",
+		PricingNote: "codex sqlite thread tokens_used aggregate",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := db.GetDoctorReport(ts.Add(-time.Hour), ts.Add(time.Hour), time.Hour, "codex", "", "agent-ledger")
+	if err != nil {
+		t.Fatalf("GetDoctorReport: %v", err)
+	}
+	if !hasDoctorCheck(report.Checks, "quality.estimated_aggregate") {
+		t.Fatalf("missing estimated aggregate quality check: %+v", report.Checks)
+	}
+	md := FormatDoctorMarkdown(report)
+	if !strings.Contains(md, "quality.estimated_aggregate") || !strings.Contains(md, "session-level aggregate token estimates") {
+		t.Fatalf("estimated aggregate markdown missing: %s", md)
+	}
+}
+
 func TestGetDoctorReportIncludesWorkloadStateIssues(t *testing.T) {
 	db := tempDB(t)
 	now := time.Now().UTC()

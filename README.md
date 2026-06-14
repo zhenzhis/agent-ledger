@@ -357,7 +357,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/cost-intelligence` | Expensive session explanations with input/output/cache/reasoning token breakdown, cost-per-call/prompt, pricing source/confidence, unpriced/fallback/fuzzy/source-reported counters, reasons, and advice |
 | `GET /api/cache/doctor` | Cache hit/write/read diagnostics |
 | `GET /api/doctor?format=markdown` | One-click local diagnostics for usage, ingestion, pricing, data quality, and workload state |
-| `GET /api/data-quality` | Trust and completeness report |
+| `GET /api/data-quality` | Trust and completeness report, including unpriced, source-reported, fallback, and aggregate-estimated records |
 | `GET /api/model-calls` | Calls by model/source/project |
 | `GET /api/quota/status` | Local quota and burn-rate estimates |
 | `GET /api/anomalies` | Robust-statistics anomaly events |
