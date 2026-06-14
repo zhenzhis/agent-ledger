@@ -286,6 +286,41 @@ func TestOpenAPISpecIndexesStableControlPlane(t *testing.T) {
 	}
 }
 
+func TestOpenAPIRequestBodyOperationsAdvertiseBodyLimits(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	paths := spec["paths"].(map[string]interface{})
+	for path, rawPathItem := range paths {
+		pathItem, ok := rawPathItem.(map[string]interface{})
+		if !ok {
+			t.Fatalf("OpenAPI path %s has invalid item: %#v", path, rawPathItem)
+		}
+		for _, method := range []string{"post", "put", "patch"} {
+			rawOperation, ok := pathItem[method]
+			if !ok {
+				continue
+			}
+			operation, ok := rawOperation.(map[string]interface{})
+			if !ok {
+				t.Fatalf("OpenAPI %s %s has invalid operation: %#v", method, path, rawOperation)
+			}
+			if _, hasBody := operation["requestBody"]; !hasBody {
+				continue
+			}
+			meta, ok := operation["x-agent-ledger"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("OpenAPI %s %s with requestBody missing x-agent-ledger metadata: %#v", method, path, operation)
+			}
+			limit, ok := meta["max_body_bytes"].(int)
+			if !ok || limit <= 0 {
+				t.Fatalf("OpenAPI %s %s missing positive max_body_bytes: %#v", method, path, meta)
+			}
+			if !openAPIMethodHasResponse(paths, path, method, "413") {
+				t.Fatalf("OpenAPI %s %s with requestBody should advertise 413: %#v", method, path, operation)
+			}
+		}
+	}
+}
+
 func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Collectors.Claude.Enabled = true

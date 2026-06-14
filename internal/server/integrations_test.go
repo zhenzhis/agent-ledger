@@ -285,6 +285,23 @@ func TestAdapterSpecEndpoint(t *testing.T) {
 	assertETagRevalidates(t, srv.handleAdapterSpec, "http://127.0.0.1/api/integrations/adapter-spec", rr.Header().Get("ETag"))
 }
 
+func TestOversizedRequestBodyReturns413JSON(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/integrations/conformance", strings.NewReader(strings.Repeat("x", (4<<20)+1)))
+	rr := httptest.NewRecorder()
+	srv.handleAdapterConformance(rr, req)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("expected JSON error content type, got %q", got)
+	}
+	if !strings.Contains(rr.Body.String(), "request body too large") {
+		t.Fatalf("expected body size error, got %s", rr.Body.String())
+	}
+}
+
 func TestControlPlaneEndpointETags(t *testing.T) {
 	db := testServerDB(t)
 	srv := New(db, "", Options{

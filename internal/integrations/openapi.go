@@ -2,6 +2,12 @@ package integrations
 
 import "github.com/zhenzhis/agent-ledger/internal/storage"
 
+const (
+	defaultJSONBodyLimitBytes   = 1 << 20
+	defaultIngestBodyLimitBytes = 4 << 20
+	defaultBundleBodyLimitBytes = 32 << 20
+)
+
 // OpenAPISpecFor returns a compact OpenAPI 3.1 description for the stable
 // metadata-only control-plane surfaces. It intentionally describes contracts
 // and envelope shapes instead of local files, prompt content, or secrets.
@@ -829,9 +835,9 @@ func flexibleWriteOperation(tag, summary, description, requestSchema, responseSc
 		}
 		content[contentType] = map[string]interface{}{"schema": schema}
 	}
-	maxBodyBytes := 4 << 20
+	maxBodyBytes := defaultIngestBodyLimitBytes
 	if requestSchema == "OfflineBundleImportRequest" {
-		maxBodyBytes = 32 << 20
+		maxBodyBytes = defaultBundleBodyLimitBytes
 	}
 	return map[string]interface{}{
 		"post": map[string]interface{}{
@@ -854,6 +860,7 @@ func flexibleWriteOperation(tag, summary, description, requestSchema, responseSc
 				"200": jsonResponse(responseSchema),
 				"400": jsonResponse("Error"),
 				"403": jsonResponse("Error"),
+				"413": jsonResponse("Error"),
 			},
 		},
 	}
@@ -1029,7 +1036,7 @@ func canonicalEventPostOperation(tag, summary, description string, writes bool) 
 				"writes_local_state": writes,
 				"read_only_safe":     !writes,
 				"max_events":         500,
-				"max_body_bytes":     4 << 20,
+				"max_body_bytes":     defaultIngestBodyLimitBytes,
 			},
 			"requestBody": map[string]interface{}{
 				"required": true,
@@ -1040,6 +1047,7 @@ func canonicalEventPostOperation(tag, summary, description string, writes bool) 
 			"responses": map[string]interface{}{
 				"200": jsonResponse(map[bool]string{true: "IngestResponse", false: "ValidationResponse"}[writes]),
 				"400": jsonResponse("Error"),
+				"413": jsonResponse("Error"),
 			},
 		},
 	}
@@ -1055,7 +1063,7 @@ func adapterConformanceOperation() map[string]interface{} {
 			"x-agent-ledger": map[string]interface{}{
 				"writes_local_state": false,
 				"read_only_safe":     true,
-				"max_body_bytes":     4 << 20,
+				"max_body_bytes":     defaultIngestBodyLimitBytes,
 			},
 			"parameters": []map[string]interface{}{
 				queryParam("kind", "auto, canonical, provider, provider-stream, otel, or a2a."),
@@ -1072,6 +1080,7 @@ func adapterConformanceOperation() map[string]interface{} {
 			"responses": map[string]interface{}{
 				"200": jsonResponse("ValidationResponse"),
 				"400": jsonResponse("Error"),
+				"413": jsonResponse("Error"),
 			},
 		},
 	}
@@ -1312,6 +1321,7 @@ func workloadLeaseWriteOperation(summary, description, requestSchema, responseSc
 			"read_only_safe":     false,
 			"prompt_content":     false,
 			"lease_tokens":       "plaintext accepted only in request body and returned only from acquire; SQLite stores sha256 hashes",
+			"max_body_bytes":     defaultJSONBodyLimitBytes,
 		},
 		"requestBody": map[string]interface{}{
 			"required": true,
@@ -1323,6 +1333,7 @@ func workloadLeaseWriteOperation(summary, description, requestSchema, responseSc
 			"200": jsonResponse(responseSchema),
 			"400": jsonResponse("Error"),
 			"409": jsonResponse("Error"),
+			"413": jsonResponse("Error"),
 		},
 	}
 }
@@ -1336,6 +1347,7 @@ func simpleWriteOperation(tag, summary, description, requestSchema, responseSche
 			"writes_local_state": true,
 			"read_only_safe":     false,
 			"prompt_content":     false,
+			"max_body_bytes":     defaultJSONBodyLimitBytes,
 		},
 		"requestBody": map[string]interface{}{
 			"required": true,
@@ -1346,6 +1358,7 @@ func simpleWriteOperation(tag, summary, description, requestSchema, responseSche
 		"responses": map[string]interface{}{
 			"200": jsonResponse(responseSchema),
 			"400": jsonResponse("Error"),
+			"413": jsonResponse("Error"),
 		},
 	}
 }
@@ -1360,6 +1373,7 @@ func idempotentWriteOperation(tag, summary, description, requestSchema, response
 			"read_only_safe":     false,
 			"idempotency":        "Idempotency-Key header, X-Idempotency-Key header, or idempotency_key JSON field. Same key with different input fails with 409.",
 			"prompt_content":     false,
+			"max_body_bytes":     defaultJSONBodyLimitBytes,
 		},
 		"parameters": []map[string]interface{}{
 			headerParam("Idempotency-Key", "Stable retry key for this write operation."),
@@ -1375,6 +1389,7 @@ func idempotentWriteOperation(tag, summary, description, requestSchema, response
 			"200": jsonResponse(responseSchema),
 			"400": jsonResponse("Error"),
 			"409": jsonResponse("Error"),
+			"413": jsonResponse("Error"),
 		},
 	}
 }
@@ -1422,7 +1437,7 @@ func ecosystemIngestOperation(summary, description, requestSchema, responseSchem
 		"writes_local_state": true,
 		"read_only_safe":     false,
 		"prompt_content":     false,
-		"max_body_bytes":     4 << 20,
+		"max_body_bytes":     defaultIngestBodyLimitBytes,
 	}
 	if disabledByDefault {
 		meta["disabled_by_default"] = true
@@ -1443,6 +1458,7 @@ func ecosystemIngestOperation(summary, description, requestSchema, responseSchem
 				"200": jsonResponse(responseSchema),
 				"400": jsonResponse("Error"),
 				"403": jsonResponse("Error"),
+				"413": jsonResponse("Error"),
 			},
 		},
 	}
@@ -1485,6 +1501,7 @@ func gatewayOperation(summary, description string) map[string]interface{} {
 				"upstream_api_keys":                  "read from environment variables; not persisted",
 				"usage_metadata_persisted":           true,
 				"response_content_persisted":         false,
+				"max_body_bytes":                     defaultIngestBodyLimitBytes,
 			},
 			"requestBody": map[string]interface{}{
 				"required": true,
@@ -1503,6 +1520,7 @@ func gatewayOperation(summary, description string) map[string]interface{} {
 				"400": jsonResponse("Error"),
 				"403": jsonResponse("Error"),
 				"404": jsonResponse("Error"),
+				"413": jsonResponse("Error"),
 				"415": jsonResponse("Error"),
 			},
 		},
