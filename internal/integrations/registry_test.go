@@ -1319,6 +1319,7 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("AdapterIngestContract", "http", "cli", "mcp_tools")
 
 	expectFields("OperationResult", "ok", "source", "reset", "mode", "result")
+	expectRef("OperationResult", "result", "#/components/schemas/ProjectionRepairResult")
 	expectFields("WebhookNotificationResult", "result", "payload")
 	expectRef("WebhookNotificationResult", "result", "#/components/schemas/WebhookDeliveryResult")
 	expectRef("WebhookNotificationResult", "payload", "#/components/schemas/WebhookNotificationPayload")

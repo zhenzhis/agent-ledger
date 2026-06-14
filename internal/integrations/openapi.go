@@ -2499,10 +2499,7 @@ func operationResultSchema() map[string]interface{} {
 			"source": stringSchema(),
 			"reset":  boolSchema(),
 			"mode":   stringSchema(),
-			"result": map[string]interface{}{"oneOf": []map[string]interface{}{
-				refSchema("ProjectionRepairResult"),
-				looseObjectSchema("Operation-specific structured result."),
-			}},
+			"result": refSchema("ProjectionRepairResult"),
 		},
 	}
 }
