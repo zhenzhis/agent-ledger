@@ -45,6 +45,10 @@ type ReadinessSummary struct {
 	PromptEvents       int    `json:"prompt_events"`
 	IdempotencyKeys    int    `json:"idempotency_keys"`
 	IdempotencyReplays int    `json:"idempotency_replays"`
+	QueueClaimable     int    `json:"queue_claimable"`
+	QueueNonTerminal   int    `json:"queue_non_terminal"`
+	QueueOldestAge     string `json:"queue_oldest_claimable_age"`
+	QueueNextLease     string `json:"queue_next_lease_expiry"`
 	ActiveLeases       int    `json:"active_leases"`
 	ExpiredLeases      int    `json:"expired_leases"`
 	ReleasedLeases     int    `json:"released_leases"`
@@ -88,10 +92,11 @@ func BuildReadinessReport(db *storage.DB, cfg *config.Config, runtime *storage.R
 		LocalFirst:          cfgStatus.LocalFirst,
 		PromptContentStored: false,
 		UsageDataUploaded:   false,
+		Summary:             ReadinessSummary{QueueOldestAge: "none", QueueNextLease: "none"},
 		PrivacyNote:         "Readiness exposes status, counts, hashes, and remediation hints only; raw paths, URLs, secrets, prompts, responses, sessions, projects, branches, machine names, and authors are excluded.",
 	}
 
-	addCoreChecks(report, db)
+	addCoreChecks(report, db, now.UTC())
 	addConfigChecks(report, cfgStatus)
 	addRuntimeCheck(report, runtime)
 	addContractCheck(report, contract)
@@ -116,6 +121,7 @@ func FormatReadinessMarkdown(report *ReadinessReport) string {
 	fmt.Fprintf(&b, "- Checks: `%d` passing, `%d` critical, `%d` warnings\n", report.Summary.PassingChecks, report.Summary.CriticalFailures, report.Summary.Warnings)
 	fmt.Fprintf(&b, "- Data: `%d` usage records, `%d` prompt events, `%d` health sources\n", report.Summary.UsageRecords, report.Summary.PromptEvents, report.Summary.HealthSources)
 	fmt.Fprintf(&b, "- Control idempotency: `%d` keys, `%d` replays\n", report.Summary.IdempotencyKeys, report.Summary.IdempotencyReplays)
+	fmt.Fprintf(&b, "- Workload queue: `%d` claimable, `%d` non-terminal, oldest age `%s`, next lease expiry `%s`\n", report.Summary.QueueClaimable, report.Summary.QueueNonTerminal, report.Summary.QueueOldestAge, report.Summary.QueueNextLease)
 	fmt.Fprintf(&b, "- Workload leases: `%d` active, `%d` expired, `%d` released\n", report.Summary.ActiveLeases, report.Summary.ExpiredLeases, report.Summary.ReleasedLeases)
 	fmt.Fprintf(&b, "- Pricing: `%d` sources, `%d` stale, `%d` errors\n", report.Summary.PricingSources, report.Summary.PricingStale, report.Summary.PricingErrors)
 	fmt.Fprintf(&b, "- Recommendation: %s\n\n", report.Summary.Recommendation)
@@ -150,7 +156,7 @@ func ReadinessFingerprint(report *ReadinessReport) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func addCoreChecks(report *ReadinessReport, db *storage.DB) {
+func addCoreChecks(report *ReadinessReport, db *storage.DB, now time.Time) {
 	if db == nil {
 		report.addCheck("database.open", false, "critical", "SQLite database handle is not available", "open storage before serving control-plane traffic")
 		return
@@ -185,6 +191,16 @@ func addCoreChecks(report *ReadinessReport, db *storage.DB) {
 		report.Summary.ExpiredLeases = leases.Expired
 		report.Summary.ReleasedLeases = leases.Released
 		report.addCheck("database.workload_leases_query", true, "critical", "workload_leases query succeeded", "")
+	}
+	queue, err := db.GetWorkloadQueueStats(storage.WorkloadClaimFilter{})
+	if err != nil {
+		report.addCheck("database.workload_queue_query", false, "critical", "workload queue query failed", "inspect SQLite schema migrations and workload queue indexes")
+	} else {
+		report.Summary.QueueClaimable = queue.Claimable
+		report.Summary.QueueNonTerminal = queue.NonTerminal
+		report.Summary.QueueOldestAge = elapsedBucket(queue.OldestClaimableAt, now)
+		report.Summary.QueueNextLease = remainingBucket(queue.NextLeaseExpiryAt, now)
+		report.addCheck("database.workload_queue_query", true, "info", "workload queue probe succeeded", "")
 	}
 }
 
@@ -345,4 +361,60 @@ func defaultRuntimeStatus() *storage.RuntimeStatus {
 		BackgroundTasks: "enabled",
 		Message:         "write operations and background collectors are enabled",
 	}, integrations.Options{})
+}
+
+func elapsedBucket(raw string, now time.Time) string {
+	t, ok := parseReadinessTime(raw)
+	if !ok || now.Before(t) {
+		return "none"
+	}
+	return durationBucket(now.Sub(t))
+}
+
+func remainingBucket(raw string, now time.Time) string {
+	t, ok := parseReadinessTime(raw)
+	if !ok || !t.After(now) {
+		return "none"
+	}
+	return durationBucket(t.Sub(now))
+}
+
+func durationBucket(d time.Duration) string {
+	switch {
+	case d < 5*time.Minute:
+		return "under_5m"
+	case d < time.Hour:
+		return "under_1h"
+	case d < 6*time.Hour:
+		return "under_6h"
+	case d < 24*time.Hour:
+		return "under_24h"
+	default:
+		return "over_24h"
+	}
+}
+
+func parseReadinessTime(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	formats := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05",
+	}
+	for _, format := range formats {
+		if t, err := time.Parse(format, raw); err == nil {
+			return t.UTC(), true
+		}
+	}
+	if len(raw) >= 19 {
+		if t, err := time.Parse("2006-01-02 15:04:05", strings.Replace(raw[:19], "T", " ", 1)); err == nil {
+			return t.UTC(), true
+		}
+	}
+	return time.Time{}, false
 }

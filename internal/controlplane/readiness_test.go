@@ -71,6 +71,9 @@ func TestReadinessReportReadyAndPrivacySafe(t *testing.T) {
 	if report.Summary.ActiveLeases != 1 {
 		t.Fatalf("missing lease summary: %+v", report.Summary)
 	}
+	if report.Summary.QueueClaimable != 1 || report.Summary.QueueNonTerminal != 2 {
+		t.Fatalf("missing queue summary: %+v", report.Summary)
+	}
 	raw, err := json.Marshal(report)
 	if err != nil {
 		t.Fatalf("marshal readiness: %v", err)
@@ -81,7 +84,7 @@ func TestReadinessReportReadyAndPrivacySafe(t *testing.T) {
 		}
 	}
 	md := FormatReadinessMarkdown(report)
-	if !strings.Contains(md, "Workload leases") || strings.Contains(md, lease.LeaseToken) {
+	if !strings.Contains(md, "Workload queue") || !strings.Contains(md, "Workload leases") || strings.Contains(md, lease.LeaseToken) {
 		t.Fatalf("unexpected readiness markdown: %s", md)
 	}
 }
