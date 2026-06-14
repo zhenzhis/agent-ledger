@@ -482,6 +482,52 @@ func TestWorkloadStateAPIPrivacy(t *testing.T) {
 	if state.Goal != "<redacted>" || state.Project != "<redacted>" || state.Repo != "<redacted>" || state.GitBranch != "<redacted>" || state.Team != "<redacted>" {
 		t.Fatalf("privacy redaction failed: %+v", state)
 	}
+	if rr.Header().Get("ETag") == "" {
+		t.Fatalf("state response missing ETag")
+	}
+	assertETagRevalidates(t, srv.handleWorkloadState, "http://127.0.0.1/api/workload-state?workload_id="+workloadID+"&max_age=10m&privacy=1", rr.Header().Get("ETag"))
+	postReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workload-state?workload_id="+workloadID, nil)
+	postRR := httptest.NewRecorder()
+	srv.handleWorkloadState(postRR, postReq)
+	if postRR.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("state POST status=%d body=%s", postRR.Code, postRR.Body.String())
+	}
+}
+
+func TestWorkloadReadAPIsEmitETags(t *testing.T) {
+	db := testServerDB(t)
+	workloadID, err := db.CreateWorkload("read api goal", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	runID, err := db.StartAgentRun(workloadID, "codex", "codex", "codex", "C:/work/agent-ledger")
+	if err != nil {
+		t.Fatalf("StartAgentRun: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-read-api", runID, "working", "testing", "ok", 0.5, nil, time.Now().UTC(), 1); err != nil {
+		t.Fatalf("RecordAgentRunHeartbeat: %v", err)
+	}
+	srv := New(db, "", Options{})
+	cases := []struct {
+		name    string
+		url     string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "detail", url: "http://127.0.0.1/api/workload-detail?workload_id=" + workloadID, handler: srv.handleWorkloadDetail},
+		{name: "graph", url: "http://127.0.0.1/api/workload-graph?workload_id=" + workloadID, handler: srv.handleWorkloadGraph},
+		{name: "timeline", url: "http://127.0.0.1/api/workload-timeline?workload_id=" + workloadID + "&limit=20", handler: srv.handleWorkloadTimeline},
+		{name: "state", url: "http://127.0.0.1/api/workload-state?workload_id=" + workloadID + "&max_age=10m", handler: srv.handleWorkloadState},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			tc.handler(rr, httptest.NewRequest(http.MethodGet, tc.url, nil))
+			if rr.Code != http.StatusOK {
+				t.Fatalf("%s status=%d body=%s", tc.name, rr.Code, rr.Body.String())
+			}
+			assertETagRevalidates(t, tc.handler, tc.url, rr.Header().Get("ETag"))
+		})
+	}
 }
 
 func TestWorkloadEventsAPIPrivacy(t *testing.T) {

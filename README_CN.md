@@ -132,6 +132,8 @@ Workload 与 run 写操作支持稳定幂等键，面向异步 agent router、wr
 
 `GET /api/agent-runs/liveness` 同样会返回稳定 `ETag`；纯展示用的 `age_seconds` 跳动会被忽略，但 stale 状态、phase、status 与 heartbeat 变化仍会让响应失效。Readiness 报告会加入 active/stale run 数与最老 active run 的时间桶，不暴露 run id、workload id、goal、project、repo、branch、command 或 status message。
 
+Workload detail、graph、timeline 与 terminal-state snapshot 读端点都是 GET-only viewer reads，并返回 `ETag`，方便本地 monitor 对单个 workload 做轮询。
+
 同一个 workload 同时只允许一个 active lease。`lease_token` 只在 acquire/claim 响应中返回；list、renew、release、readiness、doctor、audit 和 contract surface 都不会返回它。SQLite 只保存 SHA-256 token hash，不保存明文 token。读路径只派生过期状态，不写回 SQLite，因此 observer/read-only 模式仍保持只读。
 
 仓库内 `examples/adapter-fixtures/` 提供 canonical events、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages、provider SSE stream、OpenTelemetry GenAI span 与 A2A task snapshot 的 strict conformance 样例。

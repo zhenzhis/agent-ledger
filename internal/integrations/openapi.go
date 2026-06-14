@@ -69,6 +69,10 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/workloads/leases":          workloadLeasesOperation(),
 			"/api/agent-runs":                agentRunsOperation(),
 			"/api/agent-runs/liveness":       agentRunLivenessOperation(),
+			"/api/workload-detail":           workloadDetailOperation(),
+			"/api/workload-graph":            workloadGraphOperation(),
+			"/api/workload-timeline":         workloadTimelineOperation(),
+			"/api/workload-state":            workloadStateOperation(),
 			"/api/workload-events":           workloadEventsOperation(false),
 			"/api/workload-events/stream":    workloadEventsOperation(true),
 		},
@@ -363,6 +367,10 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 					},
 				},
 				"AgentRunLivenessResponse": looseObjectSchema("Active async agent run liveness rows with privacy filters applied by the server."),
+				"WorkloadDetail":           looseObjectSchema("Full workload ledger detail with privacy filters applied by the server."),
+				"WorkloadGraph":            looseObjectSchema("Compact workload dependency and activity graph."),
+				"WorkloadTimelineResponse": looseObjectSchema("Chronological metadata-only workload audit timeline."),
+				"WorkloadState":            looseObjectSchema("Derived terminal-state snapshot for one async agent workload."),
 				"WorkloadEventFeed":        looseObjectSchema("Cursor-stable workload state feed."),
 				"Error": map[string]interface{}{
 					"type":       "object",
@@ -611,6 +619,53 @@ func agentRunLivenessOperation() map[string]interface{} {
 			"responses": map[string]interface{}{
 				"200": jsonResponse("AgentRunLivenessResponse"),
 				"304": map[string]interface{}{"description": "Not modified when If-None-Match matches the stable liveness ETag."},
+				"400": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
+func workloadDetailOperation() map[string]interface{} {
+	return workloadReadOperation("Get workload detail", "Return a full workload ledger detail for one workload. Privacy filters are applied by the server.", "WorkloadDetail", []map[string]interface{}{
+		queryParam("workload_id", "Required workload id."),
+	})
+}
+
+func workloadGraphOperation() map[string]interface{} {
+	return workloadReadOperation("Get workload graph", "Return a compact dependency and activity graph for one workload.", "WorkloadGraph", []map[string]interface{}{
+		queryParam("workload_id", "Required workload id."),
+	})
+}
+
+func workloadTimelineOperation() map[string]interface{} {
+	return workloadReadOperation("Get workload timeline", "Return a chronological metadata-only audit timeline for one workload.", "WorkloadTimelineResponse", []map[string]interface{}{
+		queryParam("workload_id", "Required workload id."),
+		queryParam("limit", "Maximum timeline rows to return."),
+	})
+}
+
+func workloadStateOperation() map[string]interface{} {
+	return workloadReadOperation("Get workload state", "Return a derived terminal-state snapshot for one async agent workload.", "WorkloadState", []map[string]interface{}{
+		queryParam("workload_id", "Required workload id."),
+		queryParam("max_age", "Heartbeat stale threshold such as 10m."),
+	})
+}
+
+func workloadReadOperation(summary, description, schema string, params []map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{"workload-control"},
+			"summary":     summary,
+			"description": description,
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": false,
+				"read_only_safe":     true,
+				"prompt_content":     false,
+			},
+			"parameters": params,
+			"responses": map[string]interface{}{
+				"200": jsonResponse(schema),
+				"304": map[string]interface{}{"description": "Not modified when If-None-Match matches the current ETag."},
 				"400": jsonResponse("Error"),
 			},
 		},

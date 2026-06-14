@@ -132,6 +132,8 @@ Async routers and long-running agents can acquire a short-lived workload lease b
 
 `GET /api/agent-runs/liveness` also emits a stable `ETag`; `age_seconds` render ticks are ignored, while stale-state, phase, status, and heartbeat changes still invalidate the response. Readiness reports include active/stale run counts and the oldest active run age bucket without exposing run ids, workload ids, goals, projects, repos, branches, commands, or status messages.
 
+Workload read endpoints for detail, graph, timeline, and terminal-state snapshots are GET-only viewer reads and emit `ETag` headers for local monitors that poll a specific workload.
+
 Only one active lease is allowed per workload. `lease_token` is returned only from acquire/claim responses; list, renew, release, readiness, doctor, audit, and contract surfaces never expose it. SQLite stores a SHA-256 token hash, not the plaintext token. Read paths derive expired status without mutating SQLite, so observer/read-only mode remains read-only.
 
 Strict adapter fixtures are available in `examples/adapter-fixtures/` for canonical events, OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, provider SSE streams, OpenTelemetry GenAI spans, and A2A task snapshots.

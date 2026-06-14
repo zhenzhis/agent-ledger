@@ -505,6 +505,13 @@ func (s *Server) handleAgentRunLiveness(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleWorkloadDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
 	id := r.URL.Query().Get("workload_id")
 	if id == "" {
 		badRequest(w, fmt.Errorf("workload_id required"))
@@ -516,10 +523,22 @@ func (s *Server) handleWorkloadDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applyWorkloadDetailPrivacy(detail, s.privacyFor(r))
-	writeJSON(w, detail)
+	etag, err := jsonPayloadETag(detail)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, detail, etag)
 }
 
 func (s *Server) handleWorkloadGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
 	id := r.URL.Query().Get("workload_id")
 	if id == "" {
 		badRequest(w, fmt.Errorf("workload_id required"))
@@ -530,10 +549,22 @@ func (s *Server) handleWorkloadGraph(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err)
 		return
 	}
-	writeJSON(w, graph)
+	etag, err := jsonPayloadETag(graph)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, graph, etag)
 }
 
 func (s *Server) handleWorkloadTimeline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
 	id := r.URL.Query().Get("workload_id")
 	if id == "" {
 		badRequest(w, fmt.Errorf("workload_id required"))
@@ -545,10 +576,23 @@ func (s *Server) handleWorkloadTimeline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	applyWorkloadTimelinePrivacy(rows, s.privacyFor(r))
-	writeJSON(w, map[string]interface{}{"workload_id": id, "rows": rows})
+	payload := map[string]interface{}{"workload_id": id, "rows": rows}
+	etag, err := jsonPayloadETag(payload)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, payload, etag)
 }
 
 func (s *Server) handleWorkloadState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireRole(w, r, "viewer") {
+		return
+	}
 	id := r.URL.Query().Get("workload_id")
 	if id == "" {
 		badRequest(w, fmt.Errorf("workload_id required"))
@@ -573,7 +617,12 @@ func (s *Server) handleWorkloadState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applyWorkloadStatePrivacy(state, s.privacyFor(r))
-	writeJSON(w, state)
+	etag, err := jsonPayloadETag(state)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, state, etag)
 }
 
 func (s *Server) handleWorkloadEvents(w http.ResponseWriter, r *http.Request) {
