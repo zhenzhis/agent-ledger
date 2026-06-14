@@ -1,6 +1,10 @@
 package integrations
 
-import "github.com/zhenzhis/agent-ledger/internal/storage"
+import (
+	"strings"
+
+	"github.com/zhenzhis/agent-ledger/internal/storage"
+)
 
 const (
 	defaultJSONBodyLimitBytes   = 1 << 20
@@ -576,6 +580,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			},
 		},
 	}
+	addOperationIDs(spec)
 	addAuthResponsesAndSecurity(spec)
 	addMethodNotAllowedResponses(spec)
 	return spec
@@ -583,6 +588,58 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 
 func OpenAPIFingerprint(opts Options, runtime *storage.RuntimeStatus) string {
 	return hashJSONPayload(OpenAPISpecFor(opts, runtime))
+}
+
+func addOperationIDs(spec map[string]interface{}) {
+	paths, ok := spec["paths"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	for path, rawPathItem := range paths {
+		pathItem, ok := rawPathItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for _, method := range []string{"get", "post", "put", "patch", "delete"} {
+			operation, ok := pathItem[method].(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if _, exists := operation["operationId"]; exists {
+				continue
+			}
+			operation["operationId"] = openAPIOperationID(method, path)
+		}
+	}
+}
+
+func openAPIOperationID(method, path string) string {
+	var b strings.Builder
+	b.WriteString(method)
+	lastWasUnderscore := false
+	for _, ch := range path {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+			b.WriteRune(ch)
+			lastWasUnderscore = false
+		case ch >= 'A' && ch <= 'Z':
+			b.WriteRune(ch + ('a' - 'A'))
+			lastWasUnderscore = false
+		case ch >= '0' && ch <= '9':
+			b.WriteRune(ch)
+			lastWasUnderscore = false
+		default:
+			if b.Len() > 0 && !lastWasUnderscore {
+				b.WriteByte('_')
+				lastWasUnderscore = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return method + "_operation"
+	}
+	return out
 }
 
 func addMethodNotAllowedResponses(spec map[string]interface{}) {

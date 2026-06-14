@@ -369,6 +369,39 @@ func TestOpenAPIGetOperationsDeclareRevalidationPolicy(t *testing.T) {
 	}
 }
 
+func TestOpenAPIOperationsExposeStableUniqueOperationIDs(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	paths := spec["paths"].(map[string]interface{})
+	seen := map[string]string{}
+	for path, rawPathItem := range paths {
+		pathItem, ok := rawPathItem.(map[string]interface{})
+		if !ok {
+			t.Fatalf("OpenAPI path %s has invalid item: %#v", path, rawPathItem)
+		}
+		for _, method := range []string{"get", "post", "put", "patch", "delete"} {
+			rawOperation, ok := pathItem[method]
+			if !ok {
+				continue
+			}
+			operation, ok := rawOperation.(map[string]interface{})
+			if !ok {
+				t.Fatalf("OpenAPI %s %s has invalid operation: %#v", method, path, rawOperation)
+			}
+			id, _ := operation["operationId"].(string)
+			if !contractOpenAPIOperationIDValid(id) {
+				t.Fatalf("OpenAPI %s %s has invalid operationId %q: %#v", method, path, id, operation)
+			}
+			if previous, ok := seen[id]; ok {
+				t.Fatalf("OpenAPI operationId %q reused by %s %s and %s", id, method, path, previous)
+			}
+			seen[id] = method + " " + path
+		}
+	}
+	if len(seen) == 0 {
+		t.Fatal("OpenAPI operationId check did not inspect any operations")
+	}
+}
+
 func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Collectors.Claude.Enabled = true
@@ -387,7 +420,7 @@ func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
 		t.Fatalf("verification report missing hashes: %#v", report)
 	}
-	for _, name := range []string{"discovery.contract_bundle_uri", "bundle.document.openapi", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.get_revalidation"} {
+	for _, name := range []string{"discovery.contract_bundle_uri", "bundle.document.openapi", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.get_revalidation"} {
 		if !verificationReportHasCheck(report, name) {
 			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
 		}

@@ -290,6 +290,8 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.auth_scheme", authSchemeOK, "critical", "OpenAPI declares the local bearer authentication scheme", "AgentLedgerBearer type=http scheme=bearer", boolString(authSchemeOK))
 	authOK, authActual := contractOpenAPIOperationAuthStatus(paths)
 	addCheck("openapi.operation_auth", authOK, "critical", "OpenAPI operations declare bearer auth and 401 responses", "all operations include AgentLedgerBearer security and 401 response", authActual)
+	operationIDOK, operationIDActual := contractOpenAPIOperationIDStatus(paths)
+	addCheck("openapi.operation_ids", operationIDOK, "critical", "OpenAPI operations expose stable unique operationId values", "all operations include valid unique operationId", operationIDActual)
 	admissionOK, admissionActual := contractOpenAPIOperationAdmissionStatus(paths)
 	addCheck("openapi.operation_admission", admissionOK, "critical", "OpenAPI operations expose admission role, write-mode, and read-only metadata", "all operations include required_role, write_mode, available_in_read_only", admissionActual)
 	methodOK, methodActual := contractOpenAPIOperationMethodStatus(paths)
@@ -399,6 +401,35 @@ func contractOpenAPIOperationAuthStatus(paths map[string]interface{}) (bool, str
 	return checked > 0 && missing == 0, "checked=" + intString(checked) + ",missing=" + intString(missing)
 }
 
+func contractOpenAPIOperationIDStatus(paths map[string]interface{}) (bool, string) {
+	checked, missing, duplicate := 0, 0, 0
+	seen := map[string]bool{}
+	for _, rawPathItem := range paths {
+		pathItem, ok := rawPathItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for _, method := range []string{"get", "post", "put", "patch", "delete"} {
+			operation, ok := pathItem[method].(map[string]interface{})
+			if !ok {
+				continue
+			}
+			checked++
+			id, _ := operation["operationId"].(string)
+			if !contractOpenAPIOperationIDValid(id) {
+				missing++
+				continue
+			}
+			if seen[id] {
+				duplicate++
+				continue
+			}
+			seen[id] = true
+		}
+	}
+	return checked > 0 && missing == 0 && duplicate == 0, "checked=" + intString(checked) + ",missing=" + intString(missing) + ",duplicates=" + intString(duplicate)
+}
+
 func contractOpenAPIOperationAdmissionStatus(paths map[string]interface{}) (bool, string) {
 	checked, missing := 0, 0
 	for _, rawPathItem := range paths {
@@ -504,6 +535,23 @@ func contractOpenAPIOperationHasResponse(operation map[string]interface{}, statu
 	}
 	_, ok = responses[status]
 	return ok
+}
+
+func contractOpenAPIOperationIDValid(id string) bool {
+	if id == "" {
+		return false
+	}
+	for i, ch := range id {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+		case ch >= 'A' && ch <= 'Z':
+		case ch == '_':
+		case ch >= '0' && ch <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func contractOpenAPIOperationHasAdmissionMetadata(operation map[string]interface{}) bool {
