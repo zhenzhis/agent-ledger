@@ -24,6 +24,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger event validate < event.json # validate canonical events without writing SQLite
 ./agent-ledger event ingest < event.json   # ingest metadata-only canonical event(s)
 ./agent-ledger adapter spec                # print machine-readable adapter contract
+./agent-ledger adapter matrix              # print adapter conformance matrix for fixture CI
 ./agent-ledger adapter conformance --kind provider-stream --strict --file fixture.sse # validate adapter fixture output without writing SQLite
 ./agent-ledger discovery                   # print local discovery manifest
 ./agent-ledger contracts                   # print REST/CLI/MCP contract bundle with hashes and cache semantics

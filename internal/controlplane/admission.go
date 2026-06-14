@@ -268,6 +268,7 @@ func isReadOnlyHTTPPath(path string) bool {
 		"/api/contracts/verify",
 		"/api/openapi.json",
 		"/api/integrations/adapter-spec",
+		"/api/integrations/conformance-matrix",
 		"/api/runtime/status",
 		"/api/config/status",
 		"/api/readiness",

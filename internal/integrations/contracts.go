@@ -246,6 +246,22 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				WritesLocalState: false,
 			},
 			{
+				ID:               "adapter-conformance-matrix",
+				Name:             "Adapter Conformance Matrix",
+				Contract:         "agent-ledger.adapter-conformance-matrix",
+				Version:          "v1",
+				Hash:             AdapterConformanceMatrixFingerprint(),
+				PrimaryURI:       "/api/integrations/conformance-matrix",
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger adapter matrix"},
+				MCPTools:         []string{"ledger.conformance_matrix"},
+				MCPResources:     []string{"agent-ledger://integrations/conformance-matrix"},
+				Revalidation:     "ETag + If-None-Match",
+				Privacy:          "adapter fixture paths, validation commands, expected metadata event families, and privacy notes only",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
+			{
 				ID:               "a2a-discovery",
 				Name:             "A2A Telemetry Discovery",
 				Contract:         "agent-ledger.a2a-discovery",
@@ -301,6 +317,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.openapi_uri", discovery.OpenAPIURI == "/api/openapi.json", "critical", "discovery points to OpenAPI contract", "/api/openapi.json", discovery.OpenAPIURI)
 	addCheck("discovery.catalog_hash", discovery.CapabilityCatalogHash == catalogHash, "critical", "discovery catalog hash matches generated catalog", catalogHash, discovery.CapabilityCatalogHash)
 	addCheck("discovery.provider_profiles", discovery.ProviderProfilesURI == "/api/provider-profiles" && discovery.ProviderProfilesHash == ProviderProfilesFingerprint(), "critical", "discovery points to provider profile catalog", "/api/provider-profiles "+ProviderProfilesFingerprint(), discovery.ProviderProfilesURI+" "+discovery.ProviderProfilesHash)
+	addCheck("discovery.conformance_matrix", discovery.ConformanceMatrixURI == "/api/integrations/conformance-matrix" && discovery.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint(), "critical", "discovery points to adapter conformance matrix", "/api/integrations/conformance-matrix "+AdapterConformanceMatrixFingerprint(), discovery.ConformanceMatrixURI+" "+discovery.ConformanceMatrixHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
 	addCheck("discovery.adapter_hash", discovery.AdapterSpecHash == AdapterContractFingerprint(), "critical", "discovery adapter hash matches generated adapter contract", AdapterContractFingerprint(), discovery.AdapterSpecHash)
 	addCheck("discovery.a2a_metadata", discovery.A2A.Endpoint == "/api/a2a/tasks" && discovery.A2A.ConformanceKind == "a2a" && !discovery.A2A.FullServer && !discovery.A2A.MessageContentStored && !discovery.A2A.PromptContentStored, "critical", "discovery exposes privacy-safe A2A telemetry metadata without claiming full server behavior", "endpoint=/api/a2a/tasks,kind=a2a,full_server=false,prompt/message_content_stored=false", a2aDiscoveryCheckSummary(discovery.A2A))
@@ -311,6 +328,8 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	adapterKindsOK, adapterKindsActual := contractAdapterInputKindStatus(adapter)
 	addCheck("adapter.input_kinds", adapterKindsOK, "critical", "adapter contract supported input kinds match conformance decoder families", "adapter input kinds cover all supported conformance kinds with signals and privacy notes", adapterKindsActual)
 	addCheck("adapter.provider_profiles", adapter.ProviderProfilesURI == "/api/provider-profiles" && adapter.ProviderProfilesHash == ProviderProfilesFingerprint(), "critical", "adapter contract links provider profile catalog", "/api/provider-profiles "+ProviderProfilesFingerprint(), adapter.ProviderProfilesURI+" "+adapter.ProviderProfilesHash)
+	matrix := AdapterConformanceMatrixSpec()
+	addCheck("adapter.conformance_matrix", matrix.AdapterSpecHash == AdapterContractFingerprint() && matrix.ProviderProfilesHash == ProviderProfilesFingerprint() && len(matrix.Kinds) == len(SupportedAdapterConformanceKinds()), "critical", "adapter conformance matrix links schema, provider profiles, and every decoder kind", AdapterContractFingerprint()+" "+ProviderProfilesFingerprint()+" kinds="+strconv.Itoa(len(SupportedAdapterConformanceKinds())), matrix.AdapterSpecHash+" "+matrix.ProviderProfilesHash+" kinds="+strconv.Itoa(len(matrix.Kinds)))
 	addCheck("bundle.hash", bundle.BundleHash == ContractBundleFingerprint(bundle), "critical", "contract bundle hash matches deterministic fingerprint", ContractBundleFingerprint(bundle), bundle.BundleHash)
 
 	requiredDocs := []struct {
@@ -323,6 +342,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "openapi", hash: openAPIHash},
 		{id: "capability-catalog", hash: catalogHash},
 		{id: "provider-profiles", hash: ProviderProfilesFingerprint()},
+		{id: "adapter-conformance-matrix", hash: AdapterConformanceMatrixFingerprint()},
 		{id: "runtime-status", hash: hashJSONPayload(runtime)},
 		{id: "admission-check", hash: admissionCheckContractHash()},
 		{id: "canonical-event-schema", hash: storage.CanonicalEventSchemaFingerprint()},
@@ -346,6 +366,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.privacy", meta["prompt_content_stored"] == false && meta["usage_data_uploaded"] == false, "critical", "OpenAPI metadata preserves local-first privacy flags", "prompt_content_stored=false,usage_data_uploaded=false", openAPIPrivacy(meta))
 	addCheck("openapi.catalog_hash", contractStringValue(meta["capability_catalog_hash"]) == catalogHash, "critical", "OpenAPI catalog hash matches generated catalog", catalogHash, contractStringValue(meta["capability_catalog_hash"]))
 	addCheck("openapi.provider_profiles_hash", contractStringValue(meta["provider_profiles_hash"]) == ProviderProfilesFingerprint(), "critical", "OpenAPI provider profile hash matches generated catalog", ProviderProfilesFingerprint(), contractStringValue(meta["provider_profiles_hash"]))
+	addCheck("openapi.conformance_matrix_hash", contractStringValue(meta["conformance_matrix_hash"]) == AdapterConformanceMatrixFingerprint(), "critical", "OpenAPI conformance matrix hash matches generated matrix", AdapterConformanceMatrixFingerprint(), contractStringValue(meta["conformance_matrix_hash"]))
 	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))
 	addCheck("openapi.adapter_hash", contractStringValue(meta["adapter_spec_hash"]) == AdapterContractFingerprint(), "critical", "OpenAPI adapter hash matches generated adapter contract", AdapterContractFingerprint(), contractStringValue(meta["adapter_spec_hash"]))
 

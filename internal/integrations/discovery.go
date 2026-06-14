@@ -49,6 +49,8 @@ type DiscoveryManifest struct {
 	AdapterSpecURI        string               `json:"adapter_spec_uri"`
 	AdapterSpecHash       string               `json:"adapter_spec_hash"`
 	AdapterConformanceURI string               `json:"adapter_conformance_uri"`
+	ConformanceMatrixURI  string               `json:"conformance_matrix_uri"`
+	ConformanceMatrixHash string               `json:"conformance_matrix_hash"`
 	MCPCommand            string               `json:"mcp_command"`
 	Auth                  string               `json:"auth"`
 	ReadOnly              bool                 `json:"read_only"`
@@ -138,6 +140,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		AdapterSpecURI:        "/api/integrations/adapter-spec",
 		AdapterSpecHash:       AdapterContractFingerprint(),
 		AdapterConformanceURI: "/api/integrations/conformance",
+		ConformanceMatrixURI:  "/api/integrations/conformance-matrix",
+		ConformanceMatrixHash: AdapterConformanceMatrixFingerprint(),
 		MCPCommand:            "agent-ledger mcp",
 		Auth:                  discoveryAuth(opts),
 		ReadOnly:              opts.ReadOnly,

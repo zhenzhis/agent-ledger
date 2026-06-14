@@ -92,6 +92,7 @@ func TestCLIReadOnlyGateMatchesAdmission(t *testing.T) {
 		{"reconcile", "status"},
 		{"reconcile", "import", "--file", "provider.csv"},
 		{"provider", "profiles"},
+		{"adapter", "matrix"},
 		{"provider", "convert", "--file", "provider.json"},
 		{"provider", "ingest", "--file", "provider.json"},
 		{"otel", "convert", "--file", "spans.json"},
@@ -217,6 +218,9 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	if paths["/api/openapi.json"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/config/status"] == nil || paths["/api/readiness"] == nil || paths["/api/admission/check"] == nil || paths["/api/events/validate"] == nil || paths["/api/workloads"] == nil || paths["/api/workloads/lease"] == nil || paths["/api/workloads/lease/renew"] == nil || paths["/api/workloads/lease/release"] == nil || paths["/api/workloads/leases"] == nil || paths["/api/agent-runs"] == nil {
 		t.Fatalf("openapi output missing expected paths: %+v", paths)
 	}
+	if paths["/api/integrations/conformance-matrix"] == nil {
+		t.Fatalf("openapi output missing conformance matrix path: %+v", paths)
+	}
 }
 
 func TestUICLICheckOutputsContractReport(t *testing.T) {
@@ -269,6 +273,35 @@ func TestProviderProfilesCLIOutputsReadOnlyCatalog(t *testing.T) {
 	}
 	if !strings.Contains(out, "ollama-local") || !strings.Contains(out, "openrouter-relay") {
 		t.Fatalf("provider profile catalog missing local/relay coverage: %s", out)
+	}
+}
+
+func TestAdapterMatrixCLIOutputsReadOnlyCatalog(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"adapter", "matrix"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI adapter matrix: %v", err)
+	}
+	var matrix integrations.AdapterConformanceMatrix
+	if err := json.Unmarshal([]byte(out), &matrix); err != nil {
+		t.Fatalf("decode adapter matrix output: %v\n%s", err, out)
+	}
+	if matrix.Contract != "agent-ledger.adapter-conformance-matrix" || !matrix.ReadOnlySafe ||
+		matrix.WritesLocalState || matrix.Summary.Fixtures < 10 || matrix.AdapterSpecHash != integrations.AdapterContractFingerprint() {
+		t.Fatalf("unexpected adapter conformance matrix: %+v", matrix)
+	}
+	if !strings.Contains(out, "provider-openai-response.json") || !strings.Contains(out, "a2a-delegated-task.json") {
+		t.Fatalf("adapter matrix missing expected fixture coverage: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-", "C:/Users", "session_id"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("adapter matrix leaked %q: %s", forbidden, out)
+		}
 	}
 }
 

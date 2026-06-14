@@ -36,7 +36,9 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		manifest.ProviderProfilesURI != "/api/provider-profiles" ||
 		manifest.CanonicalSchemaURI != "/api/event-schema" || manifest.EventExamplesURI != "/api/event-examples" ||
 		manifest.AdapterSpecURI != "/api/integrations/adapter-spec" ||
-		manifest.AdapterConformanceURI != "/api/integrations/conformance" || manifest.RuntimeStatusURI != "/api/runtime/status" ||
+		manifest.AdapterConformanceURI != "/api/integrations/conformance" ||
+		manifest.ConformanceMatrixURI != "/api/integrations/conformance-matrix" ||
+		manifest.RuntimeStatusURI != "/api/runtime/status" ||
 		manifest.CanonicalSchemaHash == "" {
 		t.Fatalf("unexpected manifest: %+v", manifest)
 	}
@@ -45,6 +47,9 @@ func TestDiscoveryEndpoint(t *testing.T) {
 	}
 	if manifest.ProviderProfilesHash == "" || manifest.ProviderProfilesHash != integrations.ProviderProfilesFingerprint() {
 		t.Fatalf("unexpected provider profile hash: %+v", manifest)
+	}
+	if manifest.ConformanceMatrixHash == "" || manifest.ConformanceMatrixHash != integrations.AdapterConformanceMatrixFingerprint() {
+		t.Fatalf("unexpected conformance matrix hash: %+v", manifest)
 	}
 	if manifest.A2A.Endpoint != "/api/a2a/tasks" || manifest.A2A.ConformanceKind != "a2a" ||
 		manifest.A2A.FullServer || manifest.A2A.MessageContentStored || manifest.A2A.PromptContentStored ||
@@ -77,7 +82,7 @@ func TestContractsEndpoint(t *testing.T) {
 		t.Fatalf("unexpected contract bundle: %+v", bundle)
 	}
 	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "runtime-status") ||
-		!contractBundleHasDocument(bundle, "admission-check") || !contractBundleHasDocument(bundle, "canonical-event-schema") || !contractBundleHasDocument(bundle, "adapter-contract") {
+		!contractBundleHasDocument(bundle, "admission-check") || !contractBundleHasDocument(bundle, "canonical-event-schema") || !contractBundleHasDocument(bundle, "adapter-contract") || !contractBundleHasDocument(bundle, "adapter-conformance-matrix") {
 		t.Fatalf("contract bundle missing core documents: %+v", bundle.Documents)
 	}
 	if rr.Header().Get("ETag") != `"`+bundle.BundleHash+`"` {
@@ -106,6 +111,28 @@ func TestProviderProfilesEndpoint(t *testing.T) {
 		t.Fatalf("provider profiles should cover relay and local runtimes: %s", rr.Body.String())
 	}
 	assertETagRevalidates(t, srv.handleProviderProfiles, "http://127.0.0.1/api/provider-profiles", rr.Header().Get("ETag"))
+}
+
+func TestConformanceMatrixEndpoint(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/integrations/conformance-matrix", nil)
+	rr := httptest.NewRecorder()
+	srv.handleConformanceMatrix(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("conformance matrix status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var matrix integrations.AdapterConformanceMatrix
+	if err := json.Unmarshal(rr.Body.Bytes(), &matrix); err != nil {
+		t.Fatalf("decode conformance matrix: %v", err)
+	}
+	if matrix.Contract != "agent-ledger.adapter-conformance-matrix" || matrix.Summary.InputKinds != len(integrations.SupportedAdapterConformanceKinds()) || matrix.Summary.Fixtures < 10 {
+		t.Fatalf("unexpected conformance matrix: %+v", matrix)
+	}
+	if !strings.Contains(rr.Body.String(), "provider-openai-response.json") || !strings.Contains(rr.Body.String(), "a2a-delegated-task.json") {
+		t.Fatalf("matrix missing fixture coverage: %s", rr.Body.String())
+	}
+	assertETagRevalidates(t, srv.handleConformanceMatrix, "http://127.0.0.1/api/integrations/conformance-matrix", rr.Header().Get("ETag"))
 }
 
 func TestGoalCoverageEndpoint(t *testing.T) {
@@ -172,6 +199,9 @@ func TestContractVerificationEndpoint(t *testing.T) {
 	}
 	if !contractVerificationHasCheck(report, "discovery.provider_profiles") || !contractVerificationHasCheck(report, "adapter.provider_profiles") || !contractVerificationHasCheck(report, "openapi.provider_profiles_hash") || !contractVerificationHasCheck(report, "bundle.document.provider-profiles") {
 		t.Fatalf("verification report missing provider profile checks: %+v", report.Checks)
+	}
+	if !contractVerificationHasCheck(report, "discovery.conformance_matrix") || !contractVerificationHasCheck(report, "adapter.conformance_matrix") || !contractVerificationHasCheck(report, "openapi.conformance_matrix_hash") || !contractVerificationHasCheck(report, "bundle.document.adapter-conformance-matrix") {
+		t.Fatalf("verification report missing conformance matrix checks: %+v", report.Checks)
 	}
 	assertETagRevalidates(t, srv.handleContractVerification, "http://127.0.0.1/api/contracts/verify", rr.Header().Get("ETag"))
 }
@@ -419,6 +449,7 @@ func TestControlPlaneEndpointETags(t *testing.T) {
 	}{
 		{name: "integrations", url: "http://127.0.0.1/api/integrations", handler: srv.handleIntegrations},
 		{name: "provider-profiles", url: "http://127.0.0.1/api/provider-profiles", handler: srv.handleProviderProfiles},
+		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},
 		{name: "goal-coverage", url: "http://127.0.0.1/api/goal-coverage", handler: srv.handleGoalCoverage},
 		{name: "contracts", url: "http://127.0.0.1/api/contracts", handler: srv.handleContracts},
 		{name: "contract-verification", url: "http://127.0.0.1/api/contracts/verify", handler: srv.handleContractVerification},
@@ -502,6 +533,7 @@ func TestControlPlaneEndpointsRejectNonGET(t *testing.T) {
 	}{
 		{name: "integrations", url: "http://127.0.0.1/api/integrations", handler: srv.handleIntegrations},
 		{name: "provider-profiles", url: "http://127.0.0.1/api/provider-profiles", handler: srv.handleProviderProfiles},
+		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},
 		{name: "discovery", url: "http://127.0.0.1/api/discovery", handler: srv.handleDiscovery},
 		{name: "contracts", url: "http://127.0.0.1/api/contracts", handler: srv.handleContracts},
 		{name: "contract-verification", url: "http://127.0.0.1/api/contracts/verify", handler: srv.handleContractVerification},
