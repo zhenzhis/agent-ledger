@@ -114,7 +114,7 @@ func TestConvertOpenInferenceSpanToCanonicalModelCall(t *testing.T) {
 		"end_time":"2026-06-07T11:00:01Z",
 		"attributes":{
 			"openinference.span.kind":"LLM",
-			"llm.provider":"google",
+			"llm.system":"google",
 			"llm.model_name":"gemini-2.5-pro",
 			"llm.token_count.prompt":160,
 			"llm.token_count.prompt_details.cache_read":40,
