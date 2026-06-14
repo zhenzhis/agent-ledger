@@ -11,13 +11,35 @@ import (
 
 func tempDB(t *testing.T) *storage.DB {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "agent-ledger-collector-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
 	db, err := storage.Open(filepath.Join(dir, "test.db"))
 	if err != nil {
+		_ = os.RemoveAll(dir)
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("Close test DB: %v", err)
+		}
+		removeCollectorTestDirWithRetry(t, dir)
+	})
 	return db
+}
+
+func removeCollectorTestDirWithRetry(t *testing.T, dir string) {
+	t.Helper()
+	var err error
+	for attempt := 0; attempt < 20; attempt++ {
+		err = os.RemoveAll(dir)
+		if err == nil {
+			return
+		}
+		time.Sleep(time.Duration(attempt+1) * 10 * time.Millisecond)
+	}
+	t.Errorf("RemoveAll collector test DB dir after retries: %v", err)
 }
 
 func TestClaudeCollector_Scan(t *testing.T) {
