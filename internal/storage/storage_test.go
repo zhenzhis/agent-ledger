@@ -9,13 +9,35 @@ import (
 
 func tempDB(t *testing.T) *DB {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "agent-ledger-storage-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
 	db, err := Open(filepath.Join(dir, "test.db"))
 	if err != nil {
+		_ = os.RemoveAll(dir)
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("Close test DB: %v", err)
+		}
+		removeStorageTestDirWithRetry(t, dir)
+	})
 	return db
+}
+
+func removeStorageTestDirWithRetry(t *testing.T, dir string) {
+	t.Helper()
+	var err error
+	for attempt := 0; attempt < 20; attempt++ {
+		err = os.RemoveAll(dir)
+		if err == nil {
+			return
+		}
+		time.Sleep(time.Duration(attempt+1) * 10 * time.Millisecond)
+	}
+	t.Errorf("RemoveAll storage test DB dir after retries: %v", err)
 }
 
 func TestOpenAndClose(t *testing.T) {
