@@ -128,7 +128,7 @@ Async routers and long-running agents can acquire a short-lived workload lease b
 
 `claim-next` atomically selects one queue-eligible workload and creates the lease in the same SQLite transaction, so multiple local workers do not need to list and race. By default it claims `queued` or `active` workloads; pass `status=any` or a comma-separated non-terminal status list only when a router intentionally handles stalled or blocked work.
 
-`GET /api/workloads/queue`, `agent-ledger workload queue`, and MCP `ledger.workload_queue` are read-only queue probes. They report claimable workload count, non-terminal status distribution, active/expired lease pressure, oldest claimable workload time, and next lease expiry without mutating expired lease rows.
+`GET /api/workloads/queue`, `agent-ledger workload queue`, and MCP `ledger.workload_queue` are read-only queue probes. They report claimable workload count, non-terminal status distribution, active/expired lease pressure, oldest claimable workload time, and next lease expiry without mutating expired lease rows. The REST endpoint emits a stable `ETag` that ignores `generated_at`, so HTTP monitors can use `If-None-Match` and receive `304 Not Modified` when queue state has not changed.
 
 Only one active lease is allowed per workload. `lease_token` is returned only from acquire/claim responses; list, renew, release, readiness, doctor, audit, and contract surfaces never expose it. SQLite stores a SHA-256 token hash, not the plaintext token. Read paths derive expired status without mutating SQLite, so observer/read-only mode remains read-only.
 

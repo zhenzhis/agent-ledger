@@ -427,6 +427,39 @@ func jsonPayloadETag(v interface{}) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+func jsonPayloadETagIgnoringKeys(v interface{}, keys ...string) (string, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	var stable interface{}
+	if err := json.Unmarshal(raw, &stable); err != nil {
+		return "", err
+	}
+	ignored := map[string]bool{}
+	for _, key := range keys {
+		ignored[key] = true
+	}
+	stripJSONKeys(stable, ignored)
+	return jsonPayloadETag(stable)
+}
+
+func stripJSONKeys(v interface{}, ignored map[string]bool) {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		for key := range ignored {
+			delete(x, key)
+		}
+		for _, child := range x {
+			stripJSONKeys(child, ignored)
+		}
+	case []interface{}:
+		for _, child := range x {
+			stripJSONKeys(child, ignored)
+		}
+	}
+}
+
 func quoteHTTPETag(etag string) string {
 	etag = strings.TrimSpace(etag)
 	if etag == "" {

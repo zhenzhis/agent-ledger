@@ -335,6 +335,17 @@ func TestWorkloadClaimNextAPI(t *testing.T) {
 	if beforeStats.Claimable != 1 || beforeStats.ActiveLeases != 0 {
 		t.Fatalf("unexpected queue before claim: %+v", beforeStats)
 	}
+	queueBeforeETag := queueBefore.Header().Get("ETag")
+	if queueBeforeETag == "" {
+		t.Fatalf("queue response missing ETag")
+	}
+	queueCached := httptest.NewRecorder()
+	queueCachedReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/workloads/queue?source=codex", nil)
+	queueCachedReq.Header.Set("If-None-Match", queueBeforeETag)
+	srv.handleWorkloadQueue(queueCached, queueCachedReq)
+	if queueCached.Code != http.StatusNotModified {
+		t.Fatalf("queue If-None-Match status=%d body=%s", queueCached.Code, queueCached.Body.String())
+	}
 	body, _ := json.Marshal(map[string]interface{}{
 		"holder":      "router-a",
 		"purpose":     "private execution purpose",
@@ -364,6 +375,9 @@ func TestWorkloadClaimNextAPI(t *testing.T) {
 	}
 	if afterStats.Claimable != 0 || afterStats.ActiveLeases != 1 || afterStats.NextLeaseExpiryAt == "" {
 		t.Fatalf("unexpected queue after claim: %+v", afterStats)
+	}
+	if queueAfter.Header().Get("ETag") == "" || queueAfter.Header().Get("ETag") == queueBeforeETag {
+		t.Fatalf("queue ETag did not change after claim: before=%q after=%q", queueBeforeETag, queueAfter.Header().Get("ETag"))
 	}
 	emptyResp := httptest.NewRecorder()
 	srv.handleWorkloadClaimNext(emptyResp, httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/workloads/claim-next", bytes.NewReader(body)))

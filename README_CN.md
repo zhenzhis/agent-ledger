@@ -128,7 +128,7 @@ Workload 与 run 写操作支持稳定幂等键，面向异步 agent router、wr
 
 `claim-next` 会在同一个 SQLite 事务中原子选择一个可领取 workload 并创建 lease，多个本地 worker 不需要先 list 再抢占。默认只领取 `queued` 或 `active` workload；只有 router 明确要处理 stalled/blocked 工作时，才传 `status=any` 或逗号分隔的非终态 status。
 
-`GET /api/workloads/queue`、`agent-ledger workload queue` 与 MCP `ledger.workload_queue` 是只读 queue 探针。它们会返回可领取 workload 数、非终态分布、active/expired lease 压力、最老可领取 workload 时间和下一次 lease 过期时间，不会回写过期 lease 行。
+`GET /api/workloads/queue`、`agent-ledger workload queue` 与 MCP `ledger.workload_queue` 是只读 queue 探针。它们会返回可领取 workload 数、非终态分布、active/expired lease 压力、最老可领取 workload 时间和下一次 lease 过期时间，不会回写过期 lease 行。REST 端点会返回忽略 `generated_at` 的稳定 `ETag`，HTTP monitor 可用 `If-None-Match` 在 queue 状态未变化时获得 `304 Not Modified`。
 
 同一个 workload 同时只允许一个 active lease。`lease_token` 只在 acquire/claim 响应中返回；list、renew、release、readiness、doctor、audit 和 contract surface 都不会返回它。SQLite 只保存 SHA-256 token hash，不保存明文 token。读路径只派生过期状态，不写回 SQLite，因此 observer/read-only 模式仍保持只读。
 

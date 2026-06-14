@@ -529,6 +529,7 @@ func workloadQueueOperation() map[string]interface{} {
 			},
 			"responses": map[string]interface{}{
 				"200": jsonResponse("WorkloadQueueStats"),
+				"304": map[string]interface{}{"description": "Not modified when If-None-Match matches the stable queue ETag."},
 				"400": jsonResponse("Error"),
 			},
 		},

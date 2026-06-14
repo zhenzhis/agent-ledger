@@ -262,7 +262,12 @@ func (s *Server) handleWorkloadQueue(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err)
 		return
 	}
-	writeJSON(w, stats)
+	etag, err := jsonPayloadETagIgnoringKeys(stats, "generated_at")
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, stats, etag)
 }
 
 func (s *Server) handleWorkloadLeaseAcquire(w http.ResponseWriter, r *http.Request) {
