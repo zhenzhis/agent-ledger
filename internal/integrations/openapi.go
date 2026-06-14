@@ -657,13 +657,26 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"ApprovalRouteSummaryStats":    approvalRouteSummaryStatsSchema(),
 				"ApprovalRouteRow":             approvalRouteRowSchema(),
 				"ApprovalRouteSummary":         approvalRouteSummarySchema(),
-				"OTelGenAIRequest":             looseObjectSchema("OpenTelemetry GenAI JSON span export or span array. Prompt and completion message attributes are ignored by conversion."),
-				"OTLPTraceRequest":             looseObjectSchema("OTLP HTTP JSON/protobuf trace batch. Protobuf requests use application/x-protobuf or application/protobuf."),
-				"A2ATaskRequest":               looseObjectSchema("A2A task snapshot/event payload. Message history, message parts, and artifact parts are excluded from persistence."),
-				"ProviderUsageRequest":         looseObjectSchema("OpenAI-compatible, Anthropic-style, or LiteLLM-style usage envelope without request/response message content."),
-				"EcosystemIngestResponse":      looseObjectSchema("Metadata-only ingest result with accepted row counts and canonical event projection results."),
-				"GatewayRequest":               looseObjectSchema("Provider-compatible request body. Prompt content is proxied in memory only and not persisted by Agent Ledger."),
-				"GatewayResponse":              looseObjectSchema("Provider-compatible upstream response or SSE stream with Agent Ledger metering headers."),
+				"OTelAttributeValue":           otelAttributeValueSchema(),
+				"OTelAttribute":                otelAttributeSchema(),
+				"OTelSpan":                     otelSpanSchema(),
+				"OTelSpanEnvelope":             otelSpanEnvelopeSchema(),
+				"OTelResourceSpansEnvelope":    otelResourceSpansEnvelopeSchema(),
+				"OTelGenAIRequest":             otelGenAIRequestSchema(),
+				"OTLPTraceRequest":             otlpTraceRequestSchema(),
+				"A2AStatus":                    a2aStatusSchema(),
+				"A2AArtifact":                  a2aArtifactSchema(),
+				"A2ATask":                      a2aTaskSchema(),
+				"A2ATaskEnvelope":              a2aTaskEnvelopeSchema(),
+				"A2ATaskRequest":               a2aTaskRequestSchema(),
+				"ProviderUsage":                providerUsageSchema(),
+				"ProviderCall":                 providerCallSchema(),
+				"ProviderUsageEnvelope":        providerUsageEnvelopeSchema(),
+				"ProviderUsageRequest":         providerUsageRequestSchema(),
+				"EcosystemIngestResponse":      ecosystemIngestResponseSchema(),
+				"GatewayLedgerMetadata":        gatewayLedgerMetadataSchema(),
+				"GatewayRequest":               gatewayRequestSchema(),
+				"GatewayResponse":              gatewayResponseSchema(),
 				"Error": map[string]interface{}{
 					"type":       "object",
 					"properties": map[string]interface{}{"error": stringSchema()},
@@ -2625,6 +2638,348 @@ func webhookNotificationResultSchema() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"result":  refSchema("WebhookDeliveryResult"),
 			"payload": refSchema("WebhookNotificationPayload"),
+		},
+	}
+}
+
+func otelAttributeValueSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "OpenTelemetry JSON attribute value wrapper. Prompt and message attributes are ignored by conversion.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"stringValue": stringSchema(),
+			"intValue":    stringSchema(),
+			"doubleValue": numberSchema(),
+			"boolValue":   boolSchema(),
+			"arrayValue":  looseObjectSchema("OTLP JSON arrayValue wrapper."),
+		},
+	}
+}
+
+func otelAttributeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "OpenTelemetry key/value attribute.",
+		"additionalProperties": true,
+		"required":             []string{"key", "value"},
+		"properties": map[string]interface{}{
+			"key":   stringSchema(),
+			"value": refSchema("OTelAttributeValue"),
+		},
+	}
+}
+
+func otelSpanSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Compact OpenTelemetry GenAI span shape accepted by Agent Ledger.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"trace_id":          stringSchema(),
+			"traceId":           stringSchema(),
+			"span_id":           stringSchema(),
+			"spanId":            stringSchema(),
+			"parent_span_id":    stringSchema(),
+			"parentSpanId":      stringSchema(),
+			"name":              stringSchema(),
+			"start_time":        stringSchema(),
+			"startTime":         stringSchema(),
+			"startTimeUnixNano": stringSchema(),
+			"end_time":          stringSchema(),
+			"endTime":           stringSchema(),
+			"endTimeUnixNano":   stringSchema(),
+			"attributes": map[string]interface{}{
+				"oneOf": []map[string]interface{}{
+					stringMapSchema(),
+					map[string]interface{}{"type": "array", "items": refSchema("OTelAttribute")},
+				},
+			},
+			"resource_attributes": stringMapSchema(),
+		},
+	}
+}
+
+func otelSpanEnvelopeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "OpenTelemetry JSON span list envelope.",
+		"additionalProperties": true,
+		"required":             []string{"spans"},
+		"properties":           map[string]interface{}{"spans": refArraySchema("OTelSpan")},
+	}
+}
+
+func otelResourceSpansEnvelopeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "OTLP JSON resourceSpans envelope. The receiver projects span metadata only.",
+		"additionalProperties": true,
+		"required":             []string{"resourceSpans"},
+		"properties": map[string]interface{}{
+			"resourceSpans": map[string]interface{}{"type": "array", "items": looseObjectSchema("OTLP resourceSpans entry.")},
+		},
+	}
+}
+
+func otelGenAIRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"description": "OpenTelemetry GenAI JSON span export, span array, or OTLP JSON resourceSpans envelope.",
+		"oneOf": []map[string]interface{}{
+			refSchema("OTelSpan"),
+			map[string]interface{}{"type": "array", "items": refSchema("OTelSpan")},
+			refSchema("OTelSpanEnvelope"),
+			refSchema("OTelResourceSpansEnvelope"),
+		},
+	}
+}
+
+func otlpTraceRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"description": "OTLP HTTP JSON/protobuf trace batch. JSON uses resourceSpans; protobuf uses application/x-protobuf or application/protobuf.",
+		"oneOf": []map[string]interface{}{
+			refSchema("OTelResourceSpansEnvelope"),
+			refSchema("OTelSpanEnvelope"),
+			map[string]interface{}{"type": "string", "contentEncoding": "base64", "description": "OTLP protobuf bytes for non-JSON content types."},
+		},
+	}
+}
+
+func a2aStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "A2A task lifecycle metadata without message content.",
+		"additionalProperties": true,
+		"required":             []string{"state"},
+		"properties": map[string]interface{}{
+			"state":     stringSchema(),
+			"timestamp": stringSchema(),
+		},
+	}
+}
+
+func a2aArtifactSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "A2A artifact metadata without artifact parts.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"artifact_id": stringSchema(),
+			"artifactId":  stringSchema(),
+			"id":          stringSchema(),
+			"name":        stringSchema(),
+			"description": stringSchema(),
+			"parts":       map[string]interface{}{"type": "array", "items": looseObjectSchema("A2A artifact part metadata. Part content is ignored by conversion.")},
+			"metadata":    looseObjectSchema("A2A artifact metadata such as hashes or labels."),
+		},
+	}
+}
+
+func a2aTaskSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "A2A task snapshot/event accepted as metadata-only telemetry.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"id":         stringSchema(),
+			"taskId":     stringSchema(),
+			"task_id":    stringSchema(),
+			"contextId":  stringSchema(),
+			"context_id": stringSchema(),
+			"kind":       stringSchema(),
+			"status":     refSchema("A2AStatus"),
+			"artifact":   refSchema("A2AArtifact"),
+			"artifacts":  refArraySchema("A2AArtifact"),
+			"metadata":   looseObjectSchema("A2A metadata. Message history and artifact parts are ignored by conversion."),
+		},
+	}
+}
+
+func a2aTaskEnvelopeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "A2A JSON-RPC result or batch envelope.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"task":   refSchema("A2ATask"),
+			"result": refSchema("A2ATask"),
+			"tasks":  refArraySchema("A2ATask"),
+			"events": refArraySchema("A2ATask"),
+		},
+	}
+}
+
+func a2aTaskRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"description": "A2A task snapshot, task event, JSON-RPC result, or batch envelope. Message history and artifact part content are excluded from persistence.",
+		"oneOf": []map[string]interface{}{
+			refSchema("A2ATask"),
+			map[string]interface{}{"type": "array", "items": refSchema("A2ATask")},
+			refSchema("A2ATaskEnvelope"),
+		},
+	}
+}
+
+func providerUsageSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Provider usage object normalized to Agent Ledger non-overlapping token semantics.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"input_tokens":                integerSchema(),
+			"prompt_tokens":               integerSchema(),
+			"cache_read_input_tokens":     integerSchema(),
+			"cache_read_tokens":           integerSchema(),
+			"cache_creation_input_tokens": integerSchema(),
+			"cache_write_input_tokens":    integerSchema(),
+			"cache_write_tokens":          integerSchema(),
+			"output_tokens":               integerSchema(),
+			"completion_tokens":           integerSchema(),
+			"reasoning_output_tokens":     integerSchema(),
+			"input_tokens_details":        looseObjectSchema("Provider input token detail object."),
+			"prompt_tokens_details":       looseObjectSchema("Provider prompt token detail object."),
+			"output_tokens_details":       looseObjectSchema("Provider output token detail object."),
+			"completion_tokens_details":   looseObjectSchema("Provider completion token detail object."),
+			"cost_usd":                    numberSchema(),
+			"total_cost":                  numberSchema(),
+			"cost":                        numberSchema(),
+		},
+	}
+}
+
+func providerCallSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "OpenAI-compatible, Anthropic-style, LiteLLM-style, or generic provider usage envelope.",
+		"additionalProperties": true,
+		"required":             []string{"usage"},
+		"properties": map[string]interface{}{
+			"id":                   stringSchema(),
+			"response_id":          stringSchema(),
+			"completion_id":        stringSchema(),
+			"request_id":           stringSchema(),
+			"provider":             stringSchema(),
+			"system":               stringSchema(),
+			"gen_ai.provider.name": stringSchema(),
+			"model":                stringSchema(),
+			"model_id":             stringSchema(),
+			"modelID":              stringSchema(),
+			"project":              stringSchema(),
+			"session_id":           stringSchema(),
+			"created_at":           stringSchema(),
+			"created":              stringSchema(),
+			"timestamp":            stringSchema(),
+			"finish_reason":        stringSchema(),
+			"stop_reason":          stringSchema(),
+			"usage":                refSchema("ProviderUsage"),
+			"metadata":             refSchema("GatewayLedgerMetadata"),
+		},
+	}
+}
+
+func providerUsageEnvelopeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Provider usage batch envelope.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"responses": refArraySchema("ProviderCall"),
+			"calls":     refArraySchema("ProviderCall"),
+			"items":     refArraySchema("ProviderCall"),
+		},
+	}
+}
+
+func providerUsageRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"description": "Provider usage call, usage call array, or batch envelope. Request and response message content is ignored by conversion.",
+		"oneOf": []map[string]interface{}{
+			refSchema("ProviderCall"),
+			map[string]interface{}{"type": "array", "items": refSchema("ProviderCall")},
+			refSchema("ProviderUsageEnvelope"),
+		},
+	}
+}
+
+func ecosystemIngestResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Metadata-only ecosystem ingest result with accepted row counts and canonical event projection results.",
+		"additionalProperties": true,
+		"required":             []string{"ok", "events", "results"},
+		"properties": map[string]interface{}{
+			"ok":      boolSchema(),
+			"spans":   integerSchema(),
+			"calls":   integerSchema(),
+			"tasks":   integerSchema(),
+			"events":  integerSchema(),
+			"warning": stringSchema(),
+			"results": refArraySchema("CanonicalEventResult"),
+		},
+	}
+}
+
+func gatewayLedgerMetadataSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Optional metadata Agent Ledger reads for local attribution. Prompt content and secrets must not be included.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"agent_ledger.project":      stringSchema(),
+			"agent_ledger.goal":         stringSchema(),
+			"agent_ledger.workload_id":  stringSchema(),
+			"agent_ledger.agent_run_id": stringSchema(),
+			"agent_ledger.session_id":   stringSchema(),
+			"agent_ledger.git_branch":   stringSchema(),
+			"project":                   stringSchema(),
+			"goal":                      stringSchema(),
+			"workload_id":               stringSchema(),
+			"agent_run_id":              stringSchema(),
+			"run_id":                    stringSchema(),
+			"session_id":                stringSchema(),
+			"git_branch":                stringSchema(),
+			"branch":                    stringSchema(),
+		},
+	}
+}
+
+func gatewayRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Provider-compatible request body. Prompt content is proxied in memory only and not persisted by Agent Ledger.",
+		"additionalProperties": true,
+		"required":             []string{"model"},
+		"properties": map[string]interface{}{
+			"model":          stringSchema(),
+			"stream":         boolSchema(),
+			"metadata":       refSchema("GatewayLedgerMetadata"),
+			"max_tokens":     integerSchema(),
+			"temperature":    numberSchema(),
+			"stream_options": looseObjectSchema("Provider stream options. OpenAI chat streaming may add include_usage when configured."),
+			"tools":          map[string]interface{}{"type": "array", "items": looseObjectSchema("Provider tool declaration proxied in memory only.")},
+		},
+	}
+}
+
+func gatewayResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Provider-compatible upstream response. Agent Ledger adds X-Agent-Ledger-* metering headers and persists usage metadata only.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"id":     stringSchema(),
+			"object": stringSchema(),
+			"type":   stringSchema(),
+			"model":  stringSchema(),
+			"usage":  refSchema("ProviderUsage"),
+			"choices": map[string]interface{}{
+				"type":  "array",
+				"items": looseObjectSchema("Upstream choice object. Message content is not persisted by Agent Ledger."),
+			},
+			"output": map[string]interface{}{
+				"type":  "array",
+				"items": looseObjectSchema("Upstream output object. Output content is not persisted by Agent Ledger."),
+			},
 		},
 	}
 }

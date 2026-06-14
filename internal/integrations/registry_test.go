@@ -1194,6 +1194,134 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("WebhookNotificationApprovalRoute", "route_key_hash", "approver_hash", "escalation_target_hash", "pending", "overdue", "due_soon", "approval_votes", "rejection_votes", "max_required_approvals", "due_next", "sources", "models", "projects", "actions")
 }
 
+func TestOpenAPIEcosystemIngestSchemasExposeTelemetryFields(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	schemas := spec["components"].(map[string]interface{})["schemas"].(map[string]interface{})
+	paths := spec["paths"].(map[string]interface{})
+
+	schema := func(name string) map[string]interface{} {
+		t.Helper()
+		raw, ok := schemas[name].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing: %#v", name, schemas[name])
+		}
+		return raw
+	}
+	props := func(name string) map[string]interface{} {
+		t.Helper()
+		raw := schema(name)
+		properties, ok := raw["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing properties: %#v", name, raw)
+		}
+		return properties
+	}
+	expectFields := func(name string, fields ...string) map[string]interface{} {
+		t.Helper()
+		properties := props(name)
+		for _, field := range fields {
+			if properties[field] == nil {
+				t.Fatalf("%s schema missing field %q: %#v", name, field, properties)
+			}
+		}
+		return properties
+	}
+	expectRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		fieldSchema, ok := properties[field].(map[string]interface{})
+		if !ok || fieldSchema["$ref"] != ref {
+			t.Fatalf("%s.%s should reference %s: %#v", name, field, ref, properties[field])
+		}
+	}
+	expectArrayRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		arraySchema, ok := properties[field].(map[string]interface{})
+		if !ok || arraySchema["type"] != "array" {
+			t.Fatalf("%s.%s should be an array: %#v", name, field, properties[field])
+		}
+		items, ok := arraySchema["items"].(map[string]interface{})
+		if !ok || items["$ref"] != ref {
+			t.Fatalf("%s.%s items should reference %s: %#v", name, field, ref, arraySchema["items"])
+		}
+	}
+	expectOneOfRefs := func(name string, refs ...string) {
+		t.Helper()
+		raw := schema(name)
+		oneOf, ok := raw["oneOf"].([]map[string]interface{})
+		if !ok {
+			t.Fatalf("%s should expose oneOf variants: %#v", name, raw)
+		}
+		seen := map[string]bool{}
+		for _, variant := range oneOf {
+			if ref, ok := variant["$ref"].(string); ok {
+				seen[ref] = true
+			}
+			if items, ok := variant["items"].(map[string]interface{}); ok {
+				if ref, ok := items["$ref"].(string); ok {
+					seen[ref] = true
+				}
+			}
+		}
+		for _, ref := range refs {
+			if !seen[ref] {
+				t.Fatalf("%s oneOf missing %s: %#v", name, ref, oneOf)
+			}
+		}
+	}
+	expectPathResponseRef := func(path, method, ref string) {
+		t.Helper()
+		operation := paths[path].(map[string]interface{})[method].(map[string]interface{})
+		response := operation["responses"].(map[string]interface{})["200"].(map[string]interface{})
+		schema := response["content"].(map[string]interface{})["application/json"].(map[string]interface{})["schema"].(map[string]interface{})
+		if schema["$ref"] != ref {
+			t.Fatalf("%s %s should return %s: %#v", method, path, ref, schema)
+		}
+	}
+
+	expectPathResponseRef("/api/otel/genai", "post", "#/components/schemas/EcosystemIngestResponse")
+	expectPathResponseRef("/api/a2a/tasks", "post", "#/components/schemas/EcosystemIngestResponse")
+	expectPathResponseRef("/api/provider/calls", "post", "#/components/schemas/EcosystemIngestResponse")
+	expectPathResponseRef("/gateway/openai/v1/chat/completions", "post", "#/components/schemas/GatewayResponse")
+	expectPathResponseRef("/gateway/openai/v1/responses", "post", "#/components/schemas/GatewayResponse")
+	expectPathResponseRef("/gateway/anthropic/v1/messages", "post", "#/components/schemas/GatewayResponse")
+
+	expectOneOfRefs("OTelGenAIRequest", "#/components/schemas/OTelSpan", "#/components/schemas/OTelSpanEnvelope", "#/components/schemas/OTelResourceSpansEnvelope")
+	expectFields("OTelSpan", "trace_id", "traceId", "span_id", "spanId", "parent_span_id", "parentSpanId", "name", "start_time", "startTime", "startTimeUnixNano", "end_time", "endTime", "endTimeUnixNano", "attributes", "resource_attributes")
+	expectFields("OTelAttribute", "key", "value")
+	expectRef("OTelAttribute", "value", "#/components/schemas/OTelAttributeValue")
+	expectFields("OTelSpanEnvelope", "spans")
+	expectArrayRef("OTelSpanEnvelope", "spans", "#/components/schemas/OTelSpan")
+	expectFields("OTelResourceSpansEnvelope", "resourceSpans")
+	expectOneOfRefs("OTLPTraceRequest", "#/components/schemas/OTelResourceSpansEnvelope", "#/components/schemas/OTelSpanEnvelope")
+
+	expectOneOfRefs("A2ATaskRequest", "#/components/schemas/A2ATask", "#/components/schemas/A2ATaskEnvelope")
+	expectFields("A2AStatus", "state", "timestamp")
+	expectFields("A2AArtifact", "artifact_id", "artifactId", "id", "name", "description", "parts", "metadata")
+	expectFields("A2ATask", "id", "taskId", "task_id", "contextId", "context_id", "kind", "status", "artifact", "artifacts", "metadata")
+	expectRef("A2ATask", "status", "#/components/schemas/A2AStatus")
+	expectArrayRef("A2ATask", "artifacts", "#/components/schemas/A2AArtifact")
+	expectFields("A2ATaskEnvelope", "task", "result", "tasks", "events")
+	expectArrayRef("A2ATaskEnvelope", "tasks", "#/components/schemas/A2ATask")
+
+	expectOneOfRefs("ProviderUsageRequest", "#/components/schemas/ProviderCall", "#/components/schemas/ProviderUsageEnvelope")
+	expectFields("ProviderUsage", "input_tokens", "prompt_tokens", "cache_read_input_tokens", "cache_read_tokens", "cache_creation_input_tokens", "cache_write_input_tokens", "cache_write_tokens", "output_tokens", "completion_tokens", "reasoning_output_tokens", "input_tokens_details", "prompt_tokens_details", "output_tokens_details", "completion_tokens_details", "cost_usd", "total_cost", "cost")
+	expectFields("ProviderCall", "id", "response_id", "completion_id", "request_id", "provider", "system", "gen_ai.provider.name", "model", "model_id", "modelID", "project", "session_id", "created_at", "created", "timestamp", "finish_reason", "stop_reason", "usage", "metadata")
+	expectRef("ProviderCall", "usage", "#/components/schemas/ProviderUsage")
+	expectRef("ProviderCall", "metadata", "#/components/schemas/GatewayLedgerMetadata")
+	expectFields("ProviderUsageEnvelope", "responses", "calls", "items")
+	expectArrayRef("ProviderUsageEnvelope", "calls", "#/components/schemas/ProviderCall")
+
+	expectFields("EcosystemIngestResponse", "ok", "spans", "calls", "tasks", "events", "warning", "results")
+	expectArrayRef("EcosystemIngestResponse", "results", "#/components/schemas/CanonicalEventResult")
+	expectFields("GatewayLedgerMetadata", "agent_ledger.project", "agent_ledger.goal", "agent_ledger.workload_id", "agent_ledger.agent_run_id", "agent_ledger.session_id", "agent_ledger.git_branch", "project", "goal", "workload_id", "agent_run_id", "run_id", "session_id", "git_branch", "branch")
+	expectFields("GatewayRequest", "model", "stream", "metadata", "max_tokens", "temperature", "stream_options", "tools")
+	expectRef("GatewayRequest", "metadata", "#/components/schemas/GatewayLedgerMetadata")
+	expectFields("GatewayResponse", "id", "object", "type", "model", "usage", "choices", "output")
+	expectRef("GatewayResponse", "usage", "#/components/schemas/ProviderUsage")
+}
+
 func TestOpenAPIRequestBodyOperationsAdvertiseBodyLimits(t *testing.T) {
 	spec := OpenAPISpecFor(Options{}, nil)
 	paths := spec["paths"].(map[string]interface{})
