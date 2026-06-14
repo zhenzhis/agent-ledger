@@ -554,7 +554,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, stats)
+	writeJSONWithPayloadETag(w, r, stats)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -573,7 +573,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.Runtime = s.runtimeStatus()
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data, "generated_at")
 }
 
 func (s *Server) handleCostByModel(w http.ResponseWriter, r *http.Request) {
@@ -589,7 +589,7 @@ func (s *Server) handleCostByModel(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data)
 }
 
 func (s *Server) handleCostOverTime(w http.ResponseWriter, r *http.Request) {
@@ -607,7 +607,7 @@ func (s *Server) handleCostOverTime(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data)
 }
 
 func (s *Server) handleTokensOverTime(w http.ResponseWriter, r *http.Request) {
@@ -625,7 +625,7 @@ func (s *Server) handleTokensOverTime(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data)
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
@@ -655,7 +655,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applySessionPagePrivacy(data, s.privacyFor(r))
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data)
 }
 
 func (s *Server) handleSessionDetail(w http.ResponseWriter, r *http.Request) {
@@ -670,7 +670,7 @@ func (s *Server) handleSessionDetail(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err)
 		return
 	}
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data)
 }
 
 func (s *Server) handleSessionReplay(w http.ResponseWriter, r *http.Request) {
@@ -692,7 +692,7 @@ func (s *Server) handleSessionReplay(w http.ResponseWriter, r *http.Request) {
 			data.Points[i].SessionID = hashValue(data.Points[i].SessionID)
 		}
 	}
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data)
 }
 
 func parseLimitOffset(r *http.Request) (int, int) {

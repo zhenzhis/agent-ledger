@@ -9,10 +9,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zhenzhis/agent-ledger/internal/config"
 	"github.com/zhenzhis/agent-ledger/internal/controlplane"
 	"github.com/zhenzhis/agent-ledger/internal/integrations"
+	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 func TestDiscoveryEndpoint(t *testing.T) {
@@ -337,6 +339,58 @@ func TestFinOpsDiagnosticsEndpointETags(t *testing.T) {
 		{name: "model-registry", url: "http://127.0.0.1/api/model-registry", handler: srv.handleModelRegistry},
 		{name: "cost-intelligence", url: "http://127.0.0.1/api/cost-intelligence?from=2026-06-07&to=2026-06-08", handler: srv.handleCostIntelligence},
 		{name: "cache-doctor", url: "http://127.0.0.1/api/cache/doctor?from=2026-06-07&to=2026-06-08", handler: srv.handleCacheDoctor},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			rr := httptest.NewRecorder()
+			tc.handler(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			assertETagRevalidates(t, tc.handler, tc.url, rr.Header().Get("ETag"))
+		})
+	}
+}
+
+func TestDashboardSessionEndpointETags(t *testing.T) {
+	db := testServerDB(t)
+	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	if err := db.UpsertSession(&storage.SessionRecord{
+		Source:    "codex",
+		SessionID: "dash-session",
+		Project:   "agent-ledger",
+		CWD:       "/workspace/agent-ledger",
+		StartTime: ts,
+	}); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+	if err := db.InsertUsage(&storage.UsageRecord{
+		Source:       "codex",
+		SessionID:    "dash-session",
+		Model:        "gpt-5",
+		InputTokens:  100,
+		OutputTokens: 50,
+		Project:      "agent-ledger",
+		Timestamp:    ts,
+		CostUSD:      0.01,
+	}); err != nil {
+		t.Fatalf("InsertUsage: %v", err)
+	}
+	srv := New(db, "", Options{})
+	cases := []struct {
+		name    string
+		url     string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "stats", url: "http://127.0.0.1/api/stats?from=2026-06-07&to=2026-06-08", handler: srv.handleStats},
+		{name: "dashboard", url: "http://127.0.0.1/api/dashboard?from=2026-06-07&to=2026-06-08", handler: srv.handleDashboard},
+		{name: "cost-by-model", url: "http://127.0.0.1/api/cost-by-model?from=2026-06-07&to=2026-06-08", handler: srv.handleCostByModel},
+		{name: "cost-over-time", url: "http://127.0.0.1/api/cost-over-time?from=2026-06-07&to=2026-06-08", handler: srv.handleCostOverTime},
+		{name: "tokens-over-time", url: "http://127.0.0.1/api/tokens-over-time?from=2026-06-07&to=2026-06-08", handler: srv.handleTokensOverTime},
+		{name: "sessions", url: "http://127.0.0.1/api/sessions?from=2026-06-07&to=2026-06-08&limit=100", handler: srv.handleSessions},
+		{name: "session-detail", url: "http://127.0.0.1/api/session-detail?source=codex&session_id=dash-session", handler: srv.handleSessionDetail},
+		{name: "session-replay", url: "http://127.0.0.1/api/session-replay?source=codex&session_id=dash-session", handler: srv.handleSessionReplay},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

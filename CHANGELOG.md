@@ -17,6 +17,7 @@
 - MCP resource `agent-ledger://workloads/leases` for privacy-safe lease context rows without workload ids, holders, purposes, or lease tokens.
 - MCP resource `agent-ledger://agent-runs/liveness` for privacy-safe async run health context without run ids, workload ids, project metadata, goals, or status messages.
 - Stable `ETag` revalidation for `GET /api/agent-runs/liveness`, plus readiness active/stale run counts for async agent monitors.
+- Stable `ETag` revalidation for dashboard stats, aggregate dashboard bundle, trend charts, session ledger pages, session detail, and session replay endpoints.
 - Stable `ETag` revalidation for read-heavy ingestion health, pricing, budget, data quality, doctor, model call, model registry, cost intelligence, and cache doctor endpoints.
 - Stable `ETag` revalidation and OpenAPI coverage for workload detail, graph, timeline, and terminal-state read endpoints.
 - OpenAPI/contract coverage for workload close/link and agent run heartbeat write endpoints.
