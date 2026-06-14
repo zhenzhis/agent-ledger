@@ -820,7 +820,7 @@ func (s *Server) handleModelRegistry(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleCanonicalEventSchema(w http.ResponseWriter, r *http.Request) {

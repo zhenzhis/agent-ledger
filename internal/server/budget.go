@@ -35,7 +35,7 @@ func (s *Server) handleBudgetStatus(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, map[string]interface{}{
+	writeJSONWithPayloadETag(w, r, map[string]interface{}{
 		"enabled": s.options.Budgets.Enabled,
 		"rules":   status,
 	})

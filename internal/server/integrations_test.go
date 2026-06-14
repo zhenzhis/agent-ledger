@@ -319,6 +319,38 @@ func TestControlPlaneEndpointETags(t *testing.T) {
 	}
 }
 
+func TestFinOpsDiagnosticsEndpointETags(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	cases := []struct {
+		name    string
+		url     string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "ingestion-health", url: "http://127.0.0.1/api/health/ingestion", handler: srv.handleIngestionHealth},
+		{name: "pricing-status", url: "http://127.0.0.1/api/pricing/status", handler: srv.handlePricingStatus},
+		{name: "pricing-audit", url: "http://127.0.0.1/api/pricing/audit", handler: srv.handlePricingAudit},
+		{name: "budget-status", url: "http://127.0.0.1/api/budgets/status", handler: srv.handleBudgetStatus},
+		{name: "data-quality", url: "http://127.0.0.1/api/data-quality", handler: srv.handleDataQuality},
+		{name: "doctor", url: "http://127.0.0.1/api/doctor?from=2026-06-07&to=2026-06-08", handler: srv.handleDoctor},
+		{name: "model-calls", url: "http://127.0.0.1/api/model-calls?from=2026-06-07&to=2026-06-08", handler: srv.handleModelCalls},
+		{name: "model-registry", url: "http://127.0.0.1/api/model-registry", handler: srv.handleModelRegistry},
+		{name: "cost-intelligence", url: "http://127.0.0.1/api/cost-intelligence?from=2026-06-07&to=2026-06-08", handler: srv.handleCostIntelligence},
+		{name: "cache-doctor", url: "http://127.0.0.1/api/cache/doctor?from=2026-06-07&to=2026-06-08", handler: srv.handleCacheDoctor},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			rr := httptest.NewRecorder()
+			tc.handler(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			assertETagRevalidates(t, tc.handler, tc.url, rr.Header().Get("ETag"))
+		})
+	}
+}
+
 func assertETagRevalidates(t *testing.T, handler func(http.ResponseWriter, *http.Request), url, etag string) {
 	t.Helper()
 	if etag == "" {

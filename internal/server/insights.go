@@ -43,7 +43,7 @@ func (s *Server) handlePricingStatus(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, map[string]interface{}{
+	writeJSONWithPayloadETag(w, r, map[string]interface{}{
 		"sources":         sources,
 		"unpriced_models": unpriced.UnpricedModels,
 		"confidence_mix":  unpriced.ConfidenceMix,
@@ -111,7 +111,7 @@ func (s *Server) handlePricingAudit(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleDataQuality(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +120,7 @@ func (s *Server) handleDataQuality(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +158,7 @@ func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(storage.FormatDoctorMarkdown(report)))
 		return
 	}
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) handleModelCalls(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +172,7 @@ func (s *Server) handleModelCalls(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleCostIntelligence(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +198,7 @@ func (s *Server) handleCostIntelligence(w http.ResponseWriter, r *http.Request) 
 			rows[i].GitBranch = "branch"
 		}
 	}
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleCacheDoctor(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +212,7 @@ func (s *Server) handleCacheDoctor(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleQuotaStatus(w http.ResponseWriter, r *http.Request) {

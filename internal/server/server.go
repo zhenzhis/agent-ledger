@@ -418,8 +418,25 @@ func writeJSONWithETag(w http.ResponseWriter, r *http.Request, v interface{}, et
 	writeJSON(w, v)
 }
 
+func writeJSONWithPayloadETag(w http.ResponseWriter, r *http.Request, v interface{}, ignoredKeys ...string) {
+	var (
+		etag string
+		err  error
+	)
+	if len(ignoredKeys) > 0 {
+		etag, err = jsonPayloadETagIgnoringKeys(v, ignoredKeys...)
+	} else {
+		etag, err = jsonPayloadETag(v)
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, v, etag)
+}
+
 func jsonPayloadETag(v interface{}) (string, error) {
-	raw, err := json.Marshal(v)
+	raw, err := jsonMarshalForResponse(v)
 	if err != nil {
 		return "", err
 	}
@@ -427,8 +444,18 @@ func jsonPayloadETag(v interface{}) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+func jsonMarshalForResponse(v interface{}) ([]byte, error) {
+	if v != nil {
+		rv := reflect.ValueOf(v)
+		if rv.Kind() == reflect.Slice && rv.IsNil() {
+			return []byte("[]"), nil
+		}
+	}
+	return json.Marshal(v)
+}
+
 func jsonPayloadETagIgnoringKeys(v interface{}, keys ...string) (string, error) {
-	raw, err := json.Marshal(v)
+	raw, err := jsonMarshalForResponse(v)
 	if err != nil {
 		return "", err
 	}

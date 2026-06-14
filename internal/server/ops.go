@@ -24,7 +24,7 @@ func (s *Server) handleIngestionHealth(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, data)
+	writeJSONWithPayloadETag(w, r, data)
 }
 
 func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
