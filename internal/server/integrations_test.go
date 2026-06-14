@@ -42,6 +42,11 @@ func TestDiscoveryEndpoint(t *testing.T) {
 	if manifest.AdapterSpecHash == "" || manifest.AdapterSpecHash != integrations.AdapterContractFingerprint() {
 		t.Fatalf("unexpected adapter contract hash: %+v", manifest)
 	}
+	if manifest.A2A.Endpoint != "/api/a2a/tasks" || manifest.A2A.ConformanceKind != "a2a" ||
+		manifest.A2A.FullServer || manifest.A2A.MessageContentStored || manifest.A2A.PromptContentStored ||
+		!manifest.A2A.SupportsDelegatedLineage || !manifest.A2A.SupportsEvidenceReferences {
+		t.Fatalf("unexpected A2A discovery metadata: %+v", manifest.A2A)
+	}
 	if !discoveryHasProtocol(manifest, "protocol.runtime_status") || !discoveryHasProtocol(manifest, "protocol.config_status") || !discoveryHasProtocol(manifest, "protocol.readiness") || !discoveryHasProtocol(manifest, "protocol.admission_check") || !discoveryHasProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("missing control-plane protocols: %+v", manifest.Protocols)
 	}

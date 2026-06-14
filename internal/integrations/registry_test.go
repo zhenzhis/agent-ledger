@@ -219,6 +219,13 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 		manifest.AdapterConformanceURI != "/api/integrations/conformance" {
 		t.Fatalf("discovery missing entrypoints: %#v", manifest)
 	}
+	if manifest.A2A.Endpoint != "/api/a2a/tasks" || manifest.A2A.ConformanceKind != "a2a" ||
+		manifest.A2A.FullServer || manifest.A2A.AvailableInReadOnly ||
+		manifest.A2A.MessageContentStored || manifest.A2A.PromptContentStored || manifest.A2A.ArtifactPartContentStored ||
+		!manifest.A2A.SupportsDelegatedLineage || !manifest.A2A.SupportsEvidenceReferences || !manifest.A2A.SupportsParentPlaceholders ||
+		manifest.A2A.AdapterSpecHash != AdapterContractFingerprint() {
+		t.Fatalf("discovery missing privacy-safe A2A metadata: %#v", manifest.A2A)
+	}
 	if manifest.CapabilityCatalogHash == "" || !strings.HasPrefix(manifest.CapabilityCatalogHash, "sha256:") || manifest.CapabilityCatalogHash != CatalogFingerprint(OptionsFromConfig(cfg)) {
 		t.Fatalf("discovery missing catalog hash: %#v", manifest)
 	}
@@ -255,7 +262,7 @@ func TestContractBundleIndexesCoreContracts(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.Version != "v1" || !bundle.LocalFirst || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle identity: %#v", bundle)
 	}
-	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract"} {
+	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "a2a-discovery"} {
 		if !contractBundleHasDocument(bundle, id) {
 			t.Fatalf("contract bundle missing %s: %#v", id, bundle.Documents)
 		}
@@ -1437,6 +1444,8 @@ func TestOpenAPIEcosystemIngestSchemasExposeTelemetryFields(t *testing.T) {
 	expectFields("OTelResourceSpansEnvelope", "resourceSpans")
 	expectOneOfRefs("OTLPTraceRequest", "#/components/schemas/OTelResourceSpansEnvelope", "#/components/schemas/OTelSpanEnvelope")
 
+	expectRef("DiscoveryManifest", "a2a", "#/components/schemas/A2ADiscoveryMetadata")
+	expectFields("A2ADiscoveryMetadata", "mode", "protocol", "full_server", "endpoint", "http_methods", "required_role", "available_in_read_only", "max_body_bytes", "adapter_spec_uri", "adapter_spec_hash", "conformance_uri", "conformance_kind", "strict_fixture", "supported_task_shapes", "canonical_event_types", "supports_delegated_lineage", "supports_evidence_references", "supports_parent_placeholders", "message_content_stored", "artifact_part_content_stored", "prompt_content_stored", "privacy", "limitations")
 	expectOneOfRefs("A2ATaskRequest", "#/components/schemas/A2ATask", "#/components/schemas/A2ATaskEnvelope")
 	expectFields("A2AStatus", "state", "timestamp")
 	expectFields("A2AArtifact", "artifact_id", "artifactId", "id", "name", "description", "parts", "metadata")
@@ -1622,7 +1631,7 @@ func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
 		t.Fatalf("verification report missing hashes: %#v", report)
 	}
-	for _, name := range []string{"discovery.contract_bundle_uri", "bundle.document.openapi", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
+	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
 		if !verificationReportHasCheck(report, name) {
 			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
 		}

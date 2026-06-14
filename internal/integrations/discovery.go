@@ -26,32 +26,61 @@ type DiscoveryProtocol struct {
 
 // DiscoveryManifest is the privacy-safe well-known contract for local agents and wrappers.
 type DiscoveryManifest struct {
-	Product               string              `json:"product"`
-	Slug                  string              `json:"slug"`
-	Contract              string              `json:"contract"`
-	Version               string              `json:"version"`
-	PrivacyDefault        string              `json:"privacy_default"`
-	LocalFirst            bool                `json:"local_first"`
-	PromptContentStored   bool                `json:"prompt_content_stored"`
-	UsageDataUploaded     bool                `json:"usage_data_uploaded"`
-	APIBasePath           string              `json:"api_base_path"`
-	WellKnownURI          string              `json:"well_known_uri"`
-	CapabilityCatalogURI  string              `json:"capability_catalog_uri"`
-	CapabilityCatalogHash string              `json:"capability_catalog_hash"`
-	ContractBundleURI     string              `json:"contract_bundle_uri"`
-	OpenAPIURI            string              `json:"openapi_uri"`
-	RuntimeStatusURI      string              `json:"runtime_status_uri"`
-	CanonicalSchemaURI    string              `json:"canonical_schema_uri"`
-	CanonicalSchemaHash   string              `json:"canonical_schema_hash"`
-	EventExamplesURI      string              `json:"event_examples_uri"`
-	AdapterSpecURI        string              `json:"adapter_spec_uri"`
-	AdapterSpecHash       string              `json:"adapter_spec_hash"`
-	AdapterConformanceURI string              `json:"adapter_conformance_uri"`
-	MCPCommand            string              `json:"mcp_command"`
-	Auth                  string              `json:"auth"`
-	ReadOnly              bool                `json:"read_only"`
-	Summary               Summary             `json:"summary"`
-	Protocols             []DiscoveryProtocol `json:"protocols"`
+	Product               string               `json:"product"`
+	Slug                  string               `json:"slug"`
+	Contract              string               `json:"contract"`
+	Version               string               `json:"version"`
+	PrivacyDefault        string               `json:"privacy_default"`
+	LocalFirst            bool                 `json:"local_first"`
+	PromptContentStored   bool                 `json:"prompt_content_stored"`
+	UsageDataUploaded     bool                 `json:"usage_data_uploaded"`
+	APIBasePath           string               `json:"api_base_path"`
+	WellKnownURI          string               `json:"well_known_uri"`
+	CapabilityCatalogURI  string               `json:"capability_catalog_uri"`
+	CapabilityCatalogHash string               `json:"capability_catalog_hash"`
+	ContractBundleURI     string               `json:"contract_bundle_uri"`
+	OpenAPIURI            string               `json:"openapi_uri"`
+	RuntimeStatusURI      string               `json:"runtime_status_uri"`
+	CanonicalSchemaURI    string               `json:"canonical_schema_uri"`
+	CanonicalSchemaHash   string               `json:"canonical_schema_hash"`
+	EventExamplesURI      string               `json:"event_examples_uri"`
+	AdapterSpecURI        string               `json:"adapter_spec_uri"`
+	AdapterSpecHash       string               `json:"adapter_spec_hash"`
+	AdapterConformanceURI string               `json:"adapter_conformance_uri"`
+	MCPCommand            string               `json:"mcp_command"`
+	Auth                  string               `json:"auth"`
+	ReadOnly              bool                 `json:"read_only"`
+	Summary               Summary              `json:"summary"`
+	Protocols             []DiscoveryProtocol  `json:"protocols"`
+	A2A                   A2ADiscoveryMetadata `json:"a2a"`
+}
+
+// A2ADiscoveryMetadata describes the local A2A telemetry surface without
+// claiming to be a full remote Agent2Agent server.
+type A2ADiscoveryMetadata struct {
+	Mode                       string   `json:"mode"`
+	Protocol                   string   `json:"protocol"`
+	FullServer                 bool     `json:"full_server"`
+	Endpoint                   string   `json:"endpoint"`
+	HTTPMethods                []string `json:"http_methods"`
+	RequiredRole               string   `json:"required_role"`
+	AvailableInReadOnly        bool     `json:"available_in_read_only"`
+	MaxBodyBytes               int64    `json:"max_body_bytes"`
+	AdapterSpecURI             string   `json:"adapter_spec_uri"`
+	AdapterSpecHash            string   `json:"adapter_spec_hash"`
+	ConformanceURI             string   `json:"conformance_uri"`
+	ConformanceKind            string   `json:"conformance_kind"`
+	StrictFixture              string   `json:"strict_fixture"`
+	SupportedTaskShapes        []string `json:"supported_task_shapes"`
+	CanonicalEventTypes        []string `json:"canonical_event_types"`
+	SupportsDelegatedLineage   bool     `json:"supports_delegated_lineage"`
+	SupportsEvidenceReferences bool     `json:"supports_evidence_references"`
+	SupportsParentPlaceholders bool     `json:"supports_parent_placeholders"`
+	MessageContentStored       bool     `json:"message_content_stored"`
+	ArtifactPartContentStored  bool     `json:"artifact_part_content_stored"`
+	PromptContentStored        bool     `json:"prompt_content_stored"`
+	Privacy                    string   `json:"privacy"`
+	Limitations                []string `json:"limitations"`
 }
 
 // Discovery returns a compact local discovery document for agent ecosystems.
@@ -110,6 +139,37 @@ func Discovery(opts Options) DiscoveryManifest {
 		ReadOnly:              opts.ReadOnly,
 		Summary:               catalog.Summary,
 		Protocols:             protocols,
+		A2A:                   A2ADiscovery(),
+	}
+}
+
+// A2ADiscovery returns the stable, privacy-safe discovery block for local A2A
+// telemetry ingestion.
+func A2ADiscovery() A2ADiscoveryMetadata {
+	return A2ADiscoveryMetadata{
+		Mode:                       "telemetry_adapter",
+		Protocol:                   "A2A JSON task snapshots/events",
+		FullServer:                 false,
+		Endpoint:                   "/api/a2a/tasks",
+		HTTPMethods:                []string{"POST"},
+		RequiredRole:               "operator",
+		AvailableInReadOnly:        false,
+		MaxBodyBytes:               4 << 20,
+		AdapterSpecURI:             "/api/integrations/adapter-spec",
+		AdapterSpecHash:            AdapterContractFingerprint(),
+		ConformanceURI:             "/api/integrations/conformance?kind=a2a&strict=true",
+		ConformanceKind:            "a2a",
+		StrictFixture:              "examples/adapter-fixtures/a2a-delegated-task.json",
+		SupportedTaskShapes:        []string{"task", "task_array", "tasks_envelope", "events_envelope", "jsonrpc_result", "task_event"},
+		CanonicalEventTypes:        []string{"workload.started", "workload.linked", "agent.run.started", "agent.run.heartbeat", "agent.run.finished", "context.ref", "artifact.created", "evaluation.recorded", "policy.decision"},
+		SupportsDelegatedLineage:   true,
+		SupportsEvidenceReferences: true,
+		SupportsParentPlaceholders: true,
+		MessageContentStored:       false,
+		ArtifactPartContentStored:  false,
+		PromptContentStored:        false,
+		Privacy:                    "metadata-only task telemetry; message history, message parts, prompt text, response text, artifact bodies, and raw evidence refs are excluded",
+		Limitations:                []string{"local telemetry adapter, not a full A2A task execution server", "parent workloads may be reconstructed with lower confidence when only parent task metadata is provided", "evidence references require ref_hash or a locally hashable stable reference"},
 	}
 }
 

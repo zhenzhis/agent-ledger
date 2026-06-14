@@ -213,6 +213,23 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				ReadOnlySafe:     true,
 				WritesLocalState: false,
 			},
+			{
+				ID:               "a2a-discovery",
+				Name:             "A2A Telemetry Discovery",
+				Contract:         "agent-ledger.a2a-discovery",
+				Version:          "v1",
+				Hash:             hashJSONPayload(discovery.A2A),
+				PrimaryURI:       "/.well-known/agent-ledger.json#a2a",
+				AlternateURIs:    []string{"/api/discovery#a2a"},
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger discovery"},
+				MCPTools:         []string{"ledger.discovery"},
+				MCPResources:     []string{"agent-ledger://discovery/manifest"},
+				Revalidation:     "ETag + If-None-Match on the discovery document",
+				Privacy:          "A2A endpoint, role, conformance, capability, and metadata-only privacy flags",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
 		},
 	}
 	bundle.BundleHash = ContractBundleFingerprint(bundle)
@@ -253,6 +270,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.catalog_hash", discovery.CapabilityCatalogHash == catalogHash, "critical", "discovery catalog hash matches generated catalog", catalogHash, discovery.CapabilityCatalogHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
 	addCheck("discovery.adapter_hash", discovery.AdapterSpecHash == AdapterContractFingerprint(), "critical", "discovery adapter hash matches generated adapter contract", AdapterContractFingerprint(), discovery.AdapterSpecHash)
+	addCheck("discovery.a2a_metadata", discovery.A2A.Endpoint == "/api/a2a/tasks" && discovery.A2A.ConformanceKind == "a2a" && !discovery.A2A.FullServer && !discovery.A2A.MessageContentStored && !discovery.A2A.PromptContentStored, "critical", "discovery exposes privacy-safe A2A telemetry metadata without claiming full server behavior", "endpoint=/api/a2a/tasks,kind=a2a,full_server=false,prompt/message_content_stored=false", a2aDiscoveryCheckSummary(discovery.A2A))
 	examplesOK, examplesActual := contractCanonicalEventExamplesStatus()
 	addCheck("canonical.examples", examplesOK, "critical", "canonical event examples cover every event type and validate without warnings", "one valid metadata-only example per canonical event type", examplesActual)
 	adapterSchemaOK, adapterSchemaActual := contractAdapterSchemaStatus(adapter)
@@ -273,6 +291,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "admission-check", hash: admissionCheckContractHash()},
 		{id: "canonical-event-schema", hash: storage.CanonicalEventSchemaFingerprint()},
 		{id: "adapter-contract", hash: AdapterContractFingerprint()},
+		{id: "a2a-discovery", hash: hashJSONPayload(discovery.A2A)},
 	}
 	for _, required := range requiredDocs {
 		doc, ok := contractDocument(bundle, required.id)
@@ -354,6 +373,14 @@ func contractDocument(bundle ContractBundle, id string) (ContractDocument, bool)
 
 func contractDocAccess(doc ContractDocument) string {
 	return "read_only_safe=" + boolString(doc.ReadOnlySafe) + ",writes_local_state=" + boolString(doc.WritesLocalState)
+}
+
+func a2aDiscoveryCheckSummary(meta A2ADiscoveryMetadata) string {
+	return "endpoint=" + meta.Endpoint +
+		",kind=" + meta.ConformanceKind +
+		",full_server=" + boolString(meta.FullServer) +
+		",prompt_content_stored=" + boolString(meta.PromptContentStored) +
+		",message_content_stored=" + boolString(meta.MessageContentStored)
 }
 
 func admissionCheckContractHash() string {
