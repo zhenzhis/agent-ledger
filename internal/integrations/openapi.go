@@ -529,7 +529,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IngestionHealthRows":       looseObjectSchema("Collector health rows with path, scan, watermark, and error summaries."),
 				"OperationResult":           looseObjectSchema("Local operation acknowledgement."),
 				"ProjectionRepairResult":    looseObjectSchema("Canonical-to-usage projection repair result."),
-				"PricingStatus":             looseObjectSchema("Pricing source freshness, rule summary, confidence mix, and unpriced model groups."),
+				"PricingSourceStatus":       pricingSourceStatusSchema(),
+				"PricingStatus":             pricingStatusSchema(),
 				"PricingAuditRows":          looseObjectSchema("Pricing audit rows for official, fallback, override, stale, fuzzy, and unpriced matches."),
 				"BudgetStatusResponse":      looseObjectSchema("Configured budget rules and current severity state."),
 				"QuotaStatus":               looseObjectSchema("Local estimated quota windows, reset calendar, burn-rate, and remaining usage."),
@@ -1774,6 +1775,75 @@ func stringArraySchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":  "array",
 		"items": stringSchema(),
+	}
+}
+
+func pricingSourceStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One pricing source with explicit provenance. Embedded official seeds and local overrides are not treated as live fetches.",
+		"additionalProperties": true,
+		"required": []string{
+			"name", "kind", "priority", "url", "last_fetch_at", "sha256", "model_count", "status", "freshness_kind", "stale",
+		},
+		"properties": map[string]interface{}{
+			"name":           stringSchema(),
+			"kind":           stringSchema(),
+			"priority":       integerSchema(),
+			"url":            stringSchema(),
+			"last_fetch_at":  stringSchema(),
+			"etag":           stringSchema(),
+			"sha256":         stringSchema(),
+			"model_count":    integerSchema(),
+			"status":         stringSchema(),
+			"last_error":     stringSchema(),
+			"freshness_kind": stringSchema(),
+			"freshness_note": stringSchema(),
+			"stale":          boolSchema(),
+		},
+	}
+}
+
+func pricingStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Pricing source provenance, freshness, rule summary, confidence mix, and unpriced model groups.",
+		"additionalProperties": true,
+		"required":             []string{"sources", "unpriced_models", "confidence_mix", "rules", "mode", "stale_after"},
+		"properties": map[string]interface{}{
+			"sources": map[string]interface{}{
+				"type":  "array",
+				"items": refSchema("PricingSourceStatus"),
+			},
+			"unpriced_models": map[string]interface{}{
+				"type":        "array",
+				"description": "Models with usage records that could not be priced.",
+				"items":       looseObjectSchema("Unpriced model group with source, model, and record count."),
+			},
+			"confidence_mix": map[string]interface{}{
+				"type":                 "object",
+				"description":          "Record counts grouped by pricing confidence such as official, override, fallback, fuzzy, source-reported, or unpriced.",
+				"additionalProperties": integerSchema(),
+			},
+			"rules": map[string]interface{}{
+				"type":                 "object",
+				"description":          "Effective pricing rule counts grouped by source priority and confidence.",
+				"additionalProperties": true,
+				"properties": map[string]interface{}{
+					"total_rules":     integerSchema(),
+					"override_rules":  integerSchema(),
+					"official_rules":  integerSchema(),
+					"fallback_rules":  integerSchema(),
+					"unknown_rules":   integerSchema(),
+					"oldest_updated":  stringSchema(),
+					"newest_updated":  stringSchema(),
+					"confidence_mix":  map[string]interface{}{"type": "object", "additionalProperties": integerSchema()},
+					"pricing_sources": map[string]interface{}{"type": "object", "additionalProperties": integerSchema()},
+				},
+			},
+			"mode":        stringSchema(),
+			"stale_after": stringSchema(),
+		},
 	}
 }
 

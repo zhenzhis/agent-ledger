@@ -413,6 +413,43 @@ func TestOpenAPICostIntelligenceSchemaExposesTrustFields(t *testing.T) {
 	}
 }
 
+func TestOpenAPIPricingStatusSchemaExposesSourceFreshness(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	schemas := spec["components"].(map[string]interface{})["schemas"].(map[string]interface{})
+	statusSchema, ok := schemas["PricingStatus"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("PricingStatus schema missing: %#v", schemas)
+	}
+	if statusSchema["type"] != "object" {
+		t.Fatalf("PricingStatus should be an object schema: %#v", statusSchema)
+	}
+	statusProps, ok := statusSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("PricingStatus missing properties: %#v", statusSchema)
+	}
+	for _, field := range []string{"sources", "unpriced_models", "confidence_mix", "rules", "mode", "stale_after"} {
+		if statusProps[field] == nil {
+			t.Fatalf("PricingStatus schema missing field %q: %#v", field, statusProps)
+		}
+	}
+	sourceSchema, ok := schemas["PricingSourceStatus"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("PricingSourceStatus schema missing: %#v", schemas)
+	}
+	sourceProps, ok := sourceSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("PricingSourceStatus missing properties: %#v", sourceSchema)
+	}
+	for _, field := range []string{"name", "kind", "priority", "url", "last_fetch_at", "sha256", "model_count", "status", "freshness_kind", "freshness_note", "stale"} {
+		if sourceProps[field] == nil {
+			t.Fatalf("PricingSourceStatus schema missing field %q: %#v", field, sourceProps)
+		}
+	}
+	if sourceProps["stale"].(map[string]interface{})["type"] != "boolean" {
+		t.Fatalf("PricingSourceStatus stale should be boolean: %#v", sourceProps["stale"])
+	}
+}
+
 func TestOpenAPIRequestBodyOperationsAdvertiseBodyLimits(t *testing.T) {
 	spec := OpenAPISpecFor(Options{}, nil)
 	paths := spec["paths"].(map[string]interface{})
