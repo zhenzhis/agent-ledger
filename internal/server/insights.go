@@ -392,7 +392,7 @@ func (s *Server) handleAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applyAuditEventPrivacy(rows, s.privacyFor(r))
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleReconciliationStatus(w http.ResponseWriter, r *http.Request) {
@@ -401,7 +401,7 @@ func (s *Server) handleReconciliationStatus(w http.ResponseWriter, r *http.Reque
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleRouterSimulation(w http.ResponseWriter, r *http.Request) {
@@ -436,7 +436,7 @@ func (s *Server) handleRouterSimulation(w http.ResponseWriter, r *http.Request) 
 		badRequest(w, err)
 		return
 	}
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) handlePreflightEstimate(w http.ResponseWriter, r *http.Request) {
@@ -458,7 +458,7 @@ func (s *Server) handlePreflightEstimate(w http.ResponseWriter, r *http.Request)
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) handleChargeback(w http.ResponseWriter, r *http.Request) {
@@ -488,7 +488,7 @@ func (s *Server) handleChargeback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applyChargebackPrivacy(rows, s.privacyFor(r))
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func (s *Server) handleWrapped(w http.ResponseWriter, r *http.Request) {
@@ -520,7 +520,7 @@ func (s *Server) handleWrapped(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(storage.FormatWrappedMarkdown(report)))
 		return
 	}
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) handleReconciliationImport(w http.ResponseWriter, r *http.Request) {
@@ -759,7 +759,7 @@ func (s *Server) handleEvidenceBundle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePolicyStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]interface{}{
+	writeJSONWithPayloadETag(w, r, map[string]interface{}{
 		"enabled":                s.options.Policies.Enabled,
 		"read_only":              s.options.RBAC.ReadOnly,
 		"require_privacy_export": s.options.Policies.RequirePrivacyExport,

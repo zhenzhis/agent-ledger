@@ -81,7 +81,7 @@ func (s *Server) handlePolicyAudit(w http.ResponseWriter, r *http.Request) {
 	report.WindowTo = to.Format(time.RFC3339)
 	report.Scope = "usage_records,tool_calls,workloads"
 	applyPolicyAuditPrivacy(&report, s.privacyFor(r))
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report)
 }
 
 func (s *Server) handlePolicyEnforcement(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +94,7 @@ func (s *Server) handlePolicyEnforcement(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	applyPolicyEnforcementPrivacy(report, s.privacyFor(r))
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) handlePolicyApprovalRoutes(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +116,7 @@ func (s *Server) handlePolicyApprovalRoutes(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	applyApprovalRoutePrivacy(report, s.privacyFor(r))
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) evaluateOperationPolicy(w http.ResponseWriter, r *http.Request, action, source, model, project, target string) bool {
@@ -376,7 +376,7 @@ func (s *Server) handlePolicyApprovals(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		applyApprovalRequestsPrivacy(rows, s.privacyFor(r))
-		writeJSON(w, map[string]interface{}{"rows": rows, "status": status})
+		writeJSONWithPayloadETag(w, r, map[string]interface{}{"rows": rows, "status": status})
 	case http.MethodPost:
 		if !s.requireRole(w, r, "admin") {
 			return

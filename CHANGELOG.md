@@ -19,6 +19,7 @@
 - Stable `ETag` revalidation for `GET /api/agent-runs/liveness`, plus readiness active/stale run counts for async agent monitors.
 - Stable `ETag` revalidation for dashboard stats, aggregate dashboard bundle, trend charts, session ledger pages, session detail, and session replay endpoints.
 - Stable `ETag` revalidation for read-heavy ingestion health, pricing, budget, data quality, doctor, model call, model registry, cost intelligence, and cache doctor endpoints.
+- Stable `ETag` revalidation for read-heavy team, reconciliation, policy, wrapped JSON, chargeback, fleet attribution, router simulation, preflight, and audit-log endpoints.
 - Stable `ETag` revalidation and OpenAPI coverage for workload detail, graph, timeline, and terminal-state read endpoints.
 - OpenAPI/contract coverage for workload close/link and agent run heartbeat write endpoints.
 - MCP resources `agent-ledger://workload/state` and `agent-ledger://workload/timeline` for privacy-safe single-workload monitor context.

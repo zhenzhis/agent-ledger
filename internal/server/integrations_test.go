@@ -405,6 +405,44 @@ func TestDashboardSessionEndpointETags(t *testing.T) {
 	}
 }
 
+func TestGovernanceTeamEndpointETags(t *testing.T) {
+	db := testServerDB(t)
+	if err := db.UpsertPricing("gpt-5-mini", 0.0000001, 0.0000002, 0.00000001, 0.00000005); err != nil {
+		t.Fatalf("UpsertPricing: %v", err)
+	}
+	srv := New(db, "", Options{})
+	cases := []struct {
+		name    string
+		url     string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "fleet-attribution", url: "http://127.0.0.1/api/fleet-attribution?from=2026-06-07&to=2026-06-08", handler: srv.handleFleetAttribution},
+		{name: "audit-log", url: "http://127.0.0.1/api/audit-log?from=2026-06-07&to=2026-06-08", handler: srv.handleAuditLog},
+		{name: "reconciliation-status", url: "http://127.0.0.1/api/reconciliation/status", handler: srv.handleReconciliationStatus},
+		{name: "router-simulate", url: "http://127.0.0.1/api/router/simulate?from=2026-06-07&to=2026-06-08&to_model=gpt-5-mini", handler: srv.handleRouterSimulation},
+		{name: "preflight-estimate", url: "http://127.0.0.1/api/preflight/estimate?from=2026-06-07&to=2026-06-08&task=debug", handler: srv.handlePreflightEstimate},
+		{name: "chargeback", url: "http://127.0.0.1/api/chargeback?from=2026-06-07&to=2026-06-08", handler: srv.handleChargeback},
+		{name: "wrapped-json", url: "http://127.0.0.1/api/wrapped?from=2026-06-07&to=2026-06-08&period=custom", handler: srv.handleWrapped},
+		{name: "policy-status", url: "http://127.0.0.1/api/policies/status", handler: srv.handlePolicyStatus},
+		{name: "policy-audit", url: "http://127.0.0.1/api/policy/audit?from=2026-06-07&to=2026-06-08", handler: srv.handlePolicyAudit},
+		{name: "policy-enforcement", url: "http://127.0.0.1/api/policy/enforcement", handler: srv.handlePolicyEnforcement},
+		{name: "policy-decisions", url: "http://127.0.0.1/api/policy/decisions", handler: srv.handlePolicyDecisions},
+		{name: "policy-approvals", url: "http://127.0.0.1/api/policy/approvals", handler: srv.handlePolicyApprovals},
+		{name: "policy-approval-routes", url: "http://127.0.0.1/api/policy/approval-routes", handler: srv.handlePolicyApprovalRoutes},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			rr := httptest.NewRecorder()
+			tc.handler(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			assertETagRevalidates(t, tc.handler, tc.url, rr.Header().Get("ETag"))
+		})
+	}
+}
+
 func assertETagRevalidates(t *testing.T, handler func(http.ResponseWriter, *http.Request), url, etag string) {
 	t.Helper()
 	if etag == "" {

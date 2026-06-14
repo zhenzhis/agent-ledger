@@ -811,7 +811,7 @@ func (s *Server) handleFleetAttribution(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	applyFleetPrivacy(report, s.privacyFor(r))
-	writeJSON(w, report)
+	writeJSONWithPayloadETag(w, r, report, "generated_at")
 }
 
 func (s *Server) handleModelRegistry(w http.ResponseWriter, r *http.Request) {
@@ -958,7 +958,7 @@ func (s *Server) handlePolicyDecisions(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, rows)
+	writeJSONWithPayloadETag(w, r, rows)
 }
 
 func applyWorkloadPagePrivacy(page *storage.WorkloadPage, privacy config.PrivacyConfig) {
