@@ -1298,7 +1298,7 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectRef("ConfigStatusReport", "auth", "#/components/schemas/ConfigAuthStatus")
 	expectArrayRef("ConfigStatusReport", "collectors", "#/components/schemas/ConfigCollectorStatus")
 	expectArrayRef("ConfigStatusReport", "issues", "#/components/schemas/ConfigStatusIssue")
-	expectFields("ConfigFeatureStatus", "budgets_enabled", "budget_rule_count", "quota_enabled", "watchdog_enabled", "policies_enabled", "policy_rule_count", "otlp_receiver_enabled", "gateway_enabled", "gateway_fallback_enabled", "gateway_fallback_rule_count")
+	expectFields("ConfigFeatureStatus", "budgets_enabled", "budget_rule_count", "quota_enabled", "watchdog_enabled", "policies_enabled", "policy_rule_count", "otlp_receiver_enabled", "otlp_receiver_grpc_enabled", "gateway_enabled", "gateway_fallback_enabled", "gateway_fallback_rule_count")
 	expectFields("ConfigOutboundStatus", "webhooks_enabled", "webhook_url_configured", "gateway_enabled", "gateway_fallback_enabled", "gateway_fallback_severity", "gateway_fallback_rule_count", "gateway_upstream_configured", "gateway_api_key_env_configured", "anthropic_upstream_configured", "anthropic_api_key_env_configured", "outbound_surfaces")
 
 	expectFields("ReadinessReport", "product", "slug", "contract", "version", "generated_at", "status", "mode", "read_only", "accepts_writes", "local_first", "prompt_content_stored", "usage_data_uploaded", "summary", "checks", "privacy_note")

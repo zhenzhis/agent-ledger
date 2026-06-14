@@ -2176,7 +2176,7 @@ func configFeatureStatusSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":                 "object",
 		"additionalProperties": true,
-		"required":             []string{"budgets_enabled", "budget_rule_count", "quota_enabled", "watchdog_enabled", "policies_enabled", "policy_rule_count", "otlp_receiver_enabled", "gateway_enabled", "gateway_fallback_enabled", "gateway_fallback_rule_count"},
+		"required":             []string{"budgets_enabled", "budget_rule_count", "quota_enabled", "watchdog_enabled", "policies_enabled", "policy_rule_count", "otlp_receiver_enabled", "otlp_receiver_grpc_enabled", "gateway_enabled", "gateway_fallback_enabled", "gateway_fallback_rule_count"},
 		"properties": map[string]interface{}{
 			"budgets_enabled":             boolSchema(),
 			"budget_rule_count":           integerSchema(),
@@ -2185,6 +2185,7 @@ func configFeatureStatusSchema() map[string]interface{} {
 			"policies_enabled":            boolSchema(),
 			"policy_rule_count":           integerSchema(),
 			"otlp_receiver_enabled":       boolSchema(),
+			"otlp_receiver_grpc_enabled":  boolSchema(),
 			"gateway_enabled":             boolSchema(),
 			"gateway_fallback_enabled":    boolSchema(),
 			"gateway_fallback_rule_count": integerSchema(),

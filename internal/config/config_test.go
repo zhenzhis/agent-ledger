@@ -121,6 +121,24 @@ func TestStatusReportFlagsEnabledCollectorWithoutPaths(t *testing.T) {
 	}
 }
 
+func TestStatusReportFlagsUnsafeOTLPGRPCConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Integrations.OTLPReceiver.Enabled = false
+	cfg.Integrations.OTLPReceiver.GRPCEnabled = true
+	cfg.Integrations.OTLPReceiver.GRPCBindAddress = "0.0.0.0"
+
+	report := StatusReport(cfg)
+	if !report.Features.OTLPReceiverGRPCEnabled {
+		t.Fatalf("gRPC feature flag missing from status report: %+v", report.Features)
+	}
+	if !hasConfigIssue(report, "otlp.grpc_without_receiver", "warning") {
+		t.Fatalf("expected grpc-without-base warning: %+v", report.Issues)
+	}
+	if !hasConfigIssue(report, "otlp.grpc_non_loopback", "critical") {
+		t.Fatalf("expected grpc non-loopback critical issue: %+v", report.Issues)
+	}
+}
+
 func hasConfigIssue(report *ConfigStatusReport, name, severity string) bool {
 	for _, issue := range report.Issues {
 		if issue.Name == name && issue.Severity == severity {

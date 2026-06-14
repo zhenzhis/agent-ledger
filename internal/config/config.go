@@ -204,9 +204,12 @@ type GatewayConfig struct {
 
 // OTLPReceiverConfig controls the local OTLP HTTP JSON/protobuf traces receiver.
 type OTLPReceiverConfig struct {
-	Enabled      bool  `yaml:"enabled"`
-	MaxBodyBytes int64 `yaml:"max_body_bytes"`
-	MaxSpans     int   `yaml:"max_spans"`
+	Enabled         bool   `yaml:"enabled"`
+	GRPCEnabled     bool   `yaml:"grpc_enabled"`
+	GRPCBindAddress string `yaml:"grpc_bind_address"`
+	GRPCPort        int    `yaml:"grpc_port"`
+	MaxBodyBytes    int64  `yaml:"max_body_bytes"`
+	MaxSpans        int    `yaml:"max_spans"`
 }
 
 func expandPath(p string) string {
@@ -272,7 +275,7 @@ func DefaultConfig() *Config {
 		Webhooks: WebhookConfig{Enabled: false, Timeout: 10 * time.Second, MaxEvents: 20},
 		Teams:    TeamsConfig{Groups: map[string]string{}},
 		Integrations: IntegrationsConfig{
-			OTLPReceiver: OTLPReceiverConfig{Enabled: false, MaxBodyBytes: 4 << 20, MaxSpans: 1000},
+			OTLPReceiver: OTLPReceiverConfig{Enabled: false, GRPCEnabled: false, GRPCBindAddress: "127.0.0.1", GRPCPort: 4317, MaxBodyBytes: 4 << 20, MaxSpans: 1000},
 		},
 		Gateway: GatewayConfig{
 			Enabled:                  false,
@@ -350,6 +353,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Integrations.OTLPReceiver.MaxSpans <= 0 {
 		cfg.Integrations.OTLPReceiver.MaxSpans = 1000
+	}
+	if cfg.Integrations.OTLPReceiver.GRPCBindAddress == "" {
+		cfg.Integrations.OTLPReceiver.GRPCBindAddress = "127.0.0.1"
+	}
+	if cfg.Integrations.OTLPReceiver.GRPCPort <= 0 {
+		cfg.Integrations.OTLPReceiver.GRPCPort = 4317
 	}
 	if cfg.Gateway.UpstreamBaseURL == "" {
 		cfg.Gateway.UpstreamBaseURL = "https://api.openai.com"

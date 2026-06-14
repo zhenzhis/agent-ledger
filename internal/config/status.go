@@ -87,6 +87,7 @@ type ConfigFeatureStatus struct {
 	PoliciesEnabled          bool `json:"policies_enabled"`
 	PolicyRuleCount          int  `json:"policy_rule_count"`
 	OTLPReceiverEnabled      bool `json:"otlp_receiver_enabled"`
+	OTLPReceiverGRPCEnabled  bool `json:"otlp_receiver_grpc_enabled"`
 	GatewayEnabled           bool `json:"gateway_enabled"`
 	GatewayFallbackEnabled   bool `json:"gateway_fallback_enabled"`
 	GatewayFallbackRuleCount int  `json:"gateway_fallback_rule_count"`
@@ -188,6 +189,7 @@ func StatusReport(cfg *Config) *ConfigStatusReport {
 			PoliciesEnabled:          cfg.Policies.Enabled,
 			PolicyRuleCount:          len(cfg.Policies.Rules),
 			OTLPReceiverEnabled:      cfg.Integrations.OTLPReceiver.Enabled,
+			OTLPReceiverGRPCEnabled:  cfg.Integrations.OTLPReceiver.GRPCEnabled,
 			GatewayEnabled:           cfg.Gateway.Enabled,
 			GatewayFallbackEnabled:   cfg.Gateway.FallbackEnabled,
 			GatewayFallbackRuleCount: len(cfg.Gateway.FallbackModels),
@@ -284,6 +286,14 @@ func (r *ConfigStatusReport) addValidationIssues(cfg *Config) {
 	}
 	if cfg.Policies.Enabled && !cfg.RBAC.Enabled {
 		r.addIssue("policies.enabled_without_rbac", "info", "policies are enabled while RBAC is disabled; policy checks remain advisory", "enable RBAC if role-aware policy enforcement is required")
+	}
+	if cfg.Integrations.OTLPReceiver.GRPCEnabled {
+		if !cfg.Integrations.OTLPReceiver.Enabled {
+			r.addIssue("otlp.grpc_without_receiver", "warning", "OTLP gRPC receiver is enabled while OTLP receiver is disabled", "set integrations.otlp_receiver.enabled=true or disable grpc_enabled")
+		}
+		if !isLoopbackBind(cfg.Integrations.OTLPReceiver.GRPCBindAddress) {
+			r.addIssue("otlp.grpc_non_loopback", "critical", "OTLP gRPC receiver bind address is not loopback-only", "bind OTLP gRPC to 127.0.0.1 or ::1 unless a separate authenticated transport is added")
+		}
 	}
 	if cfg.Policies.RequirePrivacyExport && !cfg.Privacy.RedactPaths && !cfg.Privacy.HideProjectNames && !cfg.Privacy.HashSessionIDs {
 		r.addIssue("policies.privacy_export_without_redaction", "warning", "privacy export policy is enabled but no redaction toggles are active", "enable a privacy preset or explicit redaction options")

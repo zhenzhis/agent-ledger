@@ -134,6 +134,9 @@ teams:
 integrations:
   otlp_receiver:
     enabled: false
+    grpc_enabled: false
+    grpc_bind_address: "127.0.0.1"
+    grpc_port: 4317
     max_body_bytes: 4194304
     max_spans: 1000
 

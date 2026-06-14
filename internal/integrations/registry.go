@@ -20,15 +20,16 @@ type Source struct {
 
 // Options controls runtime-specific capability flags for the registry.
 type Options struct {
-	Sources             []Source `json:"sources"`
-	PricingMode         string   `json:"pricing_mode"`
-	PoliciesEnabled     bool     `json:"policies_enabled"`
-	RBACEnabled         bool     `json:"rbac_enabled"`
-	ReadOnly            bool     `json:"read_only"`
-	QuotaEnabled        bool     `json:"quota_enabled"`
-	WebhooksEnabled     bool     `json:"webhooks_enabled"`
-	OTLPReceiverEnabled bool     `json:"otlp_receiver_enabled"`
-	GatewayEnabled      bool     `json:"gateway_enabled"`
+	Sources                 []Source `json:"sources"`
+	PricingMode             string   `json:"pricing_mode"`
+	PoliciesEnabled         bool     `json:"policies_enabled"`
+	RBACEnabled             bool     `json:"rbac_enabled"`
+	ReadOnly                bool     `json:"read_only"`
+	QuotaEnabled            bool     `json:"quota_enabled"`
+	WebhooksEnabled         bool     `json:"webhooks_enabled"`
+	OTLPReceiverEnabled     bool     `json:"otlp_receiver_enabled"`
+	OTLPReceiverGRPCEnabled bool     `json:"otlp_receiver_grpc_enabled"`
+	GatewayEnabled          bool     `json:"gateway_enabled"`
 }
 
 // Capability describes one supported or planned integration surface.
@@ -89,14 +90,15 @@ func OptionsFromConfig(cfg *config.Config) Options {
 			sourceFromConfig("kiro", cfg.Collectors.Kiro),
 			sourceFromConfig("pi", cfg.Collectors.Pi),
 		},
-		PricingMode:         cfg.Pricing.Mode,
-		PoliciesEnabled:     cfg.Policies.Enabled,
-		RBACEnabled:         cfg.RBAC.Enabled,
-		ReadOnly:            cfg.RBAC.ReadOnly,
-		QuotaEnabled:        cfg.Quota.Enabled,
-		WebhooksEnabled:     cfg.Webhooks.Enabled,
-		OTLPReceiverEnabled: cfg.Integrations.OTLPReceiver.Enabled,
-		GatewayEnabled:      cfg.Gateway.Enabled,
+		PricingMode:             cfg.Pricing.Mode,
+		PoliciesEnabled:         cfg.Policies.Enabled,
+		RBACEnabled:             cfg.RBAC.Enabled,
+		ReadOnly:                cfg.RBAC.ReadOnly,
+		QuotaEnabled:            cfg.Quota.Enabled,
+		WebhooksEnabled:         cfg.Webhooks.Enabled,
+		OTLPReceiverEnabled:     cfg.Integrations.OTLPReceiver.Enabled,
+		OTLPReceiverGRPCEnabled: cfg.Integrations.OTLPReceiver.GRPCEnabled,
+		GatewayEnabled:          cfg.Gateway.Enabled,
 	}
 }
 
@@ -454,7 +456,7 @@ func Registry(opts Options) Catalog {
 			ID:             "protocol.otlp_receiver",
 			Name:           "OpenTelemetry OTLP Receiver",
 			Category:       "protocol",
-			Protocol:       "OTLP HTTP JSON/protobuf traces",
+			Protocol:       "OTLP HTTP JSON/protobuf traces and optional loopback-only OTLP/gRPC TraceService",
 			Direction:      "ingest",
 			Status:         "experimental",
 			Maturity:       "local-preview",
@@ -462,8 +464,8 @@ func Registry(opts Options) Catalog {
 			Privacy:        "metadata-only span projection; prompt/message attributes are intentionally not persisted",
 			EventTypes:     []string{"model.call", "context.ref"},
 			Endpoints:      []string{"POST /v1/traces", "POST /api/otlp/v1/traces"},
-			Limitations:    []string{"gRPC collector receiver is not yet accepted", "disabled by default and restricted to localhost or authenticated operators", "HTTP receiver rejects over-limit bodies or span batches explicitly and exposes per-request backpressure headers/body fields/audit metadata"},
-			NextMilestones: []string{"OTLP gRPC conformance", "collector distribution smoke tests"},
+			Limitations:    []string{"disabled by default", "gRPC receiver requires integrations.otlp_receiver.enabled and integrations.otlp_receiver.grpc_enabled", "gRPC receiver refuses non-loopback bind addresses", "HTTP receiver rejects over-limit bodies or span batches explicitly and exposes per-request backpressure headers/body fields/audit metadata"},
+			NextMilestones: []string{"collector distribution smoke tests"},
 		},
 	}
 	capabilities = append(capabilities, collectorCapabilities(opts.Sources)...)

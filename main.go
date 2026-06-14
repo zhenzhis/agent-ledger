@@ -223,6 +223,13 @@ func main() {
 		RecalcMode:   func(mode string) error { return recalcCostsMode(db, mode) },
 		PricingSync:  func() error { return pricing.SyncWithConfig(db, cfg.Pricing) },
 	})
+	if cfg.Integrations.OTLPReceiver.Enabled && cfg.Integrations.OTLPReceiver.GRPCEnabled {
+		go func() {
+			if err := server.StartOTLPGRPCReceiver(db, cfg); err != nil {
+				log.Printf("OTLP gRPC receiver: %v", err)
+			}
+		}()
+	}
 	log.Fatal(srv.Start())
 }
 

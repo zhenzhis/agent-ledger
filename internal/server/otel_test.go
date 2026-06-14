@@ -245,36 +245,52 @@ func otlpPayload(spanIDs ...string) string {
 
 func otlpProtoPayload(t *testing.T) []byte {
 	t.Helper()
-	req := &collectortracepb.ExportTraceServiceRequest{
+	req := otlpProtoRequest(t, "span-1")
+	raw, err := proto.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal OTLP protobuf: %v", err)
+	}
+	return raw
+}
+
+func otlpProtoRequest(t *testing.T, spanIDs ...string) *collectortracepb.ExportTraceServiceRequest {
+	t.Helper()
+	if len(spanIDs) == 0 {
+		spanIDs = []string{"span-1"}
+	}
+	spans := make([]*tracepb.Span, 0, len(spanIDs))
+	for i, spanID := range spanIDs {
+		spans = append(spans, &tracepb.Span{
+			TraceId:           []byte{0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01},
+			SpanId:            otlpSpanIDBytes(i),
+			Name:              "genai.chat",
+			StartTimeUnixNano: 1780836000000000000,
+			EndTimeUnixNano:   1780836001000000000,
+			Attributes: []*commonpb.KeyValue{
+				otelKVString("gen_ai.request.model", "gpt-5.5"),
+				otelKVString("gen_ai.provider.name", "openai"),
+				otelKVInt("gen_ai.usage.input_tokens", 10),
+				otelKVInt("gen_ai.usage.output_tokens", 5),
+				otelKVString("agent_ledger.goal", "receiver protobuf smoke "+spanID),
+				otelKVString("agent_ledger.source", "otlp-protobuf-test"),
+			},
+		})
+	}
+	return &collectortracepb.ExportTraceServiceRequest{
 		ResourceSpans: []*tracepb.ResourceSpans{{
 			Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{
 				otelKVString("service.namespace", "quant"),
 			}},
 			ScopeSpans: []*tracepb.ScopeSpans{{
 				Scope: &commonpb.InstrumentationScope{Name: "agent-ledger-test"},
-				Spans: []*tracepb.Span{{
-					TraceId:           []byte{0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01},
-					SpanId:            []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef},
-					Name:              "genai.chat",
-					StartTimeUnixNano: 1780836000000000000,
-					EndTimeUnixNano:   1780836001000000000,
-					Attributes: []*commonpb.KeyValue{
-						otelKVString("gen_ai.request.model", "gpt-5.5"),
-						otelKVString("gen_ai.provider.name", "openai"),
-						otelKVInt("gen_ai.usage.input_tokens", 10),
-						otelKVInt("gen_ai.usage.output_tokens", 5),
-						otelKVString("agent_ledger.goal", "receiver protobuf smoke"),
-						otelKVString("agent_ledger.source", "otlp-protobuf-test"),
-					},
-				}},
+				Spans: spans,
 			}},
 		}},
 	}
-	raw, err := proto.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal OTLP protobuf: %v", err)
-	}
-	return raw
+}
+
+func otlpSpanIDBytes(i int) []byte {
+	return []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, byte(0xef - i)}
 }
 
 func otelKVString(key, value string) *commonpb.KeyValue {
