@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
@@ -298,6 +299,8 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.operation_methods", methodOK, "critical", "OpenAPI operations expose method-not-allowed contracts", "all operations include 405 response", methodActual)
 	bodyLimitOK, bodyLimitActual := contractOpenAPIRequestBodyLimitStatus(paths)
 	addCheck("openapi.request_body_limits", bodyLimitOK, "critical", "OpenAPI request body operations expose body limits and 413 responses", "all requestBody operations include max_body_bytes and 413 response", bodyLimitActual)
+	idempotencyOK, idempotencyActual := contractOpenAPIIdempotencyStatus(openAPI, paths)
+	addCheck("openapi.idempotency", idempotencyOK, "critical", "OpenAPI idempotent writes declare retry keys and conflict behavior", "idempotent writes include Idempotency-Key, X-Idempotency-Key, idempotency_key request field, body limit, and 409 response", idempotencyActual)
 	revalidationOK, revalidationActual := contractOpenAPIGetRevalidationStatus(paths)
 	addCheck("openapi.get_revalidation", revalidationOK, "critical", "OpenAPI GET operations declare ETag revalidation or an explicit no-ETag reason", "all GET operations include 304 response or x-agent-ledger.etag", revalidationActual)
 	for _, path := range OpenAPIContractPaths() {
@@ -496,6 +499,36 @@ func contractOpenAPIRequestBodyLimitStatus(paths map[string]interface{}) (bool, 
 	return checked > 0 && missing == 0, "checked=" + intString(checked) + ",missing=" + intString(missing)
 }
 
+func contractOpenAPIIdempotencyStatus(openAPI map[string]interface{}, paths map[string]interface{}) (bool, string) {
+	checked, missing := 0, 0
+	for _, rawPathItem := range paths {
+		pathItem, ok := rawPathItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for _, method := range []string{"post", "put", "patch"} {
+			operation, ok := pathItem[method].(map[string]interface{})
+			if !ok || contractOpenAPIOperationIdempotency(operation) == "" {
+				continue
+			}
+			checked++
+			if !contractOpenAPIOperationHasHeaderParam(operation, "Idempotency-Key") ||
+				!contractOpenAPIOperationHasHeaderParam(operation, "X-Idempotency-Key") ||
+				!contractOpenAPIOperationHasResponse(operation, "409") ||
+				!contractOpenAPIOperationHasBodyLimit(operation) {
+				missing++
+			}
+			if _, hasBody := operation["requestBody"]; !hasBody {
+				missing++
+			}
+			if !contractOpenAPIIdempotencyRequestSchemaOK(openAPI, operation) {
+				missing++
+			}
+		}
+	}
+	return checked > 0 && missing == 0, "checked=" + intString(checked) + ",missing=" + intString(missing)
+}
+
 func contractOpenAPIGetRevalidationStatus(paths map[string]interface{}) (bool, string) {
 	checked, missing := 0, 0
 	for _, rawPathItem := range paths {
@@ -580,6 +613,81 @@ func contractOpenAPIOperationHasBodyLimit(operation map[string]interface{}) bool
 	default:
 		return false
 	}
+}
+
+func contractOpenAPIOperationIdempotency(operation map[string]interface{}) string {
+	meta, ok := operation["x-agent-ledger"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	idempotency, _ := meta["idempotency"].(string)
+	return idempotency
+}
+
+func contractOpenAPIOperationHasHeaderParam(operation map[string]interface{}, name string) bool {
+	params, ok := operation["parameters"].([]map[string]interface{})
+	if !ok {
+		return false
+	}
+	for _, param := range params {
+		if param["in"] == "header" && param["name"] == name {
+			return true
+		}
+	}
+	return false
+}
+
+func contractOpenAPIIdempotencyRequestSchemaOK(openAPI map[string]interface{}, operation map[string]interface{}) bool {
+	schemaName := contractOpenAPIJSONRequestSchemaRef(operation)
+	if schemaName == "" {
+		return false
+	}
+	return contractOpenAPIComponentSchemaHasProperty(openAPI, schemaName, "idempotency_key")
+}
+
+func contractOpenAPIJSONRequestSchemaRef(operation map[string]interface{}) string {
+	requestBody, ok := operation["requestBody"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	content, ok := requestBody["content"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	jsonContent, ok := content["application/json"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	schema, ok := jsonContent["schema"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	ref, _ := schema["$ref"].(string)
+	return strings.TrimPrefix(ref, "#/components/schemas/")
+}
+
+func contractOpenAPIComponentSchemaHasProperty(openAPI map[string]interface{}, schemaName, propertyName string) bool {
+	if schemaName == "" || propertyName == "" {
+		return false
+	}
+	components, ok := openAPI["components"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	schemas, ok := components["schemas"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	schema, ok := schemas[schemaName].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	properties, ok := schema["properties"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	_, ok = properties[propertyName]
+	return ok
 }
 
 func contractOpenAPIOperationETagPolicy(operation map[string]interface{}) string {

@@ -402,6 +402,53 @@ func TestOpenAPIOperationsExposeStableUniqueOperationIDs(t *testing.T) {
 	}
 }
 
+func TestOpenAPIIdempotentOperationsAdvertiseRetryContract(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	paths := spec["paths"].(map[string]interface{})
+	checked := 0
+	for path, rawPathItem := range paths {
+		pathItem, ok := rawPathItem.(map[string]interface{})
+		if !ok {
+			t.Fatalf("OpenAPI path %s has invalid item: %#v", path, rawPathItem)
+		}
+		for _, method := range []string{"post", "put", "patch"} {
+			rawOperation, ok := pathItem[method]
+			if !ok {
+				continue
+			}
+			operation, ok := rawOperation.(map[string]interface{})
+			if !ok {
+				t.Fatalf("OpenAPI %s %s has invalid operation: %#v", method, path, rawOperation)
+			}
+			if contractOpenAPIOperationIdempotency(operation) == "" {
+				continue
+			}
+			checked++
+			if !contractOpenAPIOperationHasHeaderParam(operation, "Idempotency-Key") ||
+				!contractOpenAPIOperationHasHeaderParam(operation, "X-Idempotency-Key") {
+				t.Fatalf("OpenAPI %s %s idempotent operation missing retry key headers: %#v", method, path, operation)
+			}
+			if _, hasBody := operation["requestBody"]; !hasBody {
+				t.Fatalf("OpenAPI %s %s idempotent operation missing requestBody: %#v", method, path, operation)
+			}
+			if !contractOpenAPIOperationHasBodyLimit(operation) {
+				t.Fatalf("OpenAPI %s %s idempotent operation missing body limit: %#v", method, path, operation)
+			}
+			if !openAPIMethodHasResponse(paths, path, method, "409") {
+				t.Fatalf("OpenAPI %s %s idempotent operation missing 409 conflict: %#v", method, path, operation)
+			}
+		}
+	}
+	if checked < 2 {
+		t.Fatalf("expected workload and run idempotent operations, checked=%d", checked)
+	}
+	for _, schema := range []string{"WorkloadCreateRequest", "AgentRunStartRequest"} {
+		if !openAPIComponentSchemaHasProperty(spec, schema, "idempotency_key") {
+			t.Fatalf("OpenAPI schema %s missing JSON idempotency_key property", schema)
+		}
+	}
+}
+
 func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Collectors.Claude.Enabled = true
@@ -420,7 +467,7 @@ func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
 		t.Fatalf("verification report missing hashes: %#v", report)
 	}
-	for _, name := range []string{"discovery.contract_bundle_uri", "bundle.document.openapi", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.get_revalidation"} {
+	for _, name := range []string{"discovery.contract_bundle_uri", "bundle.document.openapi", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
 		if !verificationReportHasCheck(report, name) {
 			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
 		}
@@ -596,6 +643,27 @@ func openAPIOperationETagPolicy(operation map[string]interface{}) string {
 	}
 	policy, _ := meta["etag"].(string)
 	return policy
+}
+
+func openAPIComponentSchemaHasProperty(spec map[string]interface{}, schemaName, propertyName string) bool {
+	components, ok := spec["components"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	schemas, ok := components["schemas"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	schema, ok := schemas[schemaName].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	properties, ok := schema["properties"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	_, ok = properties[propertyName]
+	return ok
 }
 
 func TestDiscoveryManifestCarriesReadOnlyRuntimeStatus(t *testing.T) {
