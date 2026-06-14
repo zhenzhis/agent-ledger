@@ -245,13 +245,35 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"actual":   stringSchema(),
 					},
 				},
-				"CapabilityCatalog":    looseObjectSchema("Integration capability catalog."),
-				"RuntimeStatus":        looseObjectSchema("Process-local runtime mode and compatibility hashes."),
-				"ConfigStatusReport":   looseObjectSchema("Privacy-safe deployment configuration status."),
-				"ReadinessReport":      looseObjectSchema("Privacy-safe control-plane readiness report."),
-				"AdmissionDecision":    looseObjectSchema("Privacy-safe control-plane admission decision."),
-				"CanonicalEventSchema": looseObjectSchema("Canonical event contract metadata."),
-				"AdapterContract":      looseObjectSchema("Machine-readable adapter contract."),
+				"CapabilityCatalog":         capabilityCatalogSchema(),
+				"CapabilitySummary":         capabilitySummarySchema(),
+				"IntegrationCapability":     integrationCapabilitySchema(),
+				"RuntimeStatus":             runtimeStatusSchema(),
+				"ConfigStatusReport":        configStatusReportSchema(),
+				"ConfigBindStatus":          configBindStatusSchema(),
+				"ConfigAuthStatus":          configAuthStatusSchema(),
+				"ConfigStorageStatus":       configStorageStatusSchema(),
+				"ConfigCollectorStatus":     configCollectorStatusSchema(),
+				"ConfigPricingStatus":       configPricingStatusSchema(),
+				"ConfigPrivacyStatus":       configPrivacyStatusSchema(),
+				"ConfigFeatureStatus":       configFeatureStatusSchema(),
+				"ConfigOutboundStatus":      configOutboundStatusSchema(),
+				"ConfigTeamStatus":          configTeamStatusSchema(),
+				"ConfigStatusSummary":       configStatusSummarySchema(),
+				"ConfigStatusIssue":         configStatusIssueSchema(),
+				"ReadinessReport":           readinessReportSchema(),
+				"ReadinessSummary":          readinessSummarySchema(),
+				"ReadinessCheck":            readinessCheckSchema(),
+				"AdmissionDecision":         admissionDecisionSchema(),
+				"CanonicalEventSchema":      canonicalEventSchemaSchema(),
+				"CanonicalEventPrivacy":     canonicalEventPrivacySchema(),
+				"CanonicalEventTypeInfo":    canonicalEventTypeInfoSchema(),
+				"CanonicalEventValidation":  canonicalEventValidationSchema(),
+				"CanonicalEventResult":      canonicalEventResultSchema(),
+				"AdapterContract":           adapterContractSchema(),
+				"AdapterInputKind":          adapterInputKindSchema(),
+				"AdapterValidationContract": adapterValidationContractSchema(),
+				"AdapterIngestContract":     adapterIngestContractSchema(),
 				"CanonicalEvent": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": false,
@@ -283,8 +305,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						{"type": "array", "items": refSchema("CanonicalEvent"), "maxItems": 500},
 					},
 				},
-				"ValidationResponse": looseObjectSchema("Validation result for one or more canonical events."),
-				"IngestResponse":     looseObjectSchema("Ingest result for one or more canonical events."),
+				"ValidationResponse": validationResponseSchema(),
+				"IngestResponse":     ingestResponseSchema(),
 				"WorkloadCreateRequest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": false,
@@ -510,82 +532,88 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"timestamp": stringSchema(),
 					},
 				},
-				"WorkloadPage":                     workloadPageSchema(),
-				"AgentRunRow":                      agentRunRowSchema(),
-				"AgentRunEventRow":                 agentRunEventRowSchema(),
-				"AgentRunHeartbeatResponse":        agentRunHeartbeatResponseSchema(),
-				"AgentRunLivenessRow":              agentRunLivenessRowSchema(),
-				"AgentRunLivenessResponse":         agentRunLivenessResponseSchema(),
-				"ModelCallDetail":                  modelCallDetailSchema(),
-				"ToolCallRow":                      toolCallRowSchema(),
-				"ContextRefRow":                    contextRefRowSchema(),
-				"ArtifactRow":                      artifactRowSchema(),
-				"EvaluationRow":                    evaluationRowSchema(),
-				"WorkloadLinkRow":                  workloadLinkRowSchema(),
-				"WorkloadDetail":                   workloadDetailSchema(),
-				"GraphNode":                        graphNodeSchema(),
-				"GraphEdge":                        graphEdgeSchema(),
-				"WorkloadGraph":                    workloadGraphSchema(),
-				"WorkloadTimelineRow":              workloadTimelineRowSchema(),
-				"WorkloadTimelineResponse":         workloadTimelineResponseSchema(),
-				"WorkloadState":                    workloadStateSchema(),
-				"WorkloadFeedEvent":                workloadFeedEventSchema(),
-				"WorkloadEventFeed":                workloadEventFeedSchema(),
-				"DashboardStats":                   dashboardStatsSchema(),
-				"DashboardConsistencyIssue":        dashboardConsistencyIssueSchema(),
-				"CostByModel":                      costByModelSchema(),
-				"TimeSeriesPoint":                  timeSeriesPointSchema(),
-				"TokenTimeSeriesPoint":             tokenTimeSeriesPointSchema(),
-				"SessionInfo":                      sessionInfoSchema(),
-				"DashboardBundle":                  dashboardBundleSchema(),
-				"CostByModelRows":                  costByModelRowsSchema(),
-				"CostTrendRows":                    costTrendRowsSchema(),
-				"TokenTrendRows":                   tokenTrendRowsSchema(),
-				"SessionPage":                      sessionPageSchema(),
-				"SessionDetailRow":                 sessionDetailRowSchema(),
-				"SessionDetail":                    sessionDetailRowsSchema(),
-				"SessionReplayPoint":               sessionReplayPointSchema(),
-				"SessionReplay":                    sessionReplaySchema(),
-				"FleetAttributionReport":           looseObjectSchema("Heuristic sub-agent, parent/child, and parallel-run attribution report."),
-				"IngestionPathStatus":              ingestionPathStatusSchema(),
-				"IngestionHealth":                  ingestionHealthSchema(),
-				"IngestionHealthRows":              ingestionHealthRowsSchema(),
-				"OperationResult":                  looseObjectSchema("Local operation acknowledgement."),
-				"ProjectionRepairResult":           projectionRepairResultSchema(),
-				"PricingSourceStatus":              pricingSourceStatusSchema(),
-				"PricingRuleSummary":               pricingRuleSummarySchema(),
-				"PricingStatus":                    pricingStatusSchema(),
-				"PricingAuditRow":                  pricingAuditRowSchema(),
-				"PricingAuditRows":                 pricingAuditRowsSchema(),
-				"BudgetStatus":                     budgetStatusSchema(),
-				"BudgetStatusResponse":             budgetStatusResponseSchema(),
-				"QuotaWindow":                      quotaWindowSchema(),
-				"QuotaStatus":                      quotaStatusSchema(),
-				"UnpricedModel":                    unpricedModelSchema(),
-				"QualitySource":                    qualitySourceSchema(),
-				"ProvenanceQuality":                provenanceQualitySchema(),
-				"ProjectionQuality":                projectionQualitySchema(),
-				"DataQualityReport":                dataQualityReportSchema(),
-				"DoctorCheck":                      doctorCheckSchema(),
-				"ControlIdempotencyOperationStats": controlIdempotencyOperationStatsSchema(),
-				"ControlIdempotencyStats":          controlIdempotencyStatsSchema(),
-				"WorkloadLeaseStats":               workloadLeaseStatsSchema(),
-				"DoctorReport":                     doctorReportSchema(),
-				"ModelCallRow":                     modelCallRowSchema(),
-				"ModelCallRows":                    modelCallRowsSchema(),
-				"ModelRegistryRow":                 modelRegistryRowSchema(),
-				"ModelRegistryRows":                modelRegistryRowsSchema(),
-				"CostInsightRow":                   costInsightRowSchema(),
-				"CostIntelligenceRows":             costIntelligenceRowsSchema(),
-				"CacheDoctorRow":                   cacheDoctorRowSchema(),
-				"CacheDoctorRows":                  cacheDoctorRowsSchema(),
-				"InsightEvent":                     insightEventSchema(),
-				"InsightEventRows":                 insightEventRowsSchema(),
-				"WebhookNotificationResult":        looseObjectSchema("Redacted webhook delivery or dry-run result."),
-				"AuditEvent":                       auditEventSchema(),
-				"AuditLogRows":                     auditLogRowsSchema(),
-				"ReconciliationImport":             reconciliationImportSchema(),
-				"ReconciliationRows":               reconciliationRowsSchema(),
+				"WorkloadPage":                      workloadPageSchema(),
+				"AgentRunRow":                       agentRunRowSchema(),
+				"AgentRunEventRow":                  agentRunEventRowSchema(),
+				"AgentRunHeartbeatResponse":         agentRunHeartbeatResponseSchema(),
+				"AgentRunLivenessRow":               agentRunLivenessRowSchema(),
+				"AgentRunLivenessResponse":          agentRunLivenessResponseSchema(),
+				"ModelCallDetail":                   modelCallDetailSchema(),
+				"ToolCallRow":                       toolCallRowSchema(),
+				"ContextRefRow":                     contextRefRowSchema(),
+				"ArtifactRow":                       artifactRowSchema(),
+				"EvaluationRow":                     evaluationRowSchema(),
+				"WorkloadLinkRow":                   workloadLinkRowSchema(),
+				"WorkloadDetail":                    workloadDetailSchema(),
+				"GraphNode":                         graphNodeSchema(),
+				"GraphEdge":                         graphEdgeSchema(),
+				"WorkloadGraph":                     workloadGraphSchema(),
+				"WorkloadTimelineRow":               workloadTimelineRowSchema(),
+				"WorkloadTimelineResponse":          workloadTimelineResponseSchema(),
+				"WorkloadState":                     workloadStateSchema(),
+				"WorkloadFeedEvent":                 workloadFeedEventSchema(),
+				"WorkloadEventFeed":                 workloadEventFeedSchema(),
+				"DashboardStats":                    dashboardStatsSchema(),
+				"DashboardConsistencyIssue":         dashboardConsistencyIssueSchema(),
+				"CostByModel":                       costByModelSchema(),
+				"TimeSeriesPoint":                   timeSeriesPointSchema(),
+				"TokenTimeSeriesPoint":              tokenTimeSeriesPointSchema(),
+				"SessionInfo":                       sessionInfoSchema(),
+				"DashboardBundle":                   dashboardBundleSchema(),
+				"CostByModelRows":                   costByModelRowsSchema(),
+				"CostTrendRows":                     costTrendRowsSchema(),
+				"TokenTrendRows":                    tokenTrendRowsSchema(),
+				"SessionPage":                       sessionPageSchema(),
+				"SessionDetailRow":                  sessionDetailRowSchema(),
+				"SessionDetail":                     sessionDetailRowsSchema(),
+				"SessionReplayPoint":                sessionReplayPointSchema(),
+				"SessionReplay":                     sessionReplaySchema(),
+				"FleetAttributionReport":            looseObjectSchema("Heuristic sub-agent, parent/child, and parallel-run attribution report."),
+				"IngestionPathStatus":               ingestionPathStatusSchema(),
+				"IngestionHealth":                   ingestionHealthSchema(),
+				"IngestionHealthRows":               ingestionHealthRowsSchema(),
+				"OperationResult":                   operationResultSchema(),
+				"ProjectionRepairResult":            projectionRepairResultSchema(),
+				"PricingSourceStatus":               pricingSourceStatusSchema(),
+				"PricingRuleSummary":                pricingRuleSummarySchema(),
+				"PricingStatus":                     pricingStatusSchema(),
+				"PricingAuditRow":                   pricingAuditRowSchema(),
+				"PricingAuditRows":                  pricingAuditRowsSchema(),
+				"BudgetStatus":                      budgetStatusSchema(),
+				"BudgetStatusResponse":              budgetStatusResponseSchema(),
+				"QuotaWindow":                       quotaWindowSchema(),
+				"QuotaStatus":                       quotaStatusSchema(),
+				"UnpricedModel":                     unpricedModelSchema(),
+				"QualitySource":                     qualitySourceSchema(),
+				"ProvenanceQuality":                 provenanceQualitySchema(),
+				"ProjectionQuality":                 projectionQualitySchema(),
+				"DataQualityReport":                 dataQualityReportSchema(),
+				"DoctorCheck":                       doctorCheckSchema(),
+				"ControlIdempotencyOperationStats":  controlIdempotencyOperationStatsSchema(),
+				"ControlIdempotencyStats":           controlIdempotencyStatsSchema(),
+				"WorkloadLeaseStats":                workloadLeaseStatsSchema(),
+				"DoctorReport":                      doctorReportSchema(),
+				"ModelCallRow":                      modelCallRowSchema(),
+				"ModelCallRows":                     modelCallRowsSchema(),
+				"ModelRegistryRow":                  modelRegistryRowSchema(),
+				"ModelRegistryRows":                 modelRegistryRowsSchema(),
+				"CostInsightRow":                    costInsightRowSchema(),
+				"CostIntelligenceRows":              costIntelligenceRowsSchema(),
+				"CacheDoctorRow":                    cacheDoctorRowSchema(),
+				"CacheDoctorRows":                   cacheDoctorRowsSchema(),
+				"InsightEvent":                      insightEventSchema(),
+				"InsightEventRows":                  insightEventRowsSchema(),
+				"WebhookDeliveryResult":             webhookDeliveryResultSchema(),
+				"WebhookNotificationPayload":        webhookNotificationPayloadSchema(),
+				"WebhookNotificationSummary":        webhookNotificationSummarySchema(),
+				"WebhookNotificationApproval":       webhookNotificationApprovalSchema(),
+				"WebhookNotificationApprovalRoutes": webhookNotificationApprovalRoutesSchema(),
+				"WebhookNotificationApprovalRoute":  webhookNotificationApprovalRouteSchema(),
+				"WebhookNotificationResult":         webhookNotificationResultSchema(),
+				"AuditEvent":                        auditEventSchema(),
+				"AuditLogRows":                      auditLogRowsSchema(),
+				"ReconciliationImport":              reconciliationImportSchema(),
+				"ReconciliationRows":                reconciliationRowsSchema(),
 				"ReconciliationImportRequest": looseObjectSchema(
 					"Provider CSV/JSON statement or manual reconciliation summary. Payload hashes are persisted; secrets and prompt content are not accepted.",
 				),
@@ -1838,6 +1866,766 @@ func stringArraySchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":  "array",
 		"items": stringSchema(),
+	}
+}
+
+func stringMapSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": stringSchema(),
+	}
+}
+
+func integerMapSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": integerSchema(),
+	}
+}
+
+func refArraySchema(name string) map[string]interface{} {
+	return map[string]interface{}{"type": "array", "items": refSchema(name)}
+}
+
+func capabilityCatalogSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe Agent Ledger ecosystem capability catalog.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "privacy_default", "summary", "capabilities"},
+		"properties": map[string]interface{}{
+			"product":         stringSchema(),
+			"contract":        stringSchema(),
+			"version":         stringSchema(),
+			"privacy_default": stringSchema(),
+			"summary":         refSchema("CapabilitySummary"),
+			"capabilities":    refArraySchema("IntegrationCapability"),
+		},
+	}
+}
+
+func capabilitySummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "High-level capability catalog counts.",
+		"additionalProperties": true,
+		"required":             []string{"implemented", "experimental", "planned", "enabled_collectors", "read_only_limited"},
+		"properties": map[string]interface{}{
+			"implemented":        integerSchema(),
+			"experimental":       integerSchema(),
+			"planned":            integerSchema(),
+			"enabled_collectors": integerSchema(),
+			"read_only_limited":  integerSchema(),
+		},
+	}
+}
+
+func integrationCapabilitySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One supported, experimental, or planned integration surface.",
+		"additionalProperties": true,
+		"required": []string{
+			"id", "name", "category", "protocol", "direction", "status", "maturity", "enabled", "writes_local_state", "available_in_read_only", "runtime_status", "privacy",
+		},
+		"properties": map[string]interface{}{
+			"id":                     stringSchema(),
+			"name":                   stringSchema(),
+			"category":               stringSchema(),
+			"protocol":               stringSchema(),
+			"direction":              stringSchema(),
+			"status":                 stringSchema(),
+			"maturity":               stringSchema(),
+			"enabled":                boolSchema(),
+			"writes_local_state":     boolSchema(),
+			"available_in_read_only": boolSchema(),
+			"runtime_status":         stringSchema(),
+			"privacy":                stringSchema(),
+			"event_types":            stringArraySchema(),
+			"endpoints":              stringArraySchema(),
+			"commands":               stringArraySchema(),
+			"tools":                  stringArraySchema(),
+			"resources":              stringArraySchema(),
+			"prompts":                stringArraySchema(),
+			"data_classes":           stringArraySchema(),
+			"limitations":            stringArraySchema(),
+			"next_milestones":        stringArraySchema(),
+		},
+	}
+}
+
+func runtimeStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Process-local observer/control-plane mode and compatibility hashes.",
+		"additionalProperties": true,
+		"required":             []string{"mode", "read_only", "write_operations", "background_tasks", "message"},
+		"properties": map[string]interface{}{
+			"contract":                stringSchema(),
+			"version":                 stringSchema(),
+			"mode":                    stringSchema(),
+			"read_only":               boolSchema(),
+			"write_operations":        stringSchema(),
+			"background_tasks":        stringSchema(),
+			"capability_catalog_hash": refSchema("Hash"),
+			"canonical_schema_hash":   refSchema("Hash"),
+			"adapter_spec_hash":       refSchema("Hash"),
+			"disabled_features":       stringArraySchema(),
+			"message":                 stringSchema(),
+		},
+	}
+}
+
+func configStatusReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe deployment configuration report without raw paths, secrets, prompt content, or session ids.",
+		"additionalProperties": true,
+		"required": []string{
+			"product", "slug", "contract", "version", "local_first", "privacy_default", "prompt_content_stored", "usage_data_uploaded", "path_values_exposed", "secret_values_exposed", "bind", "auth", "storage", "collectors", "pricing", "privacy", "features", "outbound", "teams", "summary", "issues", "privacy_note",
+		},
+		"properties": map[string]interface{}{
+			"product":               stringSchema(),
+			"slug":                  stringSchema(),
+			"contract":              stringSchema(),
+			"version":               stringSchema(),
+			"local_first":           boolSchema(),
+			"privacy_default":       stringSchema(),
+			"prompt_content_stored": boolSchema(),
+			"usage_data_uploaded":   boolSchema(),
+			"path_values_exposed":   boolSchema(),
+			"secret_values_exposed": boolSchema(),
+			"bind":                  refSchema("ConfigBindStatus"),
+			"auth":                  refSchema("ConfigAuthStatus"),
+			"storage":               refSchema("ConfigStorageStatus"),
+			"collectors":            refArraySchema("ConfigCollectorStatus"),
+			"pricing":               refSchema("ConfigPricingStatus"),
+			"privacy":               refSchema("ConfigPrivacyStatus"),
+			"features":              refSchema("ConfigFeatureStatus"),
+			"outbound":              refSchema("ConfigOutboundStatus"),
+			"teams":                 refSchema("ConfigTeamStatus"),
+			"summary":               refSchema("ConfigStatusSummary"),
+			"issues":                refArraySchema("ConfigStatusIssue"),
+			"privacy_note":          stringSchema(),
+		},
+	}
+}
+
+func configBindStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"address", "port", "loopback_only", "publicly_bound"},
+		"properties": map[string]interface{}{
+			"address":        stringSchema(),
+			"port":           integerSchema(),
+			"loopback_only":  boolSchema(),
+			"publicly_bound": boolSchema(),
+		},
+	}
+}
+
+func configAuthStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"auth_token_configured", "admin_token_configured", "viewer_token_configured", "any_token_configured", "rbac_enabled", "read_only"},
+		"properties": map[string]interface{}{
+			"auth_token_configured":   boolSchema(),
+			"admin_token_configured":  boolSchema(),
+			"viewer_token_configured": boolSchema(),
+			"any_token_configured":    boolSchema(),
+			"rbac_enabled":            boolSchema(),
+			"read_only":               boolSchema(),
+		},
+	}
+}
+
+func configStorageStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"path_configured"},
+		"properties":           map[string]interface{}{"path_configured": boolSchema()},
+	}
+}
+
+func configCollectorStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"source", "enabled", "path_count", "scan_interval"},
+		"properties": map[string]interface{}{
+			"source":        stringSchema(),
+			"enabled":       boolSchema(),
+			"path_count":    integerSchema(),
+			"scan_interval": stringSchema(),
+		},
+	}
+}
+
+func configPricingStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"mode", "sync_interval", "stale_after", "override_count"},
+		"properties": map[string]interface{}{
+			"mode":           stringSchema(),
+			"sync_interval":  stringSchema(),
+			"stale_after":    stringSchema(),
+			"override_count": integerSchema(),
+		},
+	}
+}
+
+func configPrivacyStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"redact_paths", "hash_session_ids", "hide_project_names", "screenshot_mode", "default_preset"},
+		"properties": map[string]interface{}{
+			"redact_paths":       boolSchema(),
+			"hash_session_ids":   boolSchema(),
+			"hide_project_names": boolSchema(),
+			"screenshot_mode":    boolSchema(),
+			"default_preset":     stringSchema(),
+		},
+	}
+}
+
+func configFeatureStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"budgets_enabled", "budget_rule_count", "quota_enabled", "watchdog_enabled", "policies_enabled", "policy_rule_count", "otlp_receiver_enabled", "gateway_enabled"},
+		"properties": map[string]interface{}{
+			"budgets_enabled":       boolSchema(),
+			"budget_rule_count":     integerSchema(),
+			"quota_enabled":         boolSchema(),
+			"watchdog_enabled":      boolSchema(),
+			"policies_enabled":      boolSchema(),
+			"policy_rule_count":     integerSchema(),
+			"otlp_receiver_enabled": boolSchema(),
+			"gateway_enabled":       boolSchema(),
+		},
+	}
+}
+
+func configOutboundStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required": []string{
+			"webhooks_enabled", "webhook_url_configured", "gateway_enabled", "gateway_upstream_configured", "gateway_api_key_env_configured", "anthropic_upstream_configured", "anthropic_api_key_env_configured", "outbound_surfaces",
+		},
+		"properties": map[string]interface{}{
+			"webhooks_enabled":                 boolSchema(),
+			"webhook_url_configured":           boolSchema(),
+			"gateway_enabled":                  boolSchema(),
+			"gateway_upstream_configured":      boolSchema(),
+			"gateway_api_key_env_configured":   boolSchema(),
+			"anthropic_upstream_configured":    boolSchema(),
+			"anthropic_api_key_env_configured": boolSchema(),
+			"outbound_surfaces":                stringArraySchema(),
+		},
+	}
+}
+
+func configTeamStatusSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"machine_name_configured", "git_author_configured", "group_mapping_count"},
+		"properties": map[string]interface{}{
+			"machine_name_configured": boolSchema(),
+			"git_author_configured":   boolSchema(),
+			"group_mapping_count":     integerSchema(),
+		},
+	}
+}
+
+func configStatusSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"enabled_collectors", "disabled_collectors", "collector_path_count", "critical_issues", "warning_issues", "info_issues"},
+		"properties": map[string]interface{}{
+			"enabled_collectors":   integerSchema(),
+			"disabled_collectors":  integerSchema(),
+			"collector_path_count": integerSchema(),
+			"critical_issues":      integerSchema(),
+			"warning_issues":       integerSchema(),
+			"info_issues":          integerSchema(),
+		},
+	}
+}
+
+func configStatusIssueSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"name", "severity", "message"},
+		"properties": map[string]interface{}{
+			"name":     stringSchema(),
+			"severity": stringSchema(),
+			"message":  stringSchema(),
+			"action":   stringSchema(),
+		},
+	}
+}
+
+func readinessReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe control-plane readiness report for wrappers, routers, CI, and deployment probes.",
+		"additionalProperties": true,
+		"required": []string{
+			"product", "slug", "contract", "version", "generated_at", "status", "mode", "read_only", "accepts_writes", "local_first", "prompt_content_stored", "usage_data_uploaded", "summary", "checks", "privacy_note",
+		},
+		"properties": map[string]interface{}{
+			"product":               stringSchema(),
+			"slug":                  stringSchema(),
+			"contract":              stringSchema(),
+			"version":               stringSchema(),
+			"generated_at":          stringSchema(),
+			"status":                stringSchema(),
+			"mode":                  stringSchema(),
+			"read_only":             boolSchema(),
+			"accepts_writes":        boolSchema(),
+			"local_first":           boolSchema(),
+			"prompt_content_stored": boolSchema(),
+			"usage_data_uploaded":   boolSchema(),
+			"summary":               refSchema("ReadinessSummary"),
+			"checks":                refArraySchema("ReadinessCheck"),
+			"privacy_note":          stringSchema(),
+		},
+	}
+}
+
+func readinessSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Aggregated readiness counts and queue/runtime pressure indicators.",
+		"additionalProperties": true,
+		"required": []string{
+			"total_checks", "passing_checks", "critical_failures", "warnings", "info", "usage_records", "prompt_events", "idempotency_keys", "idempotency_replays", "queue_claimable", "queue_non_terminal", "queue_oldest_claimable_age", "queue_next_lease_expiry", "active_leases", "expired_leases", "released_leases", "active_runs", "stale_runs", "oldest_run_age", "health_sources", "health_errors", "pricing_sources", "pricing_stale", "pricing_errors", "config_issues", "contract_checks", "contract_failures", "recommendation",
+		},
+		"properties": map[string]interface{}{
+			"total_checks":               integerSchema(),
+			"passing_checks":             integerSchema(),
+			"critical_failures":          integerSchema(),
+			"warnings":                   integerSchema(),
+			"info":                       integerSchema(),
+			"usage_records":              integerSchema(),
+			"prompt_events":              integerSchema(),
+			"idempotency_keys":           integerSchema(),
+			"idempotency_replays":        integerSchema(),
+			"queue_claimable":            integerSchema(),
+			"queue_non_terminal":         integerSchema(),
+			"queue_oldest_claimable_age": stringSchema(),
+			"queue_next_lease_expiry":    stringSchema(),
+			"active_leases":              integerSchema(),
+			"expired_leases":             integerSchema(),
+			"released_leases":            integerSchema(),
+			"active_runs":                integerSchema(),
+			"stale_runs":                 integerSchema(),
+			"oldest_run_age":             stringSchema(),
+			"health_sources":             integerSchema(),
+			"health_errors":              integerSchema(),
+			"pricing_sources":            integerSchema(),
+			"pricing_stale":              integerSchema(),
+			"pricing_errors":             integerSchema(),
+			"config_issues":              integerSchema(),
+			"contract_checks":            integerSchema(),
+			"contract_failures":          integerSchema(),
+			"recommendation":             stringSchema(),
+		},
+	}
+}
+
+func readinessCheckSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"name", "ok", "severity", "message"},
+		"properties": map[string]interface{}{
+			"name":     stringSchema(),
+			"ok":       boolSchema(),
+			"severity": stringSchema(),
+			"message":  stringSchema(),
+			"action":   stringSchema(),
+		},
+	}
+}
+
+func admissionDecisionSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe operation admission decision for HTTP, CLI, or MCP surfaces.",
+		"additionalProperties": true,
+		"required": []string{
+			"product", "slug", "contract", "version", "generated_at", "status", "allowed", "surface", "operation", "role", "required_role", "rbac_enabled", "auth_configured", "read_only", "known_operation", "writes_local_state", "write_mode", "available_in_read_only", "local_or_auth_required", "prompt_content_stored", "usage_data_uploaded", "reason", "privacy_note",
+		},
+		"properties": map[string]interface{}{
+			"product":                stringSchema(),
+			"slug":                   stringSchema(),
+			"contract":               stringSchema(),
+			"version":                stringSchema(),
+			"generated_at":           stringSchema(),
+			"status":                 stringSchema(),
+			"allowed":                boolSchema(),
+			"surface":                stringSchema(),
+			"operation":              stringSchema(),
+			"role":                   stringSchema(),
+			"required_role":          stringSchema(),
+			"rbac_enabled":           boolSchema(),
+			"auth_configured":        boolSchema(),
+			"read_only":              boolSchema(),
+			"known_operation":        boolSchema(),
+			"writes_local_state":     boolSchema(),
+			"write_mode":             stringSchema(),
+			"available_in_read_only": boolSchema(),
+			"local_or_auth_required": boolSchema(),
+			"prompt_content_stored":  boolSchema(),
+			"usage_data_uploaded":    boolSchema(),
+			"reason":                 stringSchema(),
+			"action":                 stringSchema(),
+			"privacy_note":           stringSchema(),
+		},
+	}
+}
+
+func canonicalEventSchemaSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Metadata-only canonical event contract and supported event types.",
+		"additionalProperties": true,
+		"required":             []string{"version", "supported_versions", "schema_hash", "privacy", "envelope_fields", "event_types", "examples_uri"},
+		"properties": map[string]interface{}{
+			"version":            stringSchema(),
+			"supported_versions": stringArraySchema(),
+			"schema_hash":        refSchema("Hash"),
+			"privacy":            refSchema("CanonicalEventPrivacy"),
+			"envelope_fields":    stringMapSchema(),
+			"event_types":        refArraySchema("CanonicalEventTypeInfo"),
+			"examples_uri":       stringSchema(),
+		},
+	}
+}
+
+func canonicalEventPrivacySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"payload_policy", "rejected_payload_keys"},
+		"properties": map[string]interface{}{
+			"payload_policy":        stringSchema(),
+			"rejected_payload_keys": stringArraySchema(),
+		},
+	}
+}
+
+func canonicalEventTypeInfoSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One supported metadata-only canonical event type.",
+		"additionalProperties": true,
+		"required":             []string{"event_type", "description", "required", "payload_fields"},
+		"properties": map[string]interface{}{
+			"event_type":     stringSchema(),
+			"description":    stringSchema(),
+			"required":       stringArraySchema(),
+			"payload_fields": stringMapSchema(),
+		},
+	}
+}
+
+func canonicalEventValidationSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Dry-run validation outcome for one canonical event.",
+		"additionalProperties": true,
+		"required":             []string{"event_id", "status", "event_type", "source", "payload_hash"},
+		"properties": map[string]interface{}{
+			"event_id":     stringSchema(),
+			"status":       stringSchema(),
+			"event_type":   stringSchema(),
+			"source":       stringSchema(),
+			"payload_hash": refSchema("Hash"),
+			"warnings":     stringArraySchema(),
+		},
+	}
+}
+
+func canonicalEventResultSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Ingest outcome for one canonical event.",
+		"additionalProperties": true,
+		"required":             []string{"event_id", "status", "event_type"},
+		"properties": map[string]interface{}{
+			"event_id":    stringSchema(),
+			"status":      stringSchema(),
+			"event_type":  stringSchema(),
+			"workload_id": stringSchema(),
+			"run_id":      stringSchema(),
+			"derived":     stringArraySchema(),
+		},
+	}
+}
+
+func validationResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Validation result for one or more canonical events.",
+		"additionalProperties": true,
+		"required":             []string{"ok", "results"},
+		"properties": map[string]interface{}{
+			"ok":      boolSchema(),
+			"results": refArraySchema("CanonicalEventValidation"),
+		},
+	}
+}
+
+func ingestResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Ingest result for one or more canonical events.",
+		"additionalProperties": true,
+		"required":             []string{"ok", "results"},
+		"properties": map[string]interface{}{
+			"ok":      boolSchema(),
+			"results": refArraySchema("CanonicalEventResult"),
+		},
+	}
+}
+
+func adapterContractSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Machine-readable adapter contract for privacy-safe integrations.",
+		"additionalProperties": true,
+		"required": []string{
+			"product", "contract", "version", "purpose", "schema_version", "schema_hash", "privacy_policy", "supported_input_kinds", "canonical_event_types", "required_envelope", "recommended_envelope", "forbidden_payload_keys", "token_semantics", "quality_gates", "validation", "ingest", "roadmap_compatibility",
+		},
+		"properties": map[string]interface{}{
+			"product":                stringSchema(),
+			"contract":               stringSchema(),
+			"version":                stringSchema(),
+			"purpose":                stringSchema(),
+			"schema_version":         stringSchema(),
+			"schema_hash":            refSchema("Hash"),
+			"privacy_policy":         stringSchema(),
+			"supported_input_kinds":  refArraySchema("AdapterInputKind"),
+			"canonical_event_types":  refArraySchema("CanonicalEventTypeInfo"),
+			"required_envelope":      stringArraySchema(),
+			"recommended_envelope":   stringArraySchema(),
+			"forbidden_payload_keys": stringArraySchema(),
+			"token_semantics":        stringArraySchema(),
+			"quality_gates":          stringArraySchema(),
+			"validation":             refSchema("AdapterValidationContract"),
+			"ingest":                 refSchema("AdapterIngestContract"),
+			"roadmap_compatibility":  stringArraySchema(),
+		},
+	}
+}
+
+func adapterInputKindSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"kind", "description", "conformance_kind", "required_signals", "privacy_notes"},
+		"properties": map[string]interface{}{
+			"kind":             stringSchema(),
+			"description":      stringSchema(),
+			"conformance_kind": stringSchema(),
+			"convert_command":  stringSchema(),
+			"ingest_command":   stringSchema(),
+			"endpoint":         stringSchema(),
+			"required_signals": stringArraySchema(),
+			"privacy_notes":    stringArraySchema(),
+		},
+	}
+}
+
+func adapterValidationContractSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"http", "cli", "mcp_tool", "strict_ci"},
+		"properties": map[string]interface{}{
+			"http":      stringSchema(),
+			"cli":       stringSchema(),
+			"mcp_tool":  stringSchema(),
+			"strict_ci": stringArraySchema(),
+		},
+	}
+}
+
+func adapterIngestContractSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"http", "cli", "mcp_tools"},
+		"properties": map[string]interface{}{
+			"http":      stringArraySchema(),
+			"cli":       stringArraySchema(),
+			"mcp_tools": stringArraySchema(),
+		},
+	}
+}
+
+func operationResultSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Local operation acknowledgement. Operation-specific fields remain explicit where they are stable.",
+		"additionalProperties": true,
+		"required":             []string{"ok"},
+		"properties": map[string]interface{}{
+			"ok":     boolSchema(),
+			"source": stringSchema(),
+			"reset":  boolSchema(),
+			"mode":   stringSchema(),
+			"result": map[string]interface{}{"oneOf": []map[string]interface{}{
+				refSchema("ProjectionRepairResult"),
+				looseObjectSchema("Operation-specific structured result."),
+			}},
+		},
+	}
+}
+
+func webhookDeliveryResultSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Redacted webhook delivery or dry-run result.",
+		"additionalProperties": true,
+		"required":             []string{"enabled", "dry_run", "event_count", "approval_count", "approval_route_count", "message"},
+		"properties": map[string]interface{}{
+			"enabled":              boolSchema(),
+			"dry_run":              boolSchema(),
+			"event_count":          integerSchema(),
+			"approval_count":       integerSchema(),
+			"approval_route_count": integerSchema(),
+			"status_code":          integerSchema(),
+			"message":              stringSchema(),
+		},
+	}
+}
+
+func webhookNotificationPayloadSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe webhook payload. Returned only for dry-run requests.",
+		"additionalProperties": true,
+		"required":             []string{"product", "kind", "generated_at", "summary", "events"},
+		"properties": map[string]interface{}{
+			"product":         stringSchema(),
+			"kind":            stringSchema(),
+			"generated_at":    stringSchema(),
+			"summary":         refSchema("WebhookNotificationSummary"),
+			"events":          refArraySchema("WorkloadFeedEvent"),
+			"approvals":       refArraySchema("WebhookNotificationApproval"),
+			"approval_routes": refSchema("WebhookNotificationApprovalRoutes"),
+		},
+	}
+}
+
+func webhookNotificationSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": true,
+		"required":             []string{"total", "pending_approvals", "approval_routes", "by_phase", "by_severity"},
+		"properties": map[string]interface{}{
+			"total":             integerSchema(),
+			"pending_approvals": integerSchema(),
+			"approval_routes":   integerSchema(),
+			"by_phase":          integerMapSchema(),
+			"by_severity":       integerMapSchema(),
+		},
+	}
+}
+
+func webhookNotificationApprovalSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Redacted approval request summary for notifications.",
+		"additionalProperties": true,
+		"required":             []string{"request_id", "project", "action", "target", "status", "required_approvals", "approval_votes", "rejection_votes", "overdue", "reason"},
+		"properties": map[string]interface{}{
+			"request_id":               stringSchema(),
+			"policy_decision_id":       stringSchema(),
+			"workload_id":              stringSchema(),
+			"run_id":                   stringSchema(),
+			"source":                   stringSchema(),
+			"model":                    stringSchema(),
+			"project":                  stringSchema(),
+			"action":                   stringSchema(),
+			"target":                   stringSchema(),
+			"actor_role":               stringSchema(),
+			"status":                   stringSchema(),
+			"required_approvals":       integerSchema(),
+			"approval_votes":           integerSchema(),
+			"rejection_votes":          integerSchema(),
+			"escalation_after_seconds": integerSchema(),
+			"due_at":                   stringSchema(),
+			"overdue":                  boolSchema(),
+			"reason":                   stringSchema(),
+			"created_at":               stringSchema(),
+			"updated_at":               stringSchema(),
+		},
+	}
+}
+
+func webhookNotificationApprovalRoutesSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Redacted approval route rollup returned in notification dry-runs.",
+		"additionalProperties": true,
+		"required":             []string{"generated_at", "due_within", "summary", "routes"},
+		"properties": map[string]interface{}{
+			"generated_at": stringSchema(),
+			"due_within":   stringSchema(),
+			"summary":      refSchema("ApprovalRouteSummaryStats"),
+			"routes":       refArraySchema("WebhookNotificationApprovalRoute"),
+		},
+	}
+}
+
+func webhookNotificationApprovalRouteSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One redacted approval route row for notifications.",
+		"additionalProperties": true,
+		"required":             []string{"route_key_hash", "pending", "overdue", "due_soon", "approval_votes", "rejection_votes", "max_required_approvals"},
+		"properties": map[string]interface{}{
+			"route_key_hash":         stringSchema(),
+			"approver_hash":          stringSchema(),
+			"escalation_target_hash": stringSchema(),
+			"pending":                integerSchema(),
+			"overdue":                integerSchema(),
+			"due_soon":               integerSchema(),
+			"approval_votes":         integerSchema(),
+			"rejection_votes":        integerSchema(),
+			"max_required_approvals": integerSchema(),
+			"due_next":               stringSchema(),
+			"sources":                stringArraySchema(),
+			"models":                 stringArraySchema(),
+			"projects":               stringArraySchema(),
+			"actions":                stringArraySchema(),
+		},
+	}
+}
+
+func webhookNotificationResultSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Webhook notification API response. Dry-run responses include the redacted payload.",
+		"additionalProperties": true,
+		"required":             []string{"result"},
+		"properties": map[string]interface{}{
+			"result":  refSchema("WebhookDeliveryResult"),
+			"payload": refSchema("WebhookNotificationPayload"),
+		},
 	}
 }
 

@@ -1066,6 +1066,134 @@ func TestOpenAPIWorkloadLedgerSchemasExposeRunAndFeedFields(t *testing.T) {
 	expectType("WorkloadFeedEvent", "terminal", "boolean")
 }
 
+func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	schemas := spec["components"].(map[string]interface{})["schemas"].(map[string]interface{})
+	paths := spec["paths"].(map[string]interface{})
+
+	schema := func(name string) map[string]interface{} {
+		t.Helper()
+		raw, ok := schemas[name].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing: %#v", name, schemas[name])
+		}
+		return raw
+	}
+	props := func(name string) map[string]interface{} {
+		t.Helper()
+		raw := schema(name)
+		properties, ok := raw["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing properties: %#v", name, raw)
+		}
+		return properties
+	}
+	expectFields := func(name string, fields ...string) map[string]interface{} {
+		t.Helper()
+		properties := props(name)
+		for _, field := range fields {
+			if properties[field] == nil {
+				t.Fatalf("%s schema missing field %q: %#v", name, field, properties)
+			}
+		}
+		return properties
+	}
+	expectRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		fieldSchema, ok := properties[field].(map[string]interface{})
+		if !ok || fieldSchema["$ref"] != ref {
+			t.Fatalf("%s.%s should reference %s: %#v", name, field, ref, properties[field])
+		}
+	}
+	expectArrayRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		arraySchema, ok := properties[field].(map[string]interface{})
+		if !ok || arraySchema["type"] != "array" {
+			t.Fatalf("%s.%s should be an array: %#v", name, field, properties[field])
+		}
+		items, ok := arraySchema["items"].(map[string]interface{})
+		if !ok || items["$ref"] != ref {
+			t.Fatalf("%s.%s items should reference %s: %#v", name, field, ref, arraySchema["items"])
+		}
+	}
+	expectPathResponseRef := func(path, method, ref string) {
+		t.Helper()
+		operation := paths[path].(map[string]interface{})[method].(map[string]interface{})
+		response := operation["responses"].(map[string]interface{})["200"].(map[string]interface{})
+		schema := response["content"].(map[string]interface{})["application/json"].(map[string]interface{})["schema"].(map[string]interface{})
+		if schema["$ref"] != ref {
+			t.Fatalf("%s %s should return %s: %#v", method, path, ref, schema)
+		}
+	}
+
+	expectPathResponseRef("/api/integrations", "get", "#/components/schemas/CapabilityCatalog")
+	expectPathResponseRef("/api/runtime/status", "get", "#/components/schemas/RuntimeStatus")
+	expectPathResponseRef("/api/config/status", "get", "#/components/schemas/ConfigStatusReport")
+	expectPathResponseRef("/api/readiness", "get", "#/components/schemas/ReadinessReport")
+	expectPathResponseRef("/api/admission/check", "get", "#/components/schemas/AdmissionDecision")
+	expectPathResponseRef("/api/event-schema", "get", "#/components/schemas/CanonicalEventSchema")
+	expectPathResponseRef("/api/integrations/adapter-spec", "get", "#/components/schemas/AdapterContract")
+	expectPathResponseRef("/api/events/validate", "post", "#/components/schemas/ValidationResponse")
+	expectPathResponseRef("/api/events", "post", "#/components/schemas/IngestResponse")
+	expectPathResponseRef("/api/notifications/webhook", "post", "#/components/schemas/WebhookNotificationResult")
+
+	expectFields("CapabilityCatalog", "product", "contract", "version", "privacy_default", "summary", "capabilities")
+	expectRef("CapabilityCatalog", "summary", "#/components/schemas/CapabilitySummary")
+	expectArrayRef("CapabilityCatalog", "capabilities", "#/components/schemas/IntegrationCapability")
+	expectFields("CapabilitySummary", "implemented", "experimental", "planned", "enabled_collectors", "read_only_limited")
+	expectFields("IntegrationCapability", "id", "name", "category", "protocol", "direction", "status", "maturity", "enabled", "writes_local_state", "available_in_read_only", "runtime_status", "privacy", "event_types", "endpoints", "commands", "tools", "resources", "prompts", "data_classes", "limitations", "next_milestones")
+
+	expectFields("RuntimeStatus", "contract", "version", "mode", "read_only", "write_operations", "background_tasks", "capability_catalog_hash", "canonical_schema_hash", "adapter_spec_hash", "disabled_features", "message")
+	expectFields("ConfigStatusReport", "product", "slug", "contract", "version", "local_first", "privacy_default", "prompt_content_stored", "usage_data_uploaded", "path_values_exposed", "secret_values_exposed", "bind", "auth", "storage", "collectors", "pricing", "privacy", "features", "outbound", "teams", "summary", "issues", "privacy_note")
+	expectRef("ConfigStatusReport", "bind", "#/components/schemas/ConfigBindStatus")
+	expectRef("ConfigStatusReport", "auth", "#/components/schemas/ConfigAuthStatus")
+	expectArrayRef("ConfigStatusReport", "collectors", "#/components/schemas/ConfigCollectorStatus")
+	expectArrayRef("ConfigStatusReport", "issues", "#/components/schemas/ConfigStatusIssue")
+	expectFields("ConfigOutboundStatus", "webhooks_enabled", "webhook_url_configured", "gateway_enabled", "gateway_upstream_configured", "gateway_api_key_env_configured", "anthropic_upstream_configured", "anthropic_api_key_env_configured", "outbound_surfaces")
+
+	expectFields("ReadinessReport", "product", "slug", "contract", "version", "generated_at", "status", "mode", "read_only", "accepts_writes", "local_first", "prompt_content_stored", "usage_data_uploaded", "summary", "checks", "privacy_note")
+	expectRef("ReadinessReport", "summary", "#/components/schemas/ReadinessSummary")
+	expectArrayRef("ReadinessReport", "checks", "#/components/schemas/ReadinessCheck")
+	expectFields("ReadinessSummary", "total_checks", "passing_checks", "critical_failures", "warnings", "info", "usage_records", "prompt_events", "idempotency_keys", "idempotency_replays", "queue_claimable", "queue_non_terminal", "queue_oldest_claimable_age", "queue_next_lease_expiry", "active_leases", "expired_leases", "released_leases", "active_runs", "stale_runs", "oldest_run_age", "health_sources", "health_errors", "pricing_sources", "pricing_stale", "pricing_errors", "config_issues", "contract_checks", "contract_failures", "recommendation")
+	expectFields("ReadinessCheck", "name", "ok", "severity", "message", "action")
+
+	expectFields("AdmissionDecision", "product", "slug", "contract", "version", "generated_at", "status", "allowed", "surface", "operation", "role", "required_role", "rbac_enabled", "auth_configured", "read_only", "known_operation", "writes_local_state", "write_mode", "available_in_read_only", "local_or_auth_required", "prompt_content_stored", "usage_data_uploaded", "reason", "action", "privacy_note")
+	expectFields("CanonicalEventSchema", "version", "supported_versions", "schema_hash", "privacy", "envelope_fields", "event_types", "examples_uri")
+	expectRef("CanonicalEventSchema", "privacy", "#/components/schemas/CanonicalEventPrivacy")
+	expectArrayRef("CanonicalEventSchema", "event_types", "#/components/schemas/CanonicalEventTypeInfo")
+	expectFields("CanonicalEventTypeInfo", "event_type", "description", "required", "payload_fields")
+	expectFields("CanonicalEventValidation", "event_id", "status", "event_type", "source", "payload_hash", "warnings")
+	expectFields("CanonicalEventResult", "event_id", "status", "event_type", "workload_id", "run_id", "derived")
+	expectArrayRef("ValidationResponse", "results", "#/components/schemas/CanonicalEventValidation")
+	expectArrayRef("IngestResponse", "results", "#/components/schemas/CanonicalEventResult")
+
+	expectFields("AdapterContract", "product", "contract", "version", "purpose", "schema_version", "schema_hash", "privacy_policy", "supported_input_kinds", "canonical_event_types", "required_envelope", "recommended_envelope", "forbidden_payload_keys", "token_semantics", "quality_gates", "validation", "ingest", "roadmap_compatibility")
+	expectArrayRef("AdapterContract", "supported_input_kinds", "#/components/schemas/AdapterInputKind")
+	expectArrayRef("AdapterContract", "canonical_event_types", "#/components/schemas/CanonicalEventTypeInfo")
+	expectRef("AdapterContract", "validation", "#/components/schemas/AdapterValidationContract")
+	expectRef("AdapterContract", "ingest", "#/components/schemas/AdapterIngestContract")
+	expectFields("AdapterInputKind", "kind", "description", "conformance_kind", "convert_command", "ingest_command", "endpoint", "required_signals", "privacy_notes")
+	expectFields("AdapterValidationContract", "http", "cli", "mcp_tool", "strict_ci")
+	expectFields("AdapterIngestContract", "http", "cli", "mcp_tools")
+
+	expectFields("OperationResult", "ok", "source", "reset", "mode", "result")
+	expectFields("WebhookNotificationResult", "result", "payload")
+	expectRef("WebhookNotificationResult", "result", "#/components/schemas/WebhookDeliveryResult")
+	expectRef("WebhookNotificationResult", "payload", "#/components/schemas/WebhookNotificationPayload")
+	expectFields("WebhookDeliveryResult", "enabled", "dry_run", "event_count", "approval_count", "approval_route_count", "status_code", "message")
+	expectFields("WebhookNotificationPayload", "product", "kind", "generated_at", "summary", "events", "approvals", "approval_routes")
+	expectRef("WebhookNotificationPayload", "summary", "#/components/schemas/WebhookNotificationSummary")
+	expectArrayRef("WebhookNotificationPayload", "events", "#/components/schemas/WorkloadFeedEvent")
+	expectArrayRef("WebhookNotificationPayload", "approvals", "#/components/schemas/WebhookNotificationApproval")
+	expectFields("WebhookNotificationSummary", "total", "pending_approvals", "approval_routes", "by_phase", "by_severity")
+	expectFields("WebhookNotificationApproval", "request_id", "policy_decision_id", "workload_id", "run_id", "source", "model", "project", "action", "target", "actor_role", "status", "required_approvals", "approval_votes", "rejection_votes", "escalation_after_seconds", "due_at", "overdue", "reason", "created_at", "updated_at")
+	expectFields("WebhookNotificationApprovalRoutes", "generated_at", "due_within", "summary", "routes")
+	expectArrayRef("WebhookNotificationApprovalRoutes", "routes", "#/components/schemas/WebhookNotificationApprovalRoute")
+	expectFields("WebhookNotificationApprovalRoute", "route_key_hash", "approver_hash", "escalation_target_hash", "pending", "overdue", "due_soon", "approval_votes", "rejection_votes", "max_required_approvals", "due_next", "sources", "models", "projects", "actions")
+}
+
 func TestOpenAPIRequestBodyOperationsAdvertiseBodyLimits(t *testing.T) {
 	spec := OpenAPISpecFor(Options{}, nil)
 	paths := spec["paths"].(map[string]interface{})
