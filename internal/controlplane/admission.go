@@ -427,7 +427,7 @@ func CLICommandAccessFor(command string, input AdmissionInput) OperationAccess {
 			return OperationAccess{Known: true, WritesLocalState: true, WriteMode: "always", AvailableInReadOnly: false, ReadOnlyBehavior: "approval resolution is disabled in read-only mode", RequiredRole: "admin", Reason: "policy resolve writes approval votes"}
 		}
 		if len(parts) > 1 && parts[1] == "evaluate" {
-			return OperationAccess{Known: true, WritesLocalState: input.Record || input.HasWorkloadID || !input.ReadOnly, WriteMode: "conditional", AvailableInReadOnly: !input.Record && !input.HasWorkloadID, ReadOnlyBehavior: "advisory evaluation is allowed in read-only mode only when no decision is recorded", RequiredRole: "operator", Reason: "policy evaluate may write audit metadata or decisions"}
+			return OperationAccess{Known: true, WritesLocalState: input.Record, WriteMode: "conditional", AvailableInReadOnly: !input.Record, ReadOnlyBehavior: "advisory evaluation is allowed in read-only mode only when no decision is recorded", RequiredRole: "operator", Reason: "policy evaluate writes local decisions only when record=true"}
 		}
 		return OperationAccess{Known: true, WriteMode: "none", AvailableInReadOnly: true, ReadOnlyBehavior: "policy read commands are available in read-only mode", RequiredRole: "viewer", Reason: "policy command is read-only"}
 	case "notify":

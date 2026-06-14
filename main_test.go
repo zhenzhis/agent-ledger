@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/zhenzhis/agent-ledger/internal/config"
+	"github.com/zhenzhis/agent-ledger/internal/controlplane"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
@@ -38,6 +39,54 @@ func TestCLICommandRequiresWriteForNotifyDryRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := cliCommandRequiresWrite(tc.args); got != tc.want {
 				t.Fatalf("cliCommandRequiresWrite(%v)=%v want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCLIReadOnlyGateMatchesAdmission(t *testing.T) {
+	cases := [][]string{
+		{"today"},
+		{"top"},
+		{"doctor", "--privacy"},
+		{"export", "--privacy"},
+		{"pricing"},
+		{"pricing", "sync"},
+		{"projection", "quality"},
+		{"projection", "repair"},
+		{"event", "validate", "--file", "event.json"},
+		{"event", "ingest", "--file", "event.json"},
+		{"bundle", "export", "--privacy"},
+		{"bundle", "import", "--file", "bundle.json"},
+		{"reconcile", "status"},
+		{"reconcile", "import", "--file", "provider.csv"},
+		{"provider", "convert", "--file", "provider.json"},
+		{"provider", "ingest", "--file", "provider.json"},
+		{"otel", "convert", "--file", "spans.json"},
+		{"otel", "ingest", "--file", "spans.json"},
+		{"a2a", "convert", "--file", "task.json"},
+		{"a2a", "ingest", "--file", "task.json"},
+		{"policy", "audit"},
+		{"policy", "evaluate", "--workload-id", "wl_1"},
+		{"policy", "evaluate", "--workload-id", "wl_1", "--record"},
+		{"policy", "resolve", "--id", "apr_1", "--status", "approved"},
+		{"notify", "webhook", "--dry-run"},
+		{"notify", "webhook"},
+		{"workload", "feed"},
+		{"workload", "heartbeat", "--run-id", "run_1"},
+		{"workload", "lease", "list"},
+		{"workload", "lease", "renew", "--lease-id", "lease_1"},
+		{"mcp"},
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			requiresWrite := cliCommandRequiresWrite(args)
+			access := controlplane.CLICommandAccessFor("agent-ledger "+strings.Join(args, " "), admissionInputForCLIArgs(args))
+			if !access.Known {
+				t.Fatalf("admission does not know supported CLI command %v: %+v", args, access)
+			}
+			if access.AvailableInReadOnly == requiresWrite {
+				t.Fatalf("read-only gate/admission mismatch for %v: cliRequiresWrite=%t admission=%+v", args, requiresWrite, access)
 			}
 		})
 	}
@@ -272,6 +321,23 @@ func TestAdmissionCLIOutputsPrivacySafeDecision(t *testing.T) {
 	if !strings.Contains(md, "Agent Ledger Admission") || !strings.Contains(md, "denied") {
 		t.Fatalf("unexpected admission markdown: %s", md)
 	}
+}
+
+func admissionInputForCLIArgs(args []string) controlplane.AdmissionInput {
+	input := controlplane.AdmissionInput{ReadOnly: true}
+	for i, arg := range args {
+		switch arg {
+		case "--dry-run":
+			input.DryRun = true
+		case "--record":
+			input.Record = true
+		case "--workload-id", "--workload_id":
+			if i+1 < len(args) && strings.TrimSpace(args[i+1]) != "" {
+				input.HasWorkloadID = true
+			}
+		}
+	}
+	return input
 }
 
 func TestPolicyRoutesCLIOutputsRedactedSummary(t *testing.T) {

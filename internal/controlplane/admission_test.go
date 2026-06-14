@@ -165,6 +165,10 @@ func TestAdmissionClassifiesReadOnlyCLISubcommands(t *testing.T) {
 			t.Fatalf("expected read-only CLI command to be allowed: command=%q decision=%+v", command, decision)
 		}
 	}
+	policyEvaluate := EvaluateAdmission(AdmissionInput{Surface: "cli", Command: "agent-ledger policy evaluate --workload-id wl_1 --action model.call", Role: "operator", RBACEnabled: true, ReadOnly: true, HasWorkloadID: true}, fixedAdmissionTime())
+	if !policyEvaluate.Allowed || policyEvaluate.WritesLocalState || !policyEvaluate.AvailableInReadOnly {
+		t.Fatalf("expected policy evaluate without record to be read-only for operators: %+v", policyEvaluate)
+	}
 	pricingSync := EvaluateAdmission(AdmissionInput{Surface: "cli", Command: "agent-ledger pricing sync", Role: "admin", RBACEnabled: true, ReadOnly: true}, fixedAdmissionTime())
 	if pricingSync.Allowed || pricingSync.RequiredRole != "admin" || pricingSync.AvailableInReadOnly {
 		t.Fatalf("expected pricing sync to be admin write rejected in read-only mode: %+v", pricingSync)
