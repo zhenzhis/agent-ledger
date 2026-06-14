@@ -182,6 +182,22 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				WritesLocalState: false,
 			},
 			{
+				ID:               "agent-profiles",
+				Name:             "Agent Framework Profile Catalog",
+				Contract:         "agent-ledger.agent-framework-profile-catalog",
+				Version:          "v1",
+				Hash:             AgentFrameworkProfilesFingerprint(),
+				PrimaryURI:       "/api/agent-profiles",
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger agent profiles"},
+				MCPTools:         []string{"ledger.agent_profiles"},
+				MCPResources:     []string{"agent-ledger://integrations/agent-profiles"},
+				Revalidation:     "ETag + If-None-Match",
+				Privacy:          "static agent CLI, framework, wrapper, router, protocol, and observability profile metadata only",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
+			{
 				ID:               "runtime-status",
 				Name:             "Runtime Status",
 				Contract:         runtime.Contract,
@@ -317,6 +333,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.openapi_uri", discovery.OpenAPIURI == "/api/openapi.json", "critical", "discovery points to OpenAPI contract", "/api/openapi.json", discovery.OpenAPIURI)
 	addCheck("discovery.catalog_hash", discovery.CapabilityCatalogHash == catalogHash, "critical", "discovery catalog hash matches generated catalog", catalogHash, discovery.CapabilityCatalogHash)
 	addCheck("discovery.provider_profiles", discovery.ProviderProfilesURI == "/api/provider-profiles" && discovery.ProviderProfilesHash == ProviderProfilesFingerprint(), "critical", "discovery points to provider profile catalog", "/api/provider-profiles "+ProviderProfilesFingerprint(), discovery.ProviderProfilesURI+" "+discovery.ProviderProfilesHash)
+	addCheck("discovery.agent_profiles", discovery.AgentProfilesURI == "/api/agent-profiles" && discovery.AgentProfilesHash == AgentFrameworkProfilesFingerprint(), "critical", "discovery points to agent framework profile catalog", "/api/agent-profiles "+AgentFrameworkProfilesFingerprint(), discovery.AgentProfilesURI+" "+discovery.AgentProfilesHash)
 	addCheck("discovery.conformance_matrix", discovery.ConformanceMatrixURI == "/api/integrations/conformance-matrix" && discovery.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint(), "critical", "discovery points to adapter conformance matrix", "/api/integrations/conformance-matrix "+AdapterConformanceMatrixFingerprint(), discovery.ConformanceMatrixURI+" "+discovery.ConformanceMatrixHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
 	addCheck("discovery.adapter_hash", discovery.AdapterSpecHash == AdapterContractFingerprint(), "critical", "discovery adapter hash matches generated adapter contract", AdapterContractFingerprint(), discovery.AdapterSpecHash)
@@ -342,6 +359,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "openapi", hash: openAPIHash},
 		{id: "capability-catalog", hash: catalogHash},
 		{id: "provider-profiles", hash: ProviderProfilesFingerprint()},
+		{id: "agent-profiles", hash: AgentFrameworkProfilesFingerprint()},
 		{id: "adapter-conformance-matrix", hash: AdapterConformanceMatrixFingerprint()},
 		{id: "runtime-status", hash: hashJSONPayload(runtime)},
 		{id: "admission-check", hash: admissionCheckContractHash()},
@@ -366,6 +384,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.privacy", meta["prompt_content_stored"] == false && meta["usage_data_uploaded"] == false, "critical", "OpenAPI metadata preserves local-first privacy flags", "prompt_content_stored=false,usage_data_uploaded=false", openAPIPrivacy(meta))
 	addCheck("openapi.catalog_hash", contractStringValue(meta["capability_catalog_hash"]) == catalogHash, "critical", "OpenAPI catalog hash matches generated catalog", catalogHash, contractStringValue(meta["capability_catalog_hash"]))
 	addCheck("openapi.provider_profiles_hash", contractStringValue(meta["provider_profiles_hash"]) == ProviderProfilesFingerprint(), "critical", "OpenAPI provider profile hash matches generated catalog", ProviderProfilesFingerprint(), contractStringValue(meta["provider_profiles_hash"]))
+	addCheck("openapi.agent_profiles_hash", contractStringValue(meta["agent_profiles_hash"]) == AgentFrameworkProfilesFingerprint(), "critical", "OpenAPI agent framework profile hash matches generated catalog", AgentFrameworkProfilesFingerprint(), contractStringValue(meta["agent_profiles_hash"]))
 	addCheck("openapi.conformance_matrix_hash", contractStringValue(meta["conformance_matrix_hash"]) == AdapterConformanceMatrixFingerprint(), "critical", "OpenAPI conformance matrix hash matches generated matrix", AdapterConformanceMatrixFingerprint(), contractStringValue(meta["conformance_matrix_hash"]))
 	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))
 	addCheck("openapi.adapter_hash", contractStringValue(meta["adapter_spec_hash"]) == AdapterContractFingerprint(), "critical", "OpenAPI adapter hash matches generated adapter contract", AdapterContractFingerprint(), contractStringValue(meta["adapter_spec_hash"]))

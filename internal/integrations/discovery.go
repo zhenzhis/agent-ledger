@@ -40,6 +40,8 @@ type DiscoveryManifest struct {
 	CapabilityCatalogHash string               `json:"capability_catalog_hash"`
 	ProviderProfilesURI   string               `json:"provider_profiles_uri"`
 	ProviderProfilesHash  string               `json:"provider_profiles_hash"`
+	AgentProfilesURI      string               `json:"agent_profiles_uri"`
+	AgentProfilesHash     string               `json:"agent_profiles_hash"`
 	ContractBundleURI     string               `json:"contract_bundle_uri"`
 	OpenAPIURI            string               `json:"openapi_uri"`
 	RuntimeStatusURI      string               `json:"runtime_status_uri"`
@@ -131,6 +133,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		CapabilityCatalogHash: CatalogFingerprintFrom(catalog),
 		ProviderProfilesURI:   "/api/provider-profiles",
 		ProviderProfilesHash:  ProviderProfilesFingerprint(),
+		AgentProfilesURI:      "/api/agent-profiles",
+		AgentProfilesHash:     AgentFrameworkProfilesFingerprint(),
 		ContractBundleURI:     "/api/contracts",
 		OpenAPIURI:            "/api/openapi.json",
 		RuntimeStatusURI:      "/api/runtime/status",

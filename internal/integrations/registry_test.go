@@ -62,6 +62,9 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityCommand(t, catalog, "protocol.provider_profiles", "agent-ledger provider profiles")
 	assertCapabilityTool(t, catalog, "protocol.provider_profiles", "ledger.provider_profiles")
 	assertCapabilityResource(t, catalog, "protocol.provider_profiles", "agent-ledger://integrations/provider-profiles")
+	assertCapabilityCommand(t, catalog, "protocol.agent_profiles", "agent-ledger agent profiles")
+	assertCapabilityTool(t, catalog, "protocol.agent_profiles", "ledger.agent_profiles")
+	assertCapabilityResource(t, catalog, "protocol.agent_profiles", "agent-ledger://integrations/agent-profiles")
 	assertCapabilityCommand(t, catalog, "protocol.openapi", "agent-ledger openapi")
 	assertCapabilityCommand(t, catalog, "protocol.runtime_status", "agent-ledger runtime")
 	assertCapabilityCommand(t, catalog, "protocol.config_status", "agent-ledger config status")
@@ -80,6 +83,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.readiness")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.admission_check")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.provider_profiles")
+	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.agent_profiles")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.conformance_matrix")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.claim_next_workload")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.workload_queue")
@@ -94,6 +98,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://discovery/manifest")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://contracts/openapi")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/provider-profiles")
+	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/agent-profiles")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/conformance-matrix")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://runtime/status")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://config/status")
@@ -282,7 +287,7 @@ func TestContractBundleIndexesCoreContracts(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.Version != "v1" || !bundle.LocalFirst || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle identity: %#v", bundle)
 	}
-	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
+	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "agent-profiles", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
 		if !contractBundleHasDocument(bundle, id) {
 			t.Fatalf("contract bundle missing %s: %#v", id, bundle.Documents)
 		}
@@ -1302,6 +1307,7 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectPathResponseRef("/api/admission/check", "get", "#/components/schemas/AdmissionDecision")
 	expectPathResponseRef("/api/goal-coverage", "get", "#/components/schemas/GoalCoverageReport")
 	expectPathResponseRef("/api/event-schema", "get", "#/components/schemas/CanonicalEventSchema")
+	expectPathResponseRef("/api/agent-profiles", "get", "#/components/schemas/AgentFrameworkProfileCatalog")
 	expectPathResponseRef("/api/integrations/adapter-spec", "get", "#/components/schemas/AdapterContract")
 	expectPathResponseRef("/api/integrations/conformance-matrix", "get", "#/components/schemas/AdapterConformanceMatrix")
 	expectPathResponseRef("/api/events/validate", "post", "#/components/schemas/ValidationResponse")
@@ -1315,7 +1321,7 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("CapabilitySummary", "implemented", "experimental", "planned", "enabled_collectors", "read_only_limited")
 	expectFields("IntegrationCapability", "id", "name", "category", "protocol", "direction", "status", "maturity", "enabled", "writes_local_state", "available_in_read_only", "runtime_status", "privacy", "event_types", "endpoints", "commands", "tools", "resources", "prompts", "data_classes", "limitations", "next_milestones")
 
-	expectFields("GoalCoverageReport", "product", "slug", "contract", "version", "status", "local_first", "read_only", "prompt_content_stored", "usage_data_uploaded", "privacy_default", "capability_catalog_hash", "openapi_hash", "contract_bundle_hash", "canonical_schema_hash", "adapter_spec_hash", "coverage_hash", "summary", "sections", "external_dependencies", "verification", "privacy")
+	expectFields("GoalCoverageReport", "product", "slug", "contract", "version", "status", "local_first", "read_only", "prompt_content_stored", "usage_data_uploaded", "privacy_default", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "canonical_schema_hash", "adapter_spec_hash", "coverage_hash", "summary", "sections", "external_dependencies", "verification", "privacy")
 	expectRef("GoalCoverageReport", "summary", "#/components/schemas/GoalCoverageSummary")
 	expectArrayRef("GoalCoverageReport", "sections", "#/components/schemas/GoalCoverageSection")
 	expectArrayRef("GoalCoverageReport", "external_dependencies", "#/components/schemas/GoalCoverageExternal")
@@ -1365,6 +1371,11 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("AdapterConformanceKind", "kind", "conformance_kind", "description", "status", "maturity", "endpoint", "cli_command", "mcp_tool", "strict_ci_command", "convert_command", "ingest_command", "accepted_formats", "required_signals", "privacy_notes", "expected_event_types", "fixtures")
 	expectArrayRef("AdapterConformanceKind", "fixtures", "#/components/schemas/AdapterConformanceFixture")
 	expectFields("AdapterConformanceFixture", "path", "format", "scenario", "strict", "command", "provider_profile_ids", "expected_event_types", "privacy")
+	expectFields("AgentFrameworkProfileCatalog", "product", "contract", "version", "generated_from", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "summary", "profiles", "quality_gates", "routing_guidance")
+	expectRef("AgentFrameworkProfileCatalog", "summary", "#/components/schemas/AgentFrameworkSummary")
+	expectArrayRef("AgentFrameworkProfileCatalog", "profiles", "#/components/schemas/AgentFrameworkProfile")
+	expectFields("AgentFrameworkSummary", "profiles", "local_collectors", "canonical_event_ingest", "provider_envelope_ingest", "provider_stream_ingest", "mcp_tooling", "a2a_telemetry", "otel_telemetry", "workload_heartbeats", "multi_agent_routers")
+	expectFields("AgentFrameworkProfile", "id", "label", "kind", "families", "supported_surfaces", "recommended_ingest", "fallback_ingest", "available_signals", "canonical_event_types", "collector_sources", "adapter_input_kinds", "mcp_tools", "mcp_resources", "http_endpoints", "cli_commands", "privacy_notes", "quality_gates", "limitations")
 
 	expectFields("OperationResult", "ok", "source", "reset", "mode", "result")
 	expectRef("OperationResult", "result", "#/components/schemas/ProjectionRepairResult")
@@ -1679,7 +1690,7 @@ func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
 		t.Fatalf("verification report missing hashes: %#v", report)
 	}
-	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
+	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.agent_profiles", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.agent-profiles", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "openapi.agent_profiles_hash", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
 		if !verificationReportHasCheck(report, name) {
 			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
 		}

@@ -472,6 +472,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return runA2ACLI(args[1:], db)
 	case "provider":
 		return runProviderCLI(args[1:], db)
+	case "agent":
+		return runAgentCLI(args[1:])
 	case "projection":
 		return runProjectionCLI(args[1:], db)
 	case "mcp":
@@ -1049,6 +1051,13 @@ func runProviderCLI(args []string, db *storage.DB) error {
 		results = append(results, result)
 	}
 	return json.NewEncoder(os.Stdout).Encode(results)
+}
+
+func runAgentCLI(args []string) error {
+	if len(args) > 0 && args[0] == "profiles" {
+		return json.NewEncoder(os.Stdout).Encode(integrations.AgentFrameworkProfiles())
+	}
+	return fmt.Errorf("usage: agent-ledger agent profiles")
 }
 
 func runAdapterCLI(args []string) error {

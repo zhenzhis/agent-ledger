@@ -164,6 +164,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if providerProfilesMeta["write_mode"] != "none" || providerProfilesMeta["writes_local_state"] != false || providerProfilesMeta["available_in_read_only"] != true {
 		t.Fatalf("provider profiles tool metadata wrong: %#v", providerProfilesMeta)
 	}
+	agentProfilesMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.agent_profiles"))
+	if agentProfilesMeta["write_mode"] != "none" || agentProfilesMeta["writes_local_state"] != false || agentProfilesMeta["available_in_read_only"] != true {
+		t.Fatalf("agent profiles tool metadata wrong: %#v", agentProfilesMeta)
+	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
 		t.Fatalf("conformance matrix tool metadata wrong: %#v", conformanceMatrixMeta)
@@ -244,7 +248,7 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 		t.Fatalf("resource subscriptions should be advertised: %#v", resourceCaps)
 	}
 	resources := out[1]["result"].(map[string]interface{})["resources"].([]interface{})
-	if !hasResource(resources, "agent-ledger://discovery/manifest") || !hasResource(resources, "agent-ledger://contracts/bundle") || !hasResource(resources, "agent-ledger://contracts/verification") || !hasResource(resources, "agent-ledger://goal/coverage") || !hasResource(resources, "agent-ledger://contracts/openapi") || !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/provider-profiles") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://integrations/conformance-matrix") || !hasResource(resources, "agent-ledger://runtime/status") || !hasResource(resources, "agent-ledger://config/status") || !hasResource(resources, "agent-ledger://readiness") || !hasResource(resources, "agent-ledger://admission/check") || !hasResource(resources, "agent-ledger://budget/current") || !hasResource(resources, "agent-ledger://workloads/queue") || !hasResource(resources, "agent-ledger://workloads/leases") || !hasResource(resources, "agent-ledger://workloads/feed") || !hasResource(resources, "agent-ledger://workload/state") || !hasResource(resources, "agent-ledger://workload/timeline") || !hasResource(resources, "agent-ledger://agent-runs/liveness") || !hasResource(resources, "agent-ledger://policy/approvals") || !hasResource(resources, "agent-ledger://policy/approval-routes") {
+	if !hasResource(resources, "agent-ledger://discovery/manifest") || !hasResource(resources, "agent-ledger://contracts/bundle") || !hasResource(resources, "agent-ledger://contracts/verification") || !hasResource(resources, "agent-ledger://goal/coverage") || !hasResource(resources, "agent-ledger://contracts/openapi") || !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/provider-profiles") || !hasResource(resources, "agent-ledger://integrations/agent-profiles") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://integrations/conformance-matrix") || !hasResource(resources, "agent-ledger://runtime/status") || !hasResource(resources, "agent-ledger://config/status") || !hasResource(resources, "agent-ledger://readiness") || !hasResource(resources, "agent-ledger://admission/check") || !hasResource(resources, "agent-ledger://budget/current") || !hasResource(resources, "agent-ledger://workloads/queue") || !hasResource(resources, "agent-ledger://workloads/leases") || !hasResource(resources, "agent-ledger://workloads/feed") || !hasResource(resources, "agent-ledger://workload/state") || !hasResource(resources, "agent-ledger://workload/timeline") || !hasResource(resources, "agent-ledger://agent-runs/liveness") || !hasResource(resources, "agent-ledger://policy/approvals") || !hasResource(resources, "agent-ledger://policy/approval-routes") {
 		t.Fatalf("expected core resources, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
@@ -351,6 +355,44 @@ func TestMCPProviderProfilesToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-", "C:/Users", "session_id"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("provider profile resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPAgentProfilesToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.agent_profiles","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/agent-profiles"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.agent-framework-profile-catalog" || toolPayload["local_first"] != true ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false {
+		t.Fatalf("unexpected agent profile tool payload: %#v", toolPayload)
+	}
+	summary := toolPayload["summary"].(map[string]interface{})
+	if summary["profiles"].(float64) < 10 || summary["local_collectors"].(float64) < 6 || summary["mcp_tooling"].(float64) == 0 {
+		t.Fatalf("unexpected agent profile summary: %#v", summary)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "webhook"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("agent profile tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.agent-framework-profile-catalog"`) ||
+		!strings.Contains(resourceText, `"id": "codex-cli"`) ||
+		!strings.Contains(resourceText, `"id": "mcp-wrapper"`) ||
+		!strings.Contains(resourceText, `"id": "a2a-task-runtime"`) {
+		t.Fatalf("unexpected agent profile resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "webhook"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("agent profile resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

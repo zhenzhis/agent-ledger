@@ -154,6 +154,7 @@ func TestAdmissionClassifiesReadOnlyCLISubcommands(t *testing.T) {
 		"agent-ledger workload queue --source codex",
 		"agent-ledger reconcile status",
 		"agent-ledger provider convert --file provider.json",
+		"agent-ledger agent profiles",
 		"agent-ledger export --privacy",
 		"agent-ledger audit --privacy",
 		"agent-ledger router simulate --to-model gpt-5-mini",

@@ -26,6 +26,13 @@ func (s *Server) handleProviderProfiles(w http.ResponseWriter, r *http.Request) 
 	writeJSONWithETag(w, r, integrations.ProviderProfiles(), integrations.ProviderProfilesFingerprint())
 }
 
+func (s *Server) handleAgentProfiles(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	writeJSONWithETag(w, r, integrations.AgentFrameworkProfiles(), integrations.AgentFrameworkProfilesFingerprint())
+}
+
 func (s *Server) handleConformanceMatrix(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

@@ -41,6 +41,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger otel convert/ingest         # map OpenTelemetry GenAI JSON spans to canonical events
 ./agent-ledger a2a convert/ingest          # map A2A task snapshots/events to canonical events
 ./agent-ledger provider profiles           # print privacy-safe provider/runtime profile catalog
+./agent-ledger agent profiles              # print privacy-safe agent/framework profile catalog
 ./agent-ledger provider convert/ingest     # map provider usage envelopes to canonical events
 ./agent-ledger projection quality/repair   # diagnose and repair canonical-to-usage projection drift
 ./agent-ledger reconcile import/status     # import provider CSV/JSON bills for local reconciliation

@@ -221,6 +221,9 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	if paths["/api/integrations/conformance-matrix"] == nil {
 		t.Fatalf("openapi output missing conformance matrix path: %+v", paths)
 	}
+	if paths["/api/agent-profiles"] == nil {
+		t.Fatalf("openapi output missing agent profile path: %+v", paths)
+	}
 }
 
 func TestUICLICheckOutputsContractReport(t *testing.T) {
@@ -273,6 +276,29 @@ func TestProviderProfilesCLIOutputsReadOnlyCatalog(t *testing.T) {
 	}
 	if !strings.Contains(out, "ollama-local") || !strings.Contains(out, "openrouter-relay") {
 		t.Fatalf("provider profile catalog missing local/relay coverage: %s", out)
+	}
+}
+
+func TestAgentProfilesCLIOutputsReadOnlyCatalog(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"agent", "profiles"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI agent profiles: %v", err)
+	}
+	var catalog integrations.AgentFrameworkProfileCatalog
+	if err := json.Unmarshal([]byte(out), &catalog); err != nil {
+		t.Fatalf("decode agent profiles output: %v\n%s", err, out)
+	}
+	if catalog.Contract != "agent-ledger.agent-framework-profile-catalog" || catalog.Summary.Profiles < 10 {
+		t.Fatalf("unexpected agent profile catalog: %+v", catalog)
+	}
+	if !strings.Contains(out, "codex-cli") || !strings.Contains(out, "mcp-wrapper") || !strings.Contains(out, "a2a-task-runtime") {
+		t.Fatalf("agent profile catalog missing agent ecosystem coverage: %s", out)
 	}
 }
 
