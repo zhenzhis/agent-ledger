@@ -116,8 +116,10 @@ func TestOpenAPIEndpoint(t *testing.T) {
 		t.Fatalf("unexpected openapi metadata: %+v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	if paths["/api/contracts"] == nil || paths["/api/contracts/verify"] == nil || paths["/api/openapi.json"] == nil || paths["/api/config/status"] == nil || paths["/api/readiness"] == nil || paths["/api/admission/check"] == nil || paths["/api/events/validate"] == nil || paths["/api/workloads"] == nil || paths["/api/workloads/close"] == nil || paths["/api/workloads/link"] == nil || paths["/api/workloads/claim-next"] == nil || paths["/api/workloads/queue"] == nil || paths["/api/workloads/lease"] == nil || paths["/api/workloads/lease/renew"] == nil || paths["/api/workloads/lease/release"] == nil || paths["/api/workloads/leases"] == nil || paths["/api/agent-runs"] == nil || paths["/api/agent-runs/heartbeat"] == nil || paths["/api/agent-runs/liveness"] == nil || paths["/api/workload-detail"] == nil || paths["/api/workload-graph"] == nil || paths["/api/workload-timeline"] == nil || paths["/api/workload-state"] == nil || paths["/api/workload-events"] == nil || paths["/api/otel/genai"] == nil || paths["/api/otlp/v1/traces"] == nil || paths["/v1/traces"] == nil || paths["/api/a2a/tasks"] == nil || paths["/api/provider/calls"] == nil || paths["/gateway/openai/v1/chat/completions"] == nil || paths["/gateway/openai/v1/responses"] == nil || paths["/gateway/anthropic/v1/messages"] == nil {
-		t.Fatalf("openapi missing expected paths: %+v", paths)
+	for _, path := range integrations.OpenAPIContractPaths() {
+		if paths[path] == nil {
+			t.Fatalf("openapi missing expected path %s: %+v", path, paths)
+		}
 	}
 	assertETagRevalidates(t, srv.handleOpenAPI, "http://127.0.0.1/api/openapi.json", rr.Header().Get("ETag"))
 }

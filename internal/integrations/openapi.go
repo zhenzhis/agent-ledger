@@ -26,6 +26,12 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			{"name": "contracts", "description": "Discovery, contract bundle, OpenAPI, runtime, and capability metadata"},
 			{"name": "canonical-events", "description": "Metadata-only canonical event schema, validation, and ingest"},
 			{"name": "adapter-conformance", "description": "Adapter contract and dry-run fixture validation"},
+			{"name": "dashboard", "description": "Read-only usage, cost, token, session, and workload analytics"},
+			{"name": "operations", "description": "Local-only scan, repair, and projection maintenance operations"},
+			{"name": "finops", "description": "Pricing governance, budgets, quota estimates, chargeback, reconciliation, and model routing economics"},
+			{"name": "diagnostics", "description": "Data quality, doctor, cost intelligence, cache diagnostics, anomalies, watchdog, and audit evidence"},
+			{"name": "governance", "description": "Policy evaluation, enforcement evidence, approval queues, and redacted notifications"},
+			{"name": "reports", "description": "Privacy-aware exports, reports, bundles, wrapped summaries, and SVG badges"},
 			{"name": "workload-control", "description": "Retry-safe workload and agent-run control-plane writes"},
 			{"name": "workload-feed", "description": "Cursor-stable workload state feed for local monitors and routers"},
 			{"name": "ecosystem-ingest", "description": "Metadata-only telemetry and provider usage ingestion for agent frameworks and observability protocols"},
@@ -62,6 +68,14 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/events":                         canonicalEventPostOperation("canonical-events", "Ingest canonical events", "Ingest one or more metadata-only canonical events.", true),
 			"/api/integrations/adapter-spec":      getOperation("adapter-conformance", "Get adapter contract", "Machine-readable adapter contract for privacy-safe integrations.", "AdapterContract"),
 			"/api/integrations/conformance":       adapterConformanceOperation(),
+			"/api/stats":                          filteredReadOperation("dashboard", "Get dashboard stats", "Read aggregate tokens, cost, sessions, prompts, cache, and runtime totals for one scope.", "DashboardStats", scopedTimeParams()),
+			"/api/dashboard":                      filteredReadOperation("dashboard", "Get dashboard bundle", "Read the aggregate dashboard bundle. Dashboard queries prefer aggregate tables and return consistency metadata.", "DashboardBundle", append(scopedTimeParams(), queryParam("granularity", "Chart bucket size such as 1h, 1d, or auto."))),
+			"/api/cost-by-model":                  filteredReadOperation("dashboard", "Get cost by model", "Read cost distribution by model for a scoped time window.", "CostByModelRows", scopedTimeParams()),
+			"/api/cost-over-time":                 filteredReadOperation("dashboard", "Get cost over time", "Read aggregate cost trend points for a scoped time window and granularity.", "CostTrendRows", append(scopedTimeParams(), queryParam("granularity", "Chart bucket size such as 1h, 1d, or auto."))),
+			"/api/tokens-over-time":               filteredReadOperation("dashboard", "Get tokens over time", "Read aggregate token trend points for a scoped time window and granularity.", "TokenTrendRows", append(scopedTimeParams(), queryParam("granularity", "Chart bucket size such as 1h, 1d, or auto."))),
+			"/api/sessions":                       filteredReadOperation("dashboard", "List session ledger", "Server-side paginated session ledger. Privacy filters may hash session ids and hide project metadata.", "SessionPage", append(scopedTimeParams(), paginationAndSortParams()...)),
+			"/api/session-detail":                 filteredReadOperation("dashboard", "Get session detail", "Read one scoped session detail by source and session_id.", "SessionDetail", append([]map[string]interface{}{queryParam("source", "Source owning the session id."), queryParam("session_id", "Required native session id.")}, privacyParams()...)),
+			"/api/session-replay":                 filteredReadOperation("dashboard", "Get session cost replay", "Read per-call token/cost replay points for one scoped session.", "SessionReplay", append([]map[string]interface{}{queryParam("source", "Source owning the session id."), queryParam("session_id", "Required native session id."), intQueryParam("limit", "Maximum replay points.")}, privacyParams()...)),
 			"/api/workloads":                      workloadsOperation(),
 			"/api/workloads/close":                workloadCloseOperation(),
 			"/api/workloads/link":                 workloadLinkOperation(),
@@ -80,6 +94,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/workload-state":                 workloadStateOperation(),
 			"/api/workload-events":                workloadEventsOperation(false),
 			"/api/workload-events/stream":         workloadEventsOperation(true),
+			"/api/fleet-attribution":              filteredReadOperation("dashboard", "Get fleet attribution", "Read heuristic parent/child and parallel agent attribution with privacy filters.", "FleetAttributionReport", append(scopedTimeParams(), intQueryParam("limit", "Maximum fleet rows."))),
 			"/api/otel/genai":                     ecosystemIngestOperation("Ingest OpenTelemetry GenAI spans", "Convert OpenTelemetry GenAI JSON spans into metadata-only canonical events.", "OTelGenAIRequest", "EcosystemIngestResponse", false),
 			"/api/otlp/v1/traces":                 otlpTracesOperation(),
 			"/v1/traces":                          otlpTracesOperation(),
@@ -88,6 +103,45 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/gateway/openai/v1/chat/completions": gatewayOperation("Proxy OpenAI-compatible chat completions", "Optional local OpenAI-compatible Chat Completions JSON/SSE proxy. Prompt content is forwarded in memory only; the ledger persists usage metadata only."),
 			"/gateway/openai/v1/responses":        gatewayOperation("Proxy OpenAI Responses", "Optional local OpenAI Responses JSON/SSE proxy. Prompt content is forwarded in memory only; the ledger persists usage metadata only."),
 			"/gateway/anthropic/v1/messages":      gatewayOperation("Proxy Anthropic Messages", "Optional local Anthropic Messages JSON/SSE proxy. Prompt content is forwarded in memory only; the ledger persists usage metadata only."),
+			"/api/health/ingestion":               filteredReadOperation("operations", "Get ingestion health", "Read collector health, path reachability summaries, scan watermarks, row counts, and last errors.", "IngestionHealthRows", []map[string]interface{}{}),
+			"/api/scan":                           localQueryWriteOperation("operations", "Run manual scan", "Run a local collector scan for all sources or one source. reset=true requires a source and clears only that source state before scanning.", "OperationResult", []map[string]interface{}{queryParam("source", "Optional source to scan."), boolQueryParam("reset", "Dangerous source-scoped cleanup before rescan.")}),
+			"/api/recalculate-costs":              localQueryWriteOperation("operations", "Recalculate costs", "Recalculate local usage record costs from current pricing rules.", "OperationResult", []map[string]interface{}{queryParam("mode", "zero or all. Empty defaults to zero.")}),
+			"/api/projections/repair":             localQueryWriteOperation("operations", "Repair usage projections", "Idempotently repair canonical-event to usage projection drift for one scoped time window.", "ProjectionRepairResult", scopedTimeParams()),
+			"/api/pricing/status":                 filteredReadOperation("finops", "Get pricing status", "Read pricing source freshness, effective rule summary, confidence mix, and unpriced model groups.", "PricingStatus", []map[string]interface{}{}),
+			"/api/pricing/sync":                   localQueryWriteOperation("finops", "Sync pricing", "Run configured official pricing adapters, LiteLLM fallback, and local overrides. Writes local pricing metadata and audit events.", "OperationResult", []map[string]interface{}{}),
+			"/api/pricing/recalculate":            localQueryWriteOperation("finops", "Recalculate pricing", "Recalculate zero-cost or all local records from current pricing rules.", "OperationResult", []map[string]interface{}{queryParam("mode", "zero or all. Empty defaults to zero.")}),
+			"/api/pricing/audit":                  filteredReadOperation("finops", "List pricing audit", "Read local pricing match, stale, fuzzy, unpriced, and source provenance audit rows.", "PricingAuditRows", []map[string]interface{}{intQueryParam("limit", "Maximum audit rows.")}),
+			"/api/budgets/status":                 filteredReadOperation("finops", "Get budget status", "Read configured budget rules, current usage ratio, severity, and budget event state.", "BudgetStatusResponse", []map[string]interface{}{}),
+			"/api/quota/status":                   filteredReadOperation("finops", "Get quota estimate", "Read local 5h/day/week/month quota and burn-rate estimates. Subscription quota is an estimate, not provider billing.", "QuotaStatus", []map[string]interface{}{}),
+			"/api/data-quality":                   filteredReadOperation("diagnostics", "Get data quality", "Read trust and completeness diagnostics, unpriced models, malformed rows, duplicates, and provenance confidence.", "DataQualityReport", []map[string]interface{}{}),
+			"/api/doctor":                         doctorOperation(),
+			"/api/model-calls":                    filteredReadOperation("diagnostics", "Get model call analytics", "Read call counts by source, model, and project for detecting loops and unexpected model use.", "ModelCallRows", append(scopedTimeParams(), intQueryParam("limit", "Maximum model call groups."))),
+			"/api/model-registry":                 filteredReadOperation("finops", "Get model registry", "Read model pricing governance registry with stale/unpriced/fuzzy state.", "ModelRegistryRows", []map[string]interface{}{intQueryParam("limit", "Maximum model registry rows.")}),
+			"/api/cost-intelligence":              filteredReadOperation("diagnostics", "Get cost intelligence", "Read expensive session explanations and cost drivers without inspecting prompt content.", "CostIntelligenceRows", append(scopedTimeParams(), intQueryParam("limit", "Maximum insight rows."))),
+			"/api/cache/doctor":                   filteredReadOperation("diagnostics", "Get cache doctor", "Read cache hit/write/read diagnostics and estimated cache miss risk by source/model/project.", "CacheDoctorRows", append(scopedTimeParams(), intQueryParam("limit", "Maximum cache diagnostic rows."))),
+			"/api/anomalies":                      derivedReadOperation("diagnostics", "Get anomalies", "Read robust-statistics anomaly events. In control-plane mode the endpoint may update derived local anomaly rows; observer mode stays read-only.", "InsightEventRows", append(scopedTimeParams(), intQueryParam("limit", "Maximum anomaly rows."))),
+			"/api/watchdog/events":                derivedReadOperation("diagnostics", "Get watchdog events", "Read local runaway, call-density, cache-miss-risk, and non-working-hour watchdog events.", "InsightEventRows", append(scopedTimeParams(), intQueryParam("limit", "Maximum watchdog rows."))),
+			"/api/notifications/webhook":          localQueryWriteOperation("governance", "Send redacted webhook notification", "Send or dry-run a redacted local notification summary. Webhooks are disabled unless explicitly configured.", "WebhookNotificationResult", append(scopedTimeParams(), queryParam("dry_run", "true or 1 to return the redacted payload without sending."), queryParam("max_age", "Workload feed stale threshold."), queryParam("approval_due_within", "Approval route deadline window."))),
+			"/api/audit-log":                      filteredReadOperation("diagnostics", "List audit log", "Read local audit rows for scans, exports, pricing sync, policy decisions, and control-plane operations.", "AuditLogRows", append([]map[string]interface{}{queryParam("from", "YYYY-MM-DD lower bound."), queryParam("to", "YYYY-MM-DD upper bound."), queryParam("actor", "Actor filter."), queryParam("role", "Role filter."), queryParam("action", "Action filter."), queryParam("target", "Target filter."), intQueryParam("limit", "Maximum audit rows.")}, privacyParams()...)),
+			"/api/reconciliation/status":          filteredReadOperation("finops", "List reconciliation imports", "Read provider invoice/import reconciliation rows.", "ReconciliationRows", []map[string]interface{}{intQueryParam("limit", "Maximum reconciliation imports.")}),
+			"/api/reconciliation/import":          flexibleWriteOperation("finops", "Import provider reconciliation", "Import provider CSV/JSON or manual balance information for local reconciliation.", "ReconciliationImportRequest", "ReconciliationImportResponse", []map[string]interface{}{queryParam("provider", "Provider name."), queryParam("format", "csv, json, or provider-specific parser."), queryParam("from", "Optional local cost window lower bound."), queryParam("to", "Optional local cost window upper bound.")}, []string{"application/json", "text/csv", "text/plain"}),
+			"/api/router/simulate":                filteredReadOperation("finops", "Simulate model routing", "Estimate savings from replacing some calls from one model with another using local historical usage.", "RouterSimulationReport", append(scopedTimeParams(), queryParam("to_model", "Required target model."), queryParam("from_model", "Optional source model."), queryParam("ratio", "Replacement ratio from 0 to 1."), intQueryParam("limit", "Maximum rows."))),
+			"/api/preflight/estimate":             filteredReadOperation("finops", "Estimate preflight cost", "Estimate likely cost, tokens, and duration for a task type from local historical sessions.", "PreflightEstimateReport", append(scopedTimeParams(), queryParam("task", "Task type such as refactor, debug, review, docs, or custom."), intQueryParam("limit", "Maximum historical rows."))),
+			"/api/chargeback":                     filteredReadOperation("finops", "Get chargeback", "Read team/project/model/source showback and chargeback rows using local attribution rules.", "ChargebackRows", append(scopedTimeParams(), intQueryParam("limit", "Maximum chargeback rows."))),
+			"/api/wrapped":                        wrappedOperation(),
+			"/api/badge/repo.svg":                 badgeOperation(),
+			"/api/evidence-bundle":                evidenceBundleOperation(),
+			"/api/offline-bundle/export":          offlineBundleExportOperation(),
+			"/api/offline-bundle/import":          flexibleWriteOperation("reports", "Import offline bundle", "Import a local offline usage bundle. Optional signature verification uses AGENT_LEDGER_BUNDLE_KEY from the environment.", "OfflineBundleImportRequest", "OfflineBundleImportResponse", []map[string]interface{}{boolQueryParam("verify", "Require bundle signature verification.")}, []string{"application/json"}),
+			"/api/policies/status":                filteredReadOperation("governance", "Get policy status", "Read local policy configuration summary and advisory enforcement posture.", "PolicyStatus", []map[string]interface{}{}),
+			"/api/policy/evaluate":                flexibleWriteOperation("governance", "Evaluate policy", "Evaluate local advisory policy rules for an operation. Optional record=true writes local policy decision metadata.", "PolicyEvaluationRequest", "PolicyEvaluationResponse", []map[string]interface{}{}, []string{"application/json"}),
+			"/api/policy/audit":                   filteredReadOperation("governance", "Audit policy candidates", "Read policy audit findings over usage, tool, and workload candidates.", "PolicyAuditReport", append(scopedTimeParams(), intQueryParam("limit", "Maximum policy findings."))),
+			"/api/policy/enforcement":             filteredReadOperation("governance", "Get policy enforcement evidence", "Read local policy enforcement decisions and approval evidence.", "PolicyEnforcementReport", []map[string]interface{}{intQueryParam("limit", "Maximum enforcement rows.")}),
+			"/api/policy/decisions":               filteredReadOperation("governance", "List policy decisions", "Read policy decisions by workload id.", "PolicyDecisionRows", []map[string]interface{}{queryParam("workload_id", "Optional workload id filter."), intQueryParam("limit", "Maximum policy decisions.")}),
+			"/api/policy/approvals":               policyApprovalsOperation(),
+			"/api/policy/approval-routes":         filteredReadOperation("governance", "Get policy approval routes", "Read due approval route summary for operators and notification dry-runs.", "ApprovalRouteSummary", []map[string]interface{}{queryParam("due_within", "Duration from 1ns to 720h."), intQueryParam("limit", "Maximum route rows.")}),
+			"/api/export":                         exportOperation(),
+			"/api/report":                         reportOperation(),
 		},
 		"components": map[string]interface{}{
 			"schemas": map[string]interface{}{
@@ -445,13 +499,61 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"WorkloadTimelineResponse":  looseObjectSchema("Chronological metadata-only workload audit timeline."),
 				"WorkloadState":             looseObjectSchema("Derived terminal-state snapshot for one async agent workload."),
 				"WorkloadEventFeed":         looseObjectSchema("Cursor-stable workload state feed."),
-				"OTelGenAIRequest":          looseObjectSchema("OpenTelemetry GenAI JSON span export or span array. Prompt and completion message attributes are ignored by conversion."),
-				"OTLPTraceRequest":          looseObjectSchema("OTLP HTTP JSON/protobuf trace batch. Protobuf requests use application/x-protobuf or application/protobuf."),
-				"A2ATaskRequest":            looseObjectSchema("A2A task snapshot/event payload. Message history, message parts, and artifact parts are excluded from persistence."),
-				"ProviderUsageRequest":      looseObjectSchema("OpenAI-compatible, Anthropic-style, or LiteLLM-style usage envelope without request/response message content."),
-				"EcosystemIngestResponse":   looseObjectSchema("Metadata-only ingest result with accepted row counts and canonical event projection results."),
-				"GatewayRequest":            looseObjectSchema("Provider-compatible request body. Prompt content is proxied in memory only and not persisted by Agent Ledger."),
-				"GatewayResponse":           looseObjectSchema("Provider-compatible upstream response or SSE stream with Agent Ledger metering headers."),
+				"DashboardStats":            looseObjectSchema("Aggregate usage, token, cost, prompt, session, cache, budget, and runtime totals."),
+				"DashboardBundle":           looseObjectSchema("Full dashboard bundle with aggregate chart data, consistency metadata, and runtime state."),
+				"CostByModelRows":           looseObjectSchema("Cost distribution rows grouped by model."),
+				"CostTrendRows":             looseObjectSchema("Aggregate cost trend points."),
+				"TokenTrendRows":            looseObjectSchema("Aggregate token trend points."),
+				"SessionPage":               looseObjectSchema("Server-side paginated session ledger page."),
+				"SessionDetail":             looseObjectSchema("Scoped session detail with records and prompt counts."),
+				"SessionReplay":             looseObjectSchema("Per-call token and cost replay points for one session."),
+				"FleetAttributionReport":    looseObjectSchema("Heuristic sub-agent, parent/child, and parallel-run attribution report."),
+				"IngestionHealthRows":       looseObjectSchema("Collector health rows with path, scan, watermark, and error summaries."),
+				"OperationResult":           looseObjectSchema("Local operation acknowledgement."),
+				"ProjectionRepairResult":    looseObjectSchema("Canonical-to-usage projection repair result."),
+				"PricingStatus":             looseObjectSchema("Pricing source freshness, rule summary, confidence mix, and unpriced model groups."),
+				"PricingAuditRows":          looseObjectSchema("Pricing audit rows for official, fallback, override, stale, fuzzy, and unpriced matches."),
+				"BudgetStatusResponse":      looseObjectSchema("Configured budget rules and current severity state."),
+				"QuotaStatus":               looseObjectSchema("Local estimated quota windows, reset calendar, burn-rate, and remaining usage."),
+				"DataQualityReport":         looseObjectSchema("Trust and completeness diagnostics for usage, pricing, provenance, duplicates, and malformed rows."),
+				"DoctorReport":              looseObjectSchema("One-click local diagnostic report. Privacy filters redact paths, projects, branches, and session ids."),
+				"ModelCallRows":             looseObjectSchema("Model call analytics grouped by source, model, project, and session."),
+				"ModelRegistryRows":         looseObjectSchema("Model pricing and provenance registry rows."),
+				"CostIntelligenceRows":      looseObjectSchema("Expensive session explanations and cost breakdown rows without prompt-content analysis."),
+				"CacheDoctorRows":           looseObjectSchema("Cache hit, cache write/read, and cache miss diagnostic rows."),
+				"InsightEventRows":          looseObjectSchema("Anomaly or watchdog insight event rows."),
+				"WebhookNotificationResult": looseObjectSchema("Redacted webhook delivery or dry-run result."),
+				"AuditLogRows":              looseObjectSchema("Local audit log rows with privacy filters applied by the server."),
+				"ReconciliationRows":        looseObjectSchema("Provider reconciliation import rows."),
+				"ReconciliationImportRequest": looseObjectSchema(
+					"Provider CSV/JSON statement or manual reconciliation summary. Payload hashes are persisted; secrets and prompt content are not accepted.",
+				),
+				"ReconciliationImportResponse": looseObjectSchema("Provider reconciliation import result."),
+				"RouterSimulationReport":       looseObjectSchema("Model router what-if savings estimate."),
+				"PreflightEstimateReport":      looseObjectSchema("Historical preflight task cost, token, and duration estimate."),
+				"ChargebackRows":               looseObjectSchema("Team/project/model/source showback and chargeback rows."),
+				"AgentWrappedReport":           looseObjectSchema("Private period summary with top models, projects, sessions, cache days, and efficiency facts."),
+				"EvidenceBundle":               looseObjectSchema("Privacy-redacted incident evidence bundle for local audit, issue reports, and support."),
+				"OfflineBundle":                looseObjectSchema("Offline signed or unsigned local usage bundle."),
+				"OfflineBundleImportRequest":   looseObjectSchema("Offline bundle JSON. Optional signature verification uses local environment key material only."),
+				"OfflineBundleImportResponse":  looseObjectSchema("Offline bundle import result."),
+				"PolicyStatus":                 looseObjectSchema("Policy configuration and enforcement posture summary."),
+				"PolicyEvaluationRequest":      looseObjectSchema("Policy evaluation request for local advisory rules."),
+				"PolicyEvaluationResponse":     looseObjectSchema("Policy evaluation decision result."),
+				"PolicyAuditReport":            looseObjectSchema("Policy audit findings over usage, tool, and workload candidates."),
+				"PolicyEnforcementReport":      looseObjectSchema("Policy enforcement evidence and local approval state."),
+				"PolicyDecisionRows":           looseObjectSchema("Recorded policy decision rows."),
+				"PolicyApprovalRows":           looseObjectSchema("Policy approval request rows."),
+				"PolicyApprovalVoteRequest":    looseObjectSchema("Approval vote payload with request_id, status, note, voter, and required approvals."),
+				"PolicyApprovalVoteResponse":   looseObjectSchema("Approval vote result."),
+				"ApprovalRouteSummary":         looseObjectSchema("Pending approval route summary for operators and notifications."),
+				"OTelGenAIRequest":             looseObjectSchema("OpenTelemetry GenAI JSON span export or span array. Prompt and completion message attributes are ignored by conversion."),
+				"OTLPTraceRequest":             looseObjectSchema("OTLP HTTP JSON/protobuf trace batch. Protobuf requests use application/x-protobuf or application/protobuf."),
+				"A2ATaskRequest":               looseObjectSchema("A2A task snapshot/event payload. Message history, message parts, and artifact parts are excluded from persistence."),
+				"ProviderUsageRequest":         looseObjectSchema("OpenAI-compatible, Anthropic-style, or LiteLLM-style usage envelope without request/response message content."),
+				"EcosystemIngestResponse":      looseObjectSchema("Metadata-only ingest result with accepted row counts and canonical event projection results."),
+				"GatewayRequest":               looseObjectSchema("Provider-compatible request body. Prompt content is proxied in memory only and not persisted by Agent Ledger."),
+				"GatewayResponse":              looseObjectSchema("Provider-compatible upstream response or SSE stream with Agent Ledger metering headers."),
 				"Error": map[string]interface{}{
 					"type":       "object",
 					"properties": map[string]interface{}{"error": stringSchema()},
@@ -464,6 +566,104 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 
 func OpenAPIFingerprint(opts Options, runtime *storage.RuntimeStatus) string {
 	return hashJSONPayload(OpenAPISpecFor(opts, runtime))
+}
+
+// OpenAPIContractPaths returns the stable REST paths that the control-plane
+// OpenAPI contract must expose. Keep this hard-coded so tests catch generator
+// drift instead of deriving the list from the generated document itself.
+func OpenAPIContractPaths() []string {
+	return []string{
+		"/.well-known/agent-ledger.json",
+		"/api/discovery",
+		"/api/stats",
+		"/api/dashboard",
+		"/api/cost-by-model",
+		"/api/cost-over-time",
+		"/api/tokens-over-time",
+		"/api/sessions",
+		"/api/session-detail",
+		"/api/session-replay",
+		"/api/workloads",
+		"/api/workloads/close",
+		"/api/workloads/link",
+		"/api/workloads/claim-next",
+		"/api/workloads/queue",
+		"/api/workloads/lease",
+		"/api/workloads/lease/renew",
+		"/api/workloads/lease/release",
+		"/api/workloads/leases",
+		"/api/agent-runs",
+		"/api/agent-runs/heartbeat",
+		"/api/agent-runs/liveness",
+		"/api/workload-detail",
+		"/api/workload-graph",
+		"/api/workload-timeline",
+		"/api/workload-state",
+		"/api/workload-events",
+		"/api/workload-events/stream",
+		"/api/fleet-attribution",
+		"/api/integrations",
+		"/api/contracts",
+		"/api/contracts/verify",
+		"/api/openapi.json",
+		"/api/integrations/adapter-spec",
+		"/api/integrations/conformance",
+		"/api/runtime/status",
+		"/api/config/status",
+		"/api/readiness",
+		"/api/admission/check",
+		"/api/event-schema",
+		"/api/event-examples",
+		"/api/events/validate",
+		"/api/events",
+		"/api/otel/genai",
+		"/api/otlp/v1/traces",
+		"/v1/traces",
+		"/api/a2a/tasks",
+		"/api/provider/calls",
+		"/gateway/openai/v1/chat/completions",
+		"/gateway/openai/v1/responses",
+		"/gateway/anthropic/v1/messages",
+		"/api/health/ingestion",
+		"/api/scan",
+		"/api/recalculate-costs",
+		"/api/projections/repair",
+		"/api/pricing/status",
+		"/api/pricing/sync",
+		"/api/pricing/recalculate",
+		"/api/pricing/audit",
+		"/api/budgets/status",
+		"/api/quota/status",
+		"/api/data-quality",
+		"/api/doctor",
+		"/api/model-calls",
+		"/api/model-registry",
+		"/api/cost-intelligence",
+		"/api/cache/doctor",
+		"/api/anomalies",
+		"/api/watchdog/events",
+		"/api/notifications/webhook",
+		"/api/audit-log",
+		"/api/reconciliation/status",
+		"/api/reconciliation/import",
+		"/api/router/simulate",
+		"/api/preflight/estimate",
+		"/api/chargeback",
+		"/api/wrapped",
+		"/api/badge/repo.svg",
+		"/api/evidence-bundle",
+		"/api/offline-bundle/export",
+		"/api/offline-bundle/import",
+		"/api/policies/status",
+		"/api/policy/evaluate",
+		"/api/policy/audit",
+		"/api/policy/enforcement",
+		"/api/policy/decisions",
+		"/api/policy/approvals",
+		"/api/policy/approval-routes",
+		"/api/export",
+		"/api/report",
+	}
 }
 
 func getOperation(tag, summary, description, schema string) map[string]interface{} {
@@ -487,6 +687,245 @@ func eventExamplesOperation() map[string]interface{} {
 		queryParam("event_type", "Alias for type."),
 	}
 	return op
+}
+
+func filteredReadOperation(tag, summary, description, schema string, params []map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{tag},
+			"summary":     summary,
+			"description": description,
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": false,
+				"read_only_safe":     true,
+				"prompt_content":     false,
+			},
+			"parameters": params,
+			"responses": map[string]interface{}{
+				"200": jsonResponse(schema),
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
+func derivedReadOperation(tag, summary, description, schema string, params []map[string]interface{}) map[string]interface{} {
+	op := filteredReadOperation(tag, summary, description, schema, params)
+	meta := op["get"].(map[string]interface{})["x-agent-ledger"].(map[string]interface{})
+	meta["writes_local_state"] = "control-plane mode may upsert derived rows; observer/read-only mode does not mutate local state"
+	meta["read_only_safe"] = "true in observer/read-only mode"
+	return op
+}
+
+func localQueryWriteOperation(tag, summary, description, responseSchema string, params []map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"post": map[string]interface{}{
+			"tags":        []string{tag},
+			"summary":     summary,
+			"description": description,
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": true,
+				"read_only_safe":     false,
+				"prompt_content":     false,
+				"local_or_auth":      true,
+			},
+			"parameters": params,
+			"responses": map[string]interface{}{
+				"200": jsonResponse(responseSchema),
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+				"503": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
+func flexibleWriteOperation(tag, summary, description, requestSchema, responseSchema string, params []map[string]interface{}, contentTypes []string) map[string]interface{} {
+	content := map[string]interface{}{}
+	for _, contentType := range contentTypes {
+		schema := interface{}(refSchema(requestSchema))
+		if contentType == "text/csv" || contentType == "text/plain" || contentType == "application/x-ndjson" {
+			schema = stringSchema()
+		}
+		content[contentType] = map[string]interface{}{"schema": schema}
+	}
+	maxBodyBytes := 4 << 20
+	if requestSchema == "OfflineBundleImportRequest" {
+		maxBodyBytes = 32 << 20
+	}
+	return map[string]interface{}{
+		"post": map[string]interface{}{
+			"tags":        []string{tag},
+			"summary":     summary,
+			"description": description,
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": true,
+				"read_only_safe":     false,
+				"prompt_content":     false,
+				"local_or_auth":      true,
+				"max_body_bytes":     maxBodyBytes,
+			},
+			"parameters": params,
+			"requestBody": map[string]interface{}{
+				"required": true,
+				"content":  content,
+			},
+			"responses": map[string]interface{}{
+				"200": jsonResponse(responseSchema),
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
+func doctorOperation() map[string]interface{} {
+	op := filteredReadOperation("diagnostics", "Run local doctor", "Read one-click diagnostics for usage, ingestion, pricing, data quality, projection drift, idempotency, leases, workload state, and runtime posture.", "DoctorReport", append(scopedTimeParams(), queryParam("format", "json or markdown.")))
+	get := op["get"].(map[string]interface{})
+	get["responses"] = map[string]interface{}{
+		"200": map[string]interface{}{
+			"description": "JSON diagnostic report or Markdown diagnostic report.",
+			"content": map[string]interface{}{
+				"application/json": map[string]interface{}{"schema": refSchema("DoctorReport")},
+				"text/markdown":    map[string]interface{}{"schema": stringSchema()},
+			},
+		},
+		"400": jsonResponse("Error"),
+		"403": jsonResponse("Error"),
+	}
+	return op
+}
+
+func wrappedOperation() map[string]interface{} {
+	op := filteredReadOperation("reports", "Get Agent Wrapped", "Read private monthly/yearly/custom usage summary. Markdown output honors privacy filters.", "AgentWrappedReport", append(scopedTimeParams(), queryParam("period", "month, year, or custom."), queryParam("format", "json or markdown.")))
+	get := op["get"].(map[string]interface{})
+	get["responses"] = map[string]interface{}{
+		"200": map[string]interface{}{
+			"description": "JSON wrapped report or Markdown wrapped report.",
+			"content": map[string]interface{}{
+				"application/json": map[string]interface{}{"schema": refSchema("AgentWrappedReport")},
+				"text/markdown":    map[string]interface{}{"schema": stringSchema()},
+			},
+		},
+		"400": jsonResponse("Error"),
+		"403": jsonResponse("Error"),
+	}
+	return op
+}
+
+func badgeOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{"reports"},
+			"summary":     "Get repo AI cost badge",
+			"description": "Render a local black/white SVG badge for repo monthly cost, tokens, sessions, or cache hit rate.",
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": false,
+				"read_only_safe":     true,
+				"prompt_content":     false,
+			},
+			"parameters": append(scopedTimeParams(), queryParam("label", "Optional badge label."), queryParam("metric", "cost, tokens, sessions, or cache.")),
+			"responses": map[string]interface{}{
+				"200": map[string]interface{}{
+					"description": "SVG badge.",
+					"content": map[string]interface{}{
+						"image/svg+xml": map[string]interface{}{"schema": stringSchema()},
+					},
+				},
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
+func evidenceBundleOperation() map[string]interface{} {
+	op := filteredReadOperation("reports", "Export incident evidence bundle", "Export a privacy-redacted evidence bundle with health, pricing audit, data quality, dashboard consistency, anomalies, watchdog, and workload state.", "EvidenceBundle", append(scopedTimeParams(), queryParam("granularity", "Dashboard evidence chart granularity.")))
+	get := op["get"].(map[string]interface{})
+	get["x-agent-ledger"].(map[string]interface{})["writes_local_state"] = "control-plane mode may record the exported bundle and audit event"
+	get["responses"].(map[string]interface{})["200"] = map[string]interface{}{
+		"description": "Privacy-redacted JSON evidence bundle attachment.",
+		"content": map[string]interface{}{
+			"application/json": map[string]interface{}{"schema": refSchema("EvidenceBundle")},
+		},
+	}
+	return op
+}
+
+func offlineBundleExportOperation() map[string]interface{} {
+	op := filteredReadOperation("reports", "Export offline bundle", "Export a local offline usage bundle for air-gapped aggregation. Optional signing uses AGENT_LEDGER_BUNDLE_KEY from the environment.", "OfflineBundle", append(scopedTimeParams(), boolQueryParam("signed", "Sign bundle with local environment key."), queryParam("key_id", "Optional signing key identifier."), intQueryParam("limit", "Maximum bundle rows.")))
+	get := op["get"].(map[string]interface{})
+	get["x-agent-ledger"].(map[string]interface{})["writes_local_state"] = "control-plane mode may record export metadata and audit event"
+	get["responses"].(map[string]interface{})["200"] = map[string]interface{}{
+		"description": "Offline JSON bundle attachment.",
+		"content": map[string]interface{}{
+			"application/json": map[string]interface{}{"schema": refSchema("OfflineBundle")},
+		},
+	}
+	return op
+}
+
+func policyApprovalsOperation() map[string]interface{} {
+	get := filteredReadOperation("governance", "List policy approvals", "List pending or historical local policy approval requests.", "PolicyApprovalRows", []map[string]interface{}{queryParam("status", "Approval status. Empty defaults to pending."), intQueryParam("limit", "Maximum approval rows.")})["get"].(map[string]interface{})
+	post := simpleWriteOperation("governance", "Cast policy approval vote", "Approve or reject one local policy approval request. Writes audit metadata without prompt content.", "PolicyApprovalVoteRequest", "PolicyApprovalVoteResponse")
+	return map[string]interface{}{
+		"get":  get,
+		"post": post,
+	}
+}
+
+func exportOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{"reports"},
+			"summary":     "Export ledger data",
+			"description": "Export sessions, workloads, daily totals, model costs, model calls, chargeback, audit, or data quality rows as CSV or JSON. Policy may require privacy=1.",
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": "control-plane mode records export audit metadata",
+				"read_only_safe":     true,
+				"prompt_content":     false,
+			},
+			"parameters": append(scopedTimeParams(), queryParam("type", "sessions, workloads, daily, models, model-calls, chargeback, audit, or quality."), queryParam("format", "csv or json.")),
+			"responses": map[string]interface{}{
+				"200": map[string]interface{}{
+					"description": "CSV or JSON export attachment.",
+					"content": map[string]interface{}{
+						"application/json": map[string]interface{}{"schema": looseObjectSchema("JSON export payload.")},
+						"text/csv":         map[string]interface{}{"schema": stringSchema()},
+					},
+				},
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
+func reportOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{"reports"},
+			"summary":     "Generate Markdown report",
+			"description": "Generate a local Markdown cost, token, session, model, and budget report for the selected scope.",
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": "control-plane mode records report audit metadata",
+				"read_only_safe":     true,
+				"prompt_content":     false,
+			},
+			"parameters": scopedTimeParams(),
+			"responses": map[string]interface{}{
+				"200": map[string]interface{}{
+					"description": "Markdown report.",
+					"content": map[string]interface{}{
+						"text/markdown": map[string]interface{}{"schema": stringSchema()},
+					},
+				},
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+			},
+		},
+	}
 }
 
 func canonicalEventPostOperation(tag, summary, description string, writes bool) map[string]interface{} {
@@ -1020,6 +1459,35 @@ func intQueryParam(name, description string) map[string]interface{} {
 	param := queryParam(name, description)
 	param["schema"] = map[string]interface{}{"type": "integer", "minimum": 1}
 	return param
+}
+
+func scopedTimeParams() []map[string]interface{} {
+	params := []map[string]interface{}{
+		queryParam("from", "YYYY-MM-DD lower bound. Time filters use half-open [from,to) semantics."),
+		queryParam("to", "YYYY-MM-DD upper bound. Time filters use half-open [from,to) semantics."),
+		queryParam("source", "Optional source filter."),
+		queryParam("model", "Optional model filter."),
+		queryParam("project", "Optional project/workspace filter."),
+		queryParam("privacy", "Set to 1 or true to apply privacy filters where supported."),
+	}
+	return params
+}
+
+func privacyParams() []map[string]interface{} {
+	return []map[string]interface{}{
+		queryParam("privacy", "Set to 1 or true to hash session ids and hide sensitive local metadata where supported."),
+	}
+}
+
+func paginationAndSortParams() []map[string]interface{} {
+	return []map[string]interface{}{
+		queryParam("q", "Optional text search."),
+		queryParam("sort", "Server-side sort key."),
+		queryParam("dir", "Sort direction asc or desc."),
+		intQueryParam("limit", "Maximum rows."),
+		intQueryParam("offset", "Offset for pagination."),
+		queryParam("cursor", "Cursor alias for offset."),
+	}
 }
 
 func refSchema(name string) map[string]interface{} {
