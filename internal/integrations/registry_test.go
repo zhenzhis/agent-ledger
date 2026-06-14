@@ -58,6 +58,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityCommand(t, catalog, "protocol.readiness", "agent-ledger readiness")
 	assertCapabilityDataClass(t, catalog, "protocol.readiness", "workload queue claimability counts")
 	assertCapabilityDataClass(t, catalog, "protocol.readiness", "workload lease pressure buckets")
+	assertCapabilityDataClass(t, catalog, "protocol.readiness", "agent run active/stale counts")
 	assertCapabilityCommand(t, catalog, "protocol.admission_check", "agent-ledger admission check")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.contracts")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.contracts_verify")
@@ -238,7 +239,7 @@ func TestOpenAPISpecIndexesStableControlPlane(t *testing.T) {
 		t.Fatalf("unexpected OpenAPI metadata: %#v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/admission/check", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workloads", "/api/workloads/claim-next", "/api/workloads/queue", "/api/workloads/lease", "/api/workloads/lease/renew", "/api/workloads/lease/release", "/api/workloads/leases", "/api/agent-runs", "/api/workload-events"} {
+	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/admission/check", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workloads", "/api/workloads/claim-next", "/api/workloads/queue", "/api/workloads/lease", "/api/workloads/lease/renew", "/api/workloads/lease/release", "/api/workloads/leases", "/api/agent-runs", "/api/agent-runs/liveness", "/api/workload-events"} {
 		if paths[path] == nil {
 			t.Fatalf("OpenAPI missing path %s: %#v", path, paths)
 		}

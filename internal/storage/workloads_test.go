@@ -498,6 +498,13 @@ func TestAgentRunLivenessReportsStaleActiveRuns(t *testing.T) {
 	if len(emptyRows) != 0 {
 		t.Fatalf("expected empty filtered rows, got %+v", emptyRows)
 	}
+	stats, err := db.GetAgentRunLivenessStats(10 * time.Minute)
+	if err != nil {
+		t.Fatalf("GetAgentRunLivenessStats: %v", err)
+	}
+	if stats.Active != 1 || stats.Stale != 1 || stats.OldestAgeSeconds < int64((10*time.Minute).Seconds()) {
+		t.Fatalf("unexpected liveness stats: %+v", stats)
+	}
 }
 
 func TestWorkloadStateDerivesAsyncTerminalSignals(t *testing.T) {

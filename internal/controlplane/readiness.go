@@ -52,6 +52,9 @@ type ReadinessSummary struct {
 	ActiveLeases       int    `json:"active_leases"`
 	ExpiredLeases      int    `json:"expired_leases"`
 	ReleasedLeases     int    `json:"released_leases"`
+	ActiveRuns         int    `json:"active_runs"`
+	StaleRuns          int    `json:"stale_runs"`
+	OldestRunAge       string `json:"oldest_run_age"`
 	HealthSources      int    `json:"health_sources"`
 	HealthErrors       int    `json:"health_errors"`
 	PricingSources     int    `json:"pricing_sources"`
@@ -92,7 +95,7 @@ func BuildReadinessReport(db *storage.DB, cfg *config.Config, runtime *storage.R
 		LocalFirst:          cfgStatus.LocalFirst,
 		PromptContentStored: false,
 		UsageDataUploaded:   false,
-		Summary:             ReadinessSummary{QueueOldestAge: "none", QueueNextLease: "none"},
+		Summary:             ReadinessSummary{QueueOldestAge: "none", QueueNextLease: "none", OldestRunAge: "none"},
 		PrivacyNote:         "Readiness exposes status, counts, hashes, and remediation hints only; raw paths, URLs, secrets, prompts, responses, sessions, projects, branches, machine names, and authors are excluded.",
 	}
 
@@ -123,6 +126,7 @@ func FormatReadinessMarkdown(report *ReadinessReport) string {
 	fmt.Fprintf(&b, "- Control idempotency: `%d` keys, `%d` replays\n", report.Summary.IdempotencyKeys, report.Summary.IdempotencyReplays)
 	fmt.Fprintf(&b, "- Workload queue: `%d` claimable, `%d` non-terminal, oldest age `%s`, next lease expiry `%s`\n", report.Summary.QueueClaimable, report.Summary.QueueNonTerminal, report.Summary.QueueOldestAge, report.Summary.QueueNextLease)
 	fmt.Fprintf(&b, "- Workload leases: `%d` active, `%d` expired, `%d` released\n", report.Summary.ActiveLeases, report.Summary.ExpiredLeases, report.Summary.ReleasedLeases)
+	fmt.Fprintf(&b, "- Agent runs: `%d` active, `%d` stale, oldest age `%s`\n", report.Summary.ActiveRuns, report.Summary.StaleRuns, report.Summary.OldestRunAge)
 	fmt.Fprintf(&b, "- Pricing: `%d` sources, `%d` stale, `%d` errors\n", report.Summary.PricingSources, report.Summary.PricingStale, report.Summary.PricingErrors)
 	fmt.Fprintf(&b, "- Recommendation: %s\n\n", report.Summary.Recommendation)
 	b.WriteString("## Checks\n\n")
@@ -201,6 +205,21 @@ func addCoreChecks(report *ReadinessReport, db *storage.DB, now time.Time) {
 		report.Summary.QueueOldestAge = elapsedBucket(queue.OldestClaimableAt, now)
 		report.Summary.QueueNextLease = remainingBucket(queue.NextLeaseExpiryAt, now)
 		report.addCheck("database.workload_queue_query", true, "info", "workload queue probe succeeded", "")
+	}
+	runStats, err := db.GetAgentRunLivenessStatsAt(10*time.Minute, now)
+	if err != nil {
+		report.addCheck("database.agent_run_liveness_query", false, "critical", "agent run liveness query failed", "inspect SQLite schema migrations and agent run indexes")
+	} else {
+		report.Summary.ActiveRuns = runStats.Active
+		report.Summary.StaleRuns = runStats.Stale
+		if runStats.Active > 0 {
+			report.Summary.OldestRunAge = durationBucket(time.Duration(runStats.OldestAgeSeconds) * time.Second)
+		}
+		if runStats.Stale > 0 {
+			report.addCheck("database.agent_run_liveness", false, "warning", "one or more active agent runs have stale heartbeats", "inspect agent-ledger workload liveness --stale-only")
+		} else {
+			report.addCheck("database.agent_run_liveness", true, "info", "agent run liveness probe succeeded", "")
+		}
 	}
 }
 

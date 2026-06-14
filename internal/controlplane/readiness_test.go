@@ -55,6 +55,13 @@ func TestReadinessReportReadyAndPrivacySafe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcquireWorkloadLease: %v", err)
 	}
+	runID, err := db.StartAgentRun(workloadID, "codex", "private-agent", "codex --token private-secret", "C:/Users/zhang/private/workspace")
+	if err != nil {
+		t.Fatalf("StartAgentRun: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-readiness-liveness", runID, "working", "testing", "private readiness message", 0.4, nil, now.Add(-time.Minute), 1); err != nil {
+		t.Fatalf("RecordAgentRunHeartbeat: %v", err)
+	}
 	cfg := config.DefaultConfig()
 	cfg.Storage.Path = "C:/Users/zhang/private/agent-ledger.db"
 	cfg.Collectors.Codex.Paths = []string{"C:/Users/zhang/private/.codex"}
@@ -74,17 +81,20 @@ func TestReadinessReportReadyAndPrivacySafe(t *testing.T) {
 	if report.Summary.QueueClaimable != 1 || report.Summary.QueueNonTerminal != 2 {
 		t.Fatalf("missing queue summary: %+v", report.Summary)
 	}
+	if report.Summary.ActiveRuns != 1 || report.Summary.StaleRuns != 0 || report.Summary.OldestRunAge == "none" {
+		t.Fatalf("missing run liveness summary: %+v", report.Summary)
+	}
 	raw, err := json.Marshal(report)
 	if err != nil {
 		t.Fatalf("marshal readiness: %v", err)
 	}
-	for _, forbidden := range []string{"private-session", "private-project", "C:/Users/zhang/private", "private.example", "private-readiness-key", lease.LeaseToken, "private-router", "private readiness purpose"} {
+	for _, forbidden := range []string{"private-session", "private-project", "C:/Users/zhang/private", "private.example", "private-readiness-key", lease.LeaseToken, "private-router", "private readiness purpose", runID, "private-agent", "private-secret", "private readiness message"} {
 		if strings.Contains(string(raw), forbidden) {
 			t.Fatalf("readiness leaked %q: %s", forbidden, raw)
 		}
 	}
 	md := FormatReadinessMarkdown(report)
-	if !strings.Contains(md, "Workload queue") || !strings.Contains(md, "Workload leases") || strings.Contains(md, lease.LeaseToken) {
+	if !strings.Contains(md, "Workload queue") || !strings.Contains(md, "Workload leases") || !strings.Contains(md, "Agent runs") || strings.Contains(md, lease.LeaseToken) {
 		t.Fatalf("unexpected readiness markdown: %s", md)
 	}
 }
@@ -118,6 +128,32 @@ func TestReadinessReportDegradedForMissingOperationalEvidence(t *testing.T) {
 	if !hasReadinessCheck(report, "ingestion.health_present", false, "warning") ||
 		!hasReadinessCheck(report, "pricing.sources_present", false, "warning") {
 		t.Fatalf("expected health and pricing warnings: %+v", report.Checks)
+	}
+}
+
+func TestReadinessReportWarnsForStaleAgentRuns(t *testing.T) {
+	db := openReadinessDB(t)
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	workloadID, err := db.CreateWorkload("stale readiness goal", "codex", "agent-ledger", "agent-ledger", "main", "", "", 0)
+	if err != nil {
+		t.Fatalf("CreateWorkload: %v", err)
+	}
+	runID, err := db.StartAgentRun(workloadID, "codex", "codex", "codex", "C:/work/agent-ledger")
+	if err != nil {
+		t.Fatalf("StartAgentRun: %v", err)
+	}
+	if _, err := db.RecordAgentRunHeartbeat("evt-readiness-stale", runID, "working", "testing", "waiting", 0.5, nil, now.Add(-20*time.Minute), 1); err != nil {
+		t.Fatalf("RecordAgentRunHeartbeat: %v", err)
+	}
+	cfg := config.DefaultConfig()
+	runtime := integrations.EnrichRuntimeStatus(&storage.RuntimeStatus{Mode: "control-plane", ReadOnly: false, WriteOperations: "enabled", BackgroundTasks: "enabled"}, integrations.OptionsFromConfig(cfg))
+
+	report := BuildReadinessReport(db, cfg, runtime, integrations.ContractVerificationReportFor(integrations.OptionsFromConfig(cfg), runtime), now)
+	if report.Summary.ActiveRuns != 1 || report.Summary.StaleRuns != 1 {
+		t.Fatalf("missing stale run summary: %+v", report.Summary)
+	}
+	if !hasReadinessCheck(report, "database.agent_run_liveness", false, "warning") {
+		t.Fatalf("expected stale run warning: %+v", report.Checks)
 	}
 }
 

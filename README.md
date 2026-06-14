@@ -130,6 +130,8 @@ Async routers and long-running agents can acquire a short-lived workload lease b
 
 `GET /api/workloads/queue`, `agent-ledger workload queue`, and MCP `ledger.workload_queue` are read-only queue probes. They report claimable workload count, non-terminal status distribution, active/expired lease pressure, oldest claimable workload time, and next lease expiry without mutating expired lease rows. The REST endpoint emits a stable `ETag` that ignores `generated_at`, so HTTP monitors can use `If-None-Match` and receive `304 Not Modified` when queue state has not changed.
 
+`GET /api/agent-runs/liveness` also emits a stable `ETag`; `age_seconds` render ticks are ignored, while stale-state, phase, status, and heartbeat changes still invalidate the response. Readiness reports include active/stale run counts and the oldest active run age bucket without exposing run ids, workload ids, goals, projects, repos, branches, commands, or status messages.
+
 Only one active lease is allowed per workload. `lease_token` is returned only from acquire/claim responses; list, renew, release, readiness, doctor, audit, and contract surfaces never expose it. SQLite stores a SHA-256 token hash, not the plaintext token. Read paths derive expired status without mutating SQLite, so observer/read-only mode remains read-only.
 
 Strict adapter fixtures are available in `examples/adapter-fixtures/` for canonical events, OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, provider SSE streams, OpenTelemetry GenAI spans, and A2A task snapshots.
@@ -490,7 +492,7 @@ If costs differ from a provider invoice:
 
 - Binds to `127.0.0.1` by default.
 - `agent-ledger config status`, `GET /api/config/status`, and MCP `ledger.config_status` are designed for deployment checks and never expose raw paths, auth tokens, API keys, webhook URLs, machine names, authors, prompts, responses, or session ids.
-- `agent-ledger readiness`, `GET /api/readiness`, MCP `ledger.readiness`, and `agent-ledger://readiness` are designed for control-plane probes and expose only status, counts, check identifiers, and remediation hints, including privacy-safe control idempotency key/replay counts, workload queue claimability, and workload lease counts.
+- `agent-ledger readiness`, `GET /api/readiness`, MCP `ledger.readiness`, and `agent-ledger://readiness` are designed for control-plane probes and expose only status, counts, check identifiers, and remediation hints, including privacy-safe control idempotency key/replay counts, workload queue claimability, workload lease counts, and active/stale agent run counts.
 - `agent-ledger admission check`, `GET /api/admission/check`, MCP `ledger.admission_check`, and `agent-ledger://admission/check` expose operation access decisions only; request bodies, full CLI arguments, raw paths, tokens, prompts, sessions, projects, branches, machine names, and authors are excluded.
 - Reads local agent logs and databases; it does not upload usage data.
 - Pricing sync is the expected outbound request.

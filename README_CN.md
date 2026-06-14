@@ -130,6 +130,8 @@ Workload 与 run 写操作支持稳定幂等键，面向异步 agent router、wr
 
 `GET /api/workloads/queue`、`agent-ledger workload queue` 与 MCP `ledger.workload_queue` 是只读 queue 探针。它们会返回可领取 workload 数、非终态分布、active/expired lease 压力、最老可领取 workload 时间和下一次 lease 过期时间，不会回写过期 lease 行。REST 端点会返回忽略 `generated_at` 的稳定 `ETag`，HTTP monitor 可用 `If-None-Match` 在 queue 状态未变化时获得 `304 Not Modified`。
 
+`GET /api/agent-runs/liveness` 同样会返回稳定 `ETag`；纯展示用的 `age_seconds` 跳动会被忽略，但 stale 状态、phase、status 与 heartbeat 变化仍会让响应失效。Readiness 报告会加入 active/stale run 数与最老 active run 的时间桶，不暴露 run id、workload id、goal、project、repo、branch、command 或 status message。
+
 同一个 workload 同时只允许一个 active lease。`lease_token` 只在 acquire/claim 响应中返回；list、renew、release、readiness、doctor、audit 和 contract surface 都不会返回它。SQLite 只保存 SHA-256 token hash，不保存明文 token。读路径只派生过期状态，不写回 SQLite，因此 observer/read-only 模式仍保持只读。
 
 仓库内 `examples/adapter-fixtures/` 提供 canonical events、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages、provider SSE stream、OpenTelemetry GenAI span 与 A2A task snapshot 的 strict conformance 样例。
@@ -490,7 +492,7 @@ agent-ledger doctor --format markdown
 
 - 默认绑定 `127.0.0.1`。
 - `agent-ledger config status`、`GET /api/config/status` 和 MCP `ledger.config_status` 用于部署检查，不暴露原始路径、auth token、API key、webhook URL、机器名、作者、prompt、response 或 session id。
-- `agent-ledger readiness`、`GET /api/readiness`、MCP `ledger.readiness` 与 `agent-ledger://readiness` 用于控制面探针，只暴露状态、计数、检查标识和修复建议，包括隐私安全的 control idempotency key/replay 计数、workload queue 可领取状态和 workload lease 计数。
+- `agent-ledger readiness`、`GET /api/readiness`、MCP `ledger.readiness` 与 `agent-ledger://readiness` 用于控制面探针，只暴露状态、计数、检查标识和修复建议，包括隐私安全的 control idempotency key/replay 计数、workload queue 可领取状态、workload lease 计数，以及 active/stale agent run 计数。
 - `agent-ledger admission check`、`GET /api/admission/check`、MCP `ledger.admission_check` 与 `agent-ledger://admission/check` 只暴露操作访问决策；不暴露 request body、完整 CLI 参数、原始路径、token、prompt、session、项目、分支、机器名或作者。
 - 只读取本地 agent 日志和数据库，不上传 usage 数据。
 - pricing sync 是默认唯一出站请求。

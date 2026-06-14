@@ -68,6 +68,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/workloads/lease/release":   workloadLeaseReleaseOperation(),
 			"/api/workloads/leases":          workloadLeasesOperation(),
 			"/api/agent-runs":                agentRunsOperation(),
+			"/api/agent-runs/liveness":       agentRunLivenessOperation(),
 			"/api/workload-events":           workloadEventsOperation(false),
 			"/api/workload-events/stream":    workloadEventsOperation(true),
 		},
@@ -361,7 +362,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"idempotent_replay": boolSchema(),
 					},
 				},
-				"WorkloadEventFeed": looseObjectSchema("Cursor-stable workload state feed."),
+				"AgentRunLivenessResponse": looseObjectSchema("Active async agent run liveness rows with privacy filters applied by the server."),
+				"WorkloadEventFeed":        looseObjectSchema("Cursor-stable workload state feed."),
 				"Error": map[string]interface{}{
 					"type":       "object",
 					"properties": map[string]interface{}{"error": stringSchema()},
@@ -585,6 +587,33 @@ func workloadLeasesOperation() map[string]interface{} {
 func agentRunsOperation() map[string]interface{} {
 	return map[string]interface{}{
 		"post": idempotentWriteOperation("workload-control", "Start agent run", "Start a run attached to an existing workload. Retries with the same normalized request and idempotency key return the original run id.", "AgentRunStartRequest", "AgentRunStartResponse"),
+	}
+}
+
+func agentRunLivenessOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"get": map[string]interface{}{
+			"tags":        []string{"workload-control"},
+			"summary":     "Get agent run liveness",
+			"description": "Return active async agent run liveness rows and stale heartbeat state. The endpoint honors privacy filters and emits a stable ETag that ignores age_seconds render ticks.",
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state": false,
+				"read_only_safe":     true,
+				"prompt_content":     false,
+			},
+			"parameters": []map[string]interface{}{
+				queryParam("max_age", "Heartbeat age threshold such as 10m."),
+				queryParam("stale_only", "Return only stale active runs when true or 1."),
+				queryParam("source", "Optional source filter."),
+				queryParam("project", "Optional project or repo filter."),
+				queryParam("limit", "Maximum rows to return."),
+			},
+			"responses": map[string]interface{}{
+				"200": jsonResponse("AgentRunLivenessResponse"),
+				"304": map[string]interface{}{"description": "Not modified when If-None-Match matches the stable liveness ETag."},
+				"400": jsonResponse("Error"),
+			},
+		},
 	}
 }
 

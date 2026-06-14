@@ -273,7 +273,7 @@ func Registry(opts Options) Catalog {
 			Commands:    []string{"agent-ledger readiness", "agent-ledger readiness --format markdown"},
 			Tools:       []string{"ledger.readiness"},
 			Resources:   []string{"agent-ledger://readiness"},
-			DataClasses: []string{"database query status", "configuration issue counts", "contract verification result", "runtime mode", "ingestion health counts", "pricing source counts", "workload queue claimability counts", "workload lease pressure buckets"},
+			DataClasses: []string{"database query status", "configuration issue counts", "contract verification result", "runtime mode", "ingestion health counts", "pricing source counts", "workload queue claimability counts", "workload lease pressure buckets", "agent run active/stale counts"},
 		},
 		{
 			ID:          "protocol.admission_check",

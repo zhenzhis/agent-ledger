@@ -117,6 +117,13 @@ type AgentRunLivenessRow struct {
 	Stale           bool    `json:"stale"`
 }
 
+// AgentRunLivenessStats summarizes active async run health without identifiers.
+type AgentRunLivenessStats struct {
+	Active           int   `json:"active"`
+	Stale            int   `json:"stale"`
+	OldestAgeSeconds int64 `json:"oldest_age_seconds"`
+}
+
 // WorkloadState is a derived terminal-state snapshot for async agent workloads.
 type WorkloadState struct {
 	WorkloadID               string   `json:"workload_id"`
@@ -848,6 +855,51 @@ func (d *DB) GetAgentRunLiveness(maxAge time.Duration, staleOnly bool, limit int
 		out = []AgentRunLivenessRow{}
 	}
 	return out, rows.Err()
+}
+
+// GetAgentRunLivenessStats returns aggregate active/stale run health without row identifiers.
+func (d *DB) GetAgentRunLivenessStats(maxAge time.Duration) (AgentRunLivenessStats, error) {
+	return d.GetAgentRunLivenessStatsAt(maxAge, time.Now().UTC())
+}
+
+// GetAgentRunLivenessStatsAt returns aggregate active/stale run health using a caller-supplied clock.
+func (d *DB) GetAgentRunLivenessStatsAt(maxAge time.Duration, now time.Time) (AgentRunLivenessStats, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if maxAge <= 0 {
+		maxAge = 10 * time.Minute
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	now = now.UTC()
+	rows, err := d.db.Query(`SELECT CASE WHEN COALESCE(last_heartbeat_at,'')='' THEN started_at ELSE last_heartbeat_at END
+		FROM agent_runs
+		WHERE status IN ('queued','running','working','waiting_approval','blocked','evaluating','stalled')`)
+	if err != nil {
+		return AgentRunLivenessStats{}, err
+	}
+	defer rows.Close()
+	stats := AgentRunLivenessStats{}
+	for rows.Next() {
+		var lastActivity string
+		if err := rows.Scan(&lastActivity); err != nil {
+			return AgentRunLivenessStats{}, err
+		}
+		stats.Active++
+		t, ok := parseDBTime(lastActivity)
+		if !ok {
+			continue
+		}
+		age := int64(now.Sub(t).Seconds())
+		if age > stats.OldestAgeSeconds {
+			stats.OldestAgeSeconds = age
+		}
+		if now.Sub(t) > maxAge {
+			stats.Stale++
+		}
+	}
+	return stats, rows.Err()
 }
 
 func recordAgentRunHeartbeatTx(tx *sql.Tx, in agentRunHeartbeatInput) (*AgentRunEventRow, error) {

@@ -439,6 +439,17 @@ func TestAgentRunLivenessAPI(t *testing.T) {
 	if row.Goal != "<redacted>" || row.StatusMessage != "<redacted>" || row.Project != "<redacted>" || row.Repo != "<redacted>" || row.GitBranch != "<redacted>" {
 		t.Fatalf("privacy redaction failed: %+v", row)
 	}
+	etag := rr.Header().Get("ETag")
+	if etag == "" {
+		t.Fatalf("liveness response missing ETag")
+	}
+	cachedReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/agent-runs/liveness?max_age=10m&stale_only=1", nil)
+	cachedReq.Header.Set("If-None-Match", etag)
+	cached := httptest.NewRecorder()
+	srv.handleAgentRunLiveness(cached, cachedReq)
+	if cached.Code != http.StatusNotModified {
+		t.Fatalf("liveness If-None-Match status=%d body=%s", cached.Code, cached.Body.String())
+	}
 }
 
 func TestWorkloadStateAPIPrivacy(t *testing.T) {

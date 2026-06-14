@@ -495,7 +495,13 @@ func (s *Server) handleAgentRunLiveness(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	applyRunLivenessPrivacy(rows, s.privacyFor(r))
-	writeJSON(w, map[string]interface{}{"rows": rows, "max_age": maxAge.String(), "stale_only": staleOnly})
+	payload := map[string]interface{}{"rows": rows, "max_age": maxAge.String(), "stale_only": staleOnly}
+	etag, err := jsonPayloadETagIgnoringKeys(payload, "age_seconds")
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, payload, etag)
 }
 
 func (s *Server) handleWorkloadDetail(w http.ResponseWriter, r *http.Request) {
