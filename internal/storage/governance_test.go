@@ -446,11 +446,7 @@ func TestDataQualityIncludesCanonicalEventProvenance(t *testing.T) {
 }
 
 func TestDetectWatchdogEventsUsesObservedTimeAndUpserts(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := tempDB(t)
 	ts := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 	var records []*UsageRecord
 	for i := 0; i < 8; i++ {

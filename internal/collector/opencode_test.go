@@ -4,27 +4,32 @@ import (
 	"database/sql"
 	"encoding/json"
 	"math"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
 func TestOpenCodeCollectorUsesSourceCost(t *testing.T) {
-	dir := t.TempDir()
-	appDB, err := storage.Open(filepath.Join(dir, "agent-ledger.db"))
+	appDB := tempDB(t)
+	dir, err := os.MkdirTemp("", "agent-ledger-opencode-source-*")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer appDB.Close()
+	t.Cleanup(func() {
+		removeCollectorTestDirWithRetry(t, dir)
+	})
 
 	sourcePath := filepath.Join(dir, "opencode.db")
 	src, err := sql.Open("sqlite", sourcePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer src.Close()
+	t.Cleanup(func() {
+		if err := src.Close(); err != nil {
+			t.Errorf("Close source DB: %v", err)
+		}
+	})
 
 	_, err = src.Exec(`
 		CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT);
@@ -77,19 +82,25 @@ func TestOpenCodeCollectorUsesSourceCost(t *testing.T) {
 }
 
 func TestOpenCodeCollectorDoesNotDuplicatePromptsOnIncrementalScan(t *testing.T) {
-	dir := t.TempDir()
-	appDB, err := storage.Open(filepath.Join(dir, "agent-ledger.db"))
+	appDB := tempDB(t)
+	dir, err := os.MkdirTemp("", "agent-ledger-opencode-source-*")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("MkdirTemp: %v", err)
 	}
-	defer appDB.Close()
+	t.Cleanup(func() {
+		removeCollectorTestDirWithRetry(t, dir)
+	})
 
 	sourcePath := filepath.Join(dir, "opencode.db")
 	src, err := sql.Open("sqlite", sourcePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer src.Close()
+	t.Cleanup(func() {
+		if err := src.Close(); err != nil {
+			t.Errorf("Close source DB: %v", err)
+		}
+	})
 
 	if _, err := src.Exec(`
 		CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT);
