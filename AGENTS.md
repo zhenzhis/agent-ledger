@@ -28,6 +28,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger discovery                   # print local discovery manifest
 ./agent-ledger contracts                   # print REST/CLI/MCP contract bundle with hashes and cache semantics
 ./agent-ledger contracts verify            # print control-plane contract self-check report
+./agent-ledger goal coverage               # print requirement-level product goal coverage report
 ./agent-ledger openapi                     # print metadata-only OpenAPI 3.1 control-plane contract
 ./agent-ledger integrations                # print privacy-safe integration capability catalog
 ./agent-ledger runtime                     # print runtime mode and read-only/write status

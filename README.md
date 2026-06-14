@@ -70,6 +70,7 @@ CLI:
 ./agent-ledger discovery
 ./agent-ledger contracts
 ./agent-ledger contracts verify
+./agent-ledger goal coverage
 ./agent-ledger openapi
 ./agent-ledger integrations
 ./agent-ledger runtime
@@ -300,6 +301,7 @@ Common filters: `from`, `to`, `source`, `model`, `project`, `privacy`.
 | `GET /api/discovery` | Same discovery manifest under the API namespace |
 | `GET /api/contracts` | One-shot contract bundle with stable document URIs, hashes, cache semantics, CLI commands, and MCP entrypoints |
 | `GET /api/contracts/verify` | Machine-readable control-plane self-check for discovery, bundle, OpenAPI, schema, adapter, runtime, and privacy invariants |
+| `GET /api/goal-coverage` | Requirement-level Agent Ledger goal coverage with evidence, verification commands, and external dependencies |
 | `GET /api/openapi.json` | Metadata-only OpenAPI 3.1 control-plane contract for wrapper, router, and CI integration |
 | `GET /api/runtime/status` | Runtime mode, read-only state, background/write status, and compatibility hashes |
 | `GET /api/config/status` | Privacy-safe deployment configuration report with risk checks and remediation hints |

@@ -453,6 +453,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return json.NewEncoder(os.Stdout).Encode(integrations.OpenAPISpecFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
 	case "integrations":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
+	case "goal":
+		return runGoalCLI(args[1:], cfg)
 	case "runtime":
 		return json.NewEncoder(os.Stdout).Encode(server.RuntimeStatusFromConfig(cfg))
 	case "config":
@@ -475,6 +477,13 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return fmt.Errorf("unknown command %q", cmd)
 	}
 	return nil
+}
+
+func runGoalCLI(args []string, cfg *config.Config) error {
+	if len(args) == 0 || args[0] != "coverage" {
+		return fmt.Errorf("usage: agent-ledger goal coverage")
+	}
+	return json.NewEncoder(os.Stdout).Encode(integrations.GoalCoverageReportFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
 }
 
 func runConfigCLI(args []string, cfg *config.Config) error {

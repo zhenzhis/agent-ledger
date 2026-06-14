@@ -19,6 +19,14 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 	writeJSONWithETag(w, r, catalog, integrations.CatalogFingerprintFrom(catalog))
 }
 
+func (s *Server) handleGoalCoverage(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	report := integrations.GoalCoverageReportFor(s.integrationOptions(), s.runtimeStatus())
+	writeJSONWithETag(w, r, report, integrations.GoalCoverageFingerprintFrom(report))
+}
+
 func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

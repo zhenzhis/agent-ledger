@@ -72,7 +72,7 @@ func TestContractsEndpoint(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle: %+v", bundle)
 	}
-	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "runtime-status") ||
+	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "runtime-status") ||
 		!contractBundleHasDocument(bundle, "admission-check") || !contractBundleHasDocument(bundle, "canonical-event-schema") || !contractBundleHasDocument(bundle, "adapter-contract") {
 		t.Fatalf("contract bundle missing core documents: %+v", bundle.Documents)
 	}
@@ -80,6 +80,45 @@ func TestContractsEndpoint(t *testing.T) {
 		t.Fatalf("contracts ETag=%q want %q", rr.Header().Get("ETag"), `"`+bundle.BundleHash+`"`)
 	}
 	assertETagRevalidates(t, srv.handleContracts, "http://127.0.0.1/api/contracts", rr.Header().Get("ETag"))
+}
+
+func TestGoalCoverageEndpoint(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{RBAC: config.RBACConfig{ReadOnly: true}, Sources: testSourceOptions()})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/goal-coverage", nil)
+	rr := httptest.NewRecorder()
+	srv.handleGoalCoverage(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("goal coverage status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var report integrations.GoalCoverageReport
+	if err := json.Unmarshal(rr.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode goal coverage: %v", err)
+	}
+	if report.Contract != "agent-ledger.goal-coverage" || report.CoverageHash == "" || report.ContractBundleHash == "" || !report.ReadOnly {
+		t.Fatalf("unexpected goal coverage report: %+v", report)
+	}
+	if integrations.GoalCoverageHasGap(report) {
+		t.Fatalf("goal coverage has gaps: %+v", report.Summary)
+	}
+	if len(report.Sections) == 0 || report.Summary.TotalSections != len(report.Sections) || len(report.ExternalDependencies) == 0 {
+		t.Fatalf("coverage missing sections or external dependency disclosure: %+v", report)
+	}
+	if strings.Contains(rr.Body.String(), "C:/Users/") || strings.Contains(rr.Body.String(), "secret-viewer-token") {
+		t.Fatalf("goal coverage leaked local-sensitive content: %s", rr.Body.String())
+	}
+	assertETagRevalidates(t, srv.handleGoalCoverage, "http://127.0.0.1/api/goal-coverage", rr.Header().Get("ETag"))
+}
+
+func testSourceOptions() []SourceOption {
+	return []SourceOption{
+		{Source: "claude", Enabled: true, Paths: []string{"~/.claude/projects"}},
+		{Source: "codex", Enabled: true, Paths: []string{"~/.codex/sessions"}},
+		{Source: "openclaw", Enabled: true, Paths: []string{"~/.openclaw/sessions"}},
+		{Source: "opencode", Enabled: true, Paths: []string{"~/.opencode"}},
+		{Source: "kiro", Enabled: true, Paths: []string{"~/.local/share/kiro-cli/data.sqlite3"}},
+		{Source: "pi", Enabled: true, Paths: []string{"~/.pi/agent/sessions"}},
+	}
 }
 
 func TestContractVerificationEndpoint(t *testing.T) {
@@ -344,6 +383,7 @@ func TestControlPlaneEndpointETags(t *testing.T) {
 		handler func(http.ResponseWriter, *http.Request)
 	}{
 		{name: "integrations", url: "http://127.0.0.1/api/integrations", handler: srv.handleIntegrations},
+		{name: "goal-coverage", url: "http://127.0.0.1/api/goal-coverage", handler: srv.handleGoalCoverage},
 		{name: "contracts", url: "http://127.0.0.1/api/contracts", handler: srv.handleContracts},
 		{name: "contract-verification", url: "http://127.0.0.1/api/contracts/verify", handler: srv.handleContractVerification},
 		{name: "openapi", url: "http://127.0.0.1/api/openapi.json", handler: srv.handleOpenAPI},

@@ -70,6 +70,7 @@ CLI：
 ./agent-ledger discovery
 ./agent-ledger contracts
 ./agent-ledger contracts verify
+./agent-ledger goal coverage
 ./agent-ledger openapi
 ./agent-ledger integrations
 ./agent-ledger runtime
@@ -300,6 +301,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/discovery` | API 命名空间下的同一 discovery manifest |
 | `GET /api/contracts` | 单次握手的契约 bundle，包含稳定文档 URI、hash、缓存语义、CLI 命令和 MCP 入口 |
 | `GET /api/contracts/verify` | 机器可读控制面自检报告，校验 discovery、bundle、OpenAPI、schema、adapter、runtime 与隐私不变量 |
+| `GET /api/goal-coverage` | Agent Ledger 产品目标的逐项覆盖报告，包含实现证据、验证命令和外部依赖 |
 | `GET /api/openapi.json` | metadata-only OpenAPI 3.1 控制面契约，供 wrapper、router 与 CI 集成 |
 | `GET /api/runtime/status` | 运行模式、只读状态、后台/写操作状态与兼容性 hash |
 | `GET /api/config/status` | 隐私安全部署配置报告，包含风险检查与修复建议 |

@@ -68,6 +68,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/contracts/verify":               getOperation("contracts", "Verify control-plane contracts", "Machine-readable self-check for discovery, contract bundle, OpenAPI, schema, adapter, runtime, and privacy invariants.", "ContractVerificationReport"),
 			"/api/openapi.json":                   getOperation("contracts", "Get OpenAPI document", "OpenAPI 3.1 control-plane contract document.", "OpenAPI"),
 			"/api/integrations":                   getOperation("contracts", "Get integration catalog", "Privacy-safe integration capability catalog.", "CapabilityCatalog"),
+			"/api/goal-coverage":                  getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
 			"/api/runtime/status":                 getOperation("contracts", "Get runtime status", "Process-local observer/control-plane mode and compatibility hashes.", "RuntimeStatus"),
 			"/api/config/status":                  getOperation("contracts", "Get config status", "Privacy-safe deployment configuration status without paths, secrets, webhook URLs, prompt content, or session ids.", "ConfigStatusReport"),
 			"/api/readiness":                      getOperation("contracts", "Get readiness", "Privacy-safe control-plane readiness for wrappers, routers, CI, and deployment checks.", "ReadinessReport"),
@@ -281,6 +282,11 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"CapabilityCatalog":         capabilityCatalogSchema(),
 				"CapabilitySummary":         capabilitySummarySchema(),
 				"IntegrationCapability":     integrationCapabilitySchema(),
+				"GoalCoverageReport":        goalCoverageReportSchema(),
+				"GoalCoverageSummary":       goalCoverageSummarySchema(),
+				"GoalCoverageSection":       goalCoverageSectionSchema(),
+				"GoalCoverageEvidence":      goalCoverageEvidenceSchema(),
+				"GoalCoverageExternal":      goalCoverageExternalSchema(),
 				"RuntimeStatus":             runtimeStatusSchema(),
 				"ConfigStatusReport":        configStatusReportSchema(),
 				"ConfigBindStatus":          configBindStatusSchema(),
@@ -952,6 +958,7 @@ func OpenAPIContractPaths() []string {
 		"/api/workload-events/stream",
 		"/api/fleet-attribution",
 		"/api/integrations",
+		"/api/goal-coverage",
 		"/api/contracts",
 		"/api/contracts/verify",
 		"/api/openapi.json",
@@ -2033,6 +2040,112 @@ func integrationCapabilitySchema() map[string]interface{} {
 			"data_classes":           stringArraySchema(),
 			"limitations":            stringArraySchema(),
 			"next_milestones":        stringArraySchema(),
+		},
+	}
+}
+
+func goalCoverageReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe requirement-level coverage report for the Agent Ledger product goal.",
+		"additionalProperties": true,
+		"required":             []string{"product", "slug", "contract", "version", "status", "local_first", "prompt_content_stored", "usage_data_uploaded", "capability_catalog_hash", "openapi_hash", "contract_bundle_hash", "coverage_hash", "summary", "sections", "verification", "privacy"},
+		"properties": map[string]interface{}{
+			"product":                 stringSchema(),
+			"slug":                    stringSchema(),
+			"contract":                constSchema("agent-ledger.goal-coverage"),
+			"version":                 stringSchema(),
+			"status":                  stringSchema(),
+			"local_first":             boolSchema(),
+			"read_only":               boolSchema(),
+			"prompt_content_stored":   boolSchema(),
+			"usage_data_uploaded":     boolSchema(),
+			"privacy_default":         stringSchema(),
+			"capability_catalog_hash": refSchema("Hash"),
+			"openapi_hash":            refSchema("Hash"),
+			"contract_bundle_hash":    refSchema("Hash"),
+			"canonical_schema_hash":   refSchema("Hash"),
+			"adapter_spec_hash":       refSchema("Hash"),
+			"coverage_hash":           refSchema("Hash"),
+			"summary":                 refSchema("GoalCoverageSummary"),
+			"sections":                refArraySchema("GoalCoverageSection"),
+			"external_dependencies":   refArraySchema("GoalCoverageExternal"),
+			"verification":            stringArraySchema(),
+			"privacy":                 stringSchema(),
+		},
+	}
+}
+
+func goalCoverageSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Coverage counts by implementation status.",
+		"additionalProperties": true,
+		"required":             []string{"total_sections", "implemented", "experimental", "external_dependencies", "gaps", "completion_ratio", "next_action"},
+		"properties": map[string]interface{}{
+			"total_sections":        integerSchema(),
+			"implemented":           integerSchema(),
+			"experimental":          integerSchema(),
+			"external_dependencies": integerSchema(),
+			"gaps":                  integerSchema(),
+			"completion_ratio":      numberSchema(),
+			"next_action":           stringSchema(),
+		},
+	}
+}
+
+func goalCoverageSectionSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One Agent Ledger product goal coverage section.",
+		"additionalProperties": true,
+		"required":             []string{"id", "title", "category", "status", "maturity", "objective", "evidence", "privacy"},
+		"properties": map[string]interface{}{
+			"id":             stringSchema(),
+			"title":          stringSchema(),
+			"category":       stringSchema(),
+			"status":         stringSchema(),
+			"maturity":       stringSchema(),
+			"objective":      stringSchema(),
+			"capability_ids": stringArraySchema(),
+			"evidence":       refSchema("GoalCoverageEvidence"),
+			"privacy":        stringSchema(),
+			"limitations":    stringArraySchema(),
+			"remaining":      stringArraySchema(),
+		},
+	}
+}
+
+func goalCoverageEvidenceSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static implementation evidence for a coverage section.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"endpoints":     stringArraySchema(),
+			"commands":      stringArraySchema(),
+			"mcp_tools":     stringArraySchema(),
+			"mcp_resources": stringArraySchema(),
+			"capabilities":  stringArraySchema(),
+			"tables":        stringArraySchema(),
+			"tests":         stringArraySchema(),
+			"docs":          stringArraySchema(),
+		},
+	}
+}
+
+func goalCoverageExternalSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "External dependency that must not be claimed as local implementation.",
+		"additionalProperties": false,
+		"required":             []string{"id", "dependency", "reason", "local_status", "evidence"},
+		"properties": map[string]interface{}{
+			"id":           stringSchema(),
+			"dependency":   stringSchema(),
+			"reason":       stringSchema(),
+			"local_status": stringSchema(),
+			"evidence":     stringArraySchema(),
 		},
 	}
 }

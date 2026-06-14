@@ -317,6 +317,7 @@ func tools() []map[string]interface{} {
 		tool("ledger.discovery", "Return the local Agent Ledger discovery manifest with runtime, schema, adapter, and conformance entrypoints.", map[string]interface{}{}),
 		tool("ledger.contracts", "Return the Agent Ledger contract bundle with URI, hash, ETag, CLI, and MCP entrypoint metadata.", map[string]interface{}{}),
 		tool("ledger.contracts_verify", "Return the Agent Ledger control-plane contract self-check report for CI, wrappers, and routers.", map[string]interface{}{}),
+		tool("ledger.goal_coverage", "Return the Agent Ledger product goal coverage report with requirement-level evidence and remaining external dependencies.", map[string]interface{}{}),
 		tool("ledger.openapi", "Return the metadata-only OpenAPI 3.1 contract for stable Agent Ledger control-plane endpoints.", map[string]interface{}{}),
 		tool("ledger.runtime_status", "Return process-level runtime mode, read-only state, background task state, and write-operation status.", map[string]interface{}{}),
 		tool("ledger.config_status", "Return privacy-safe deployment configuration status without paths, secrets, webhook URLs, prompt content, or session ids.", map[string]interface{}{}),
@@ -666,6 +667,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://discovery/manifest", "Discovery Manifest", "Privacy-safe local discovery contract for wrappers, routers, and agent frameworks.", "application/json"),
 		resource("agent-ledger://contracts/bundle", "Contract Bundle", "Privacy-safe index of stable Agent Ledger contracts, hashes, cache semantics, CLI commands, and MCP entrypoints.", "application/json"),
 		resource("agent-ledger://contracts/verification", "Contract Verification", "Machine-readable self-check for stable Agent Ledger control-plane contracts.", "application/json"),
+		resource("agent-ledger://goal/coverage", "Goal Coverage", "Privacy-safe Agent Ledger product goal coverage report with implementation evidence and external dependencies.", "application/json"),
 		resource("agent-ledger://contracts/openapi", "Control Plane OpenAPI", "Metadata-only OpenAPI 3.1 document for stable Agent Ledger REST control-plane endpoints.", "application/json"),
 		resource("agent-ledger://schema/canonical-events", "Canonical Event Schema", "Metadata-only event contract for workload, run, model-call, tool-call, artifact, evaluation, and policy events.", "application/json"),
 		resource("agent-ledger://schema/canonical-event-examples", "Canonical Event Examples", "Privacy-safe templates for all supported canonical event types.", "application/json"),
@@ -736,6 +738,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return integrations.ContractBundleFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
 	case "ledger.contracts_verify":
 		return integrations.ContractVerificationReportFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
+	case "ledger.goal_coverage":
+		return integrations.GoalCoverageReportFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
 	case "ledger.openapi":
 		return integrations.OpenAPISpecFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
 	case "ledger.runtime_status":
@@ -933,6 +937,8 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 		return integrations.ContractBundleFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
 	case "agent-ledger://contracts/verification":
 		return integrations.ContractVerificationReportFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
+	case "agent-ledger://goal/coverage":
+		return integrations.GoalCoverageReportFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
 	case "agent-ledger://contracts/openapi":
 		return integrations.OpenAPISpecFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
 	case "agent-ledger://schema/canonical-events":
