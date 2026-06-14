@@ -467,6 +467,52 @@ func TestMCPParameterizedResourceSubscriptionNotification(t *testing.T) {
 	}
 }
 
+func TestMCPQueueResourceSubscriptionIgnoresGeneratedAtNoise(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	srv := New(db, cfg)
+	srv.subscriptionInterval = time.Hour
+	uri := "agent-ledger://workloads/queue?source=codex"
+	first, err := srv.resourceCursor(uri)
+	if err != nil {
+		t.Fatalf("initial queue cursor: %v", err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	second, err := srv.resourceCursor(uri)
+	if err != nil {
+		t.Fatalf("second queue cursor: %v", err)
+	}
+	if first != second {
+		t.Fatalf("queue cursor changed without queue data change: first=%s second=%s", first, second)
+	}
+
+	var output bytes.Buffer
+	subscriptions := newSubscriptionState(srv, json.NewEncoder(&output))
+	defer subscriptions.stop()
+	if _, err := subscriptions.subscribe(uri); err != nil {
+		t.Fatalf("subscribe queue resource: %v", err)
+	}
+	subscriptions.pollOnce()
+	if strings.TrimSpace(output.String()) != "" {
+		t.Fatalf("queue subscription emitted without data change: %s", output.String())
+	}
+	if _, err := db.CreateWorkload("queue subscription workload", "codex", "agent-ledger", "zhenzhis/agent-ledger", "main", "", "infra", 0); err != nil {
+		t.Fatalf("create workload: %v", err)
+	}
+	subscriptions.pollOnce()
+	var notification map[string]interface{}
+	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &notification); err != nil {
+		t.Fatalf("decode queue notification: %v\n%s", err, output.String())
+	}
+	if notification["method"] != "notifications/resources/updated" {
+		t.Fatalf("unexpected queue notification: %#v", notification)
+	}
+	params := notification["params"].(map[string]interface{})
+	if params["uri"] != uri || !strings.HasPrefix(params["cursor"].(string), "sha256:") {
+		t.Fatalf("unexpected queue notification params: %#v", params)
+	}
+}
+
 func TestMCPUnknownResourceReturnsError(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()

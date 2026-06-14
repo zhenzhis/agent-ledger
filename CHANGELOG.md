@@ -16,6 +16,7 @@
 - MCP resource `agent-ledger://workloads/queue` for read-only queue stats in agent context windows and router discovery flows.
 - Control-plane readiness now includes privacy-safe workload queue claimability and lease pressure buckets for router and deployment probes.
 - Capability catalog readiness metadata now declares workload queue claimability and lease pressure data classes for integration discovery.
+- MCP resource subscription cursors now ignore volatile `generated_at` fields, preventing queue/readiness subscriptions from emitting no-op router wakeups.
 - Short-lived workload leases with `workload_leases`, `POST /api/workloads/lease`, `POST /api/workloads/lease/renew`, `POST /api/workloads/lease/release`, `GET /api/workloads/leases`, `agent-ledger workload lease`, and MCP `ledger.acquire_workload_lease` / `ledger.renew_workload_lease` / `ledger.release_workload_lease` / `ledger.workload_leases`; plaintext lease tokens are returned only on acquire and stored as SHA-256 hashes.
 - Async run start, heartbeat, and liveness ledger with `agent_run_events`, run snapshot fields, `agent.run.heartbeat` canonical events, `POST /api/agent-runs`, `POST /api/agent-runs/heartbeat`, `GET /api/agent-runs/liveness`, `agent-ledger workload start-run|heartbeat|liveness`, and MCP `ledger.start_run` / `ledger.heartbeat_run` / `ledger.run_liveness`.
 - Workload event feeds now include stable content cursors, `generated_at`, HTTP `ETag` / `304 Not Modified` support, and SSE `id` values so local routers and monitors can consume state changes incrementally.

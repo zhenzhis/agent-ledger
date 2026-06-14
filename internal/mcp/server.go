@@ -1130,12 +1130,43 @@ func (s *Server) resourceCursor(uri string) (string, error) {
 	if feed, ok := payload.(*storage.WorkloadEventFeed); ok {
 		return feed.Cursor, nil
 	}
-	raw, err := json.Marshal(payload)
+	stablePayload, err := stableResourceCursorPayload(payload)
+	if err != nil {
+		return "", err
+	}
+	raw, err := json.Marshal(stablePayload)
 	if err != nil {
 		return "", err
 	}
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func stableResourceCursorPayload(payload interface{}) (interface{}, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	var stable interface{}
+	if err := json.Unmarshal(raw, &stable); err != nil {
+		return nil, err
+	}
+	stripVolatileResourceFields(stable)
+	return stable, nil
+}
+
+func stripVolatileResourceFields(value interface{}) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		delete(v, "generated_at")
+		for _, child := range v {
+			stripVolatileResourceFields(child)
+		}
+	case []interface{}:
+		for _, child := range v {
+			stripVolatileResourceFields(child)
+		}
+	}
 }
 
 func getPrompt(name string, args map[string]string) (interface{}, error) {
