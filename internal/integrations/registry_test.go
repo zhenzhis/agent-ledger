@@ -1440,9 +1440,12 @@ func TestOpenAPIEcosystemIngestSchemasExposeTelemetryFields(t *testing.T) {
 	expectOneOfRefs("A2ATaskRequest", "#/components/schemas/A2ATask", "#/components/schemas/A2ATaskEnvelope")
 	expectFields("A2AStatus", "state", "timestamp")
 	expectFields("A2AArtifact", "artifact_id", "artifactId", "id", "name", "description", "parts", "metadata")
-	expectFields("A2ATask", "id", "taskId", "task_id", "contextId", "context_id", "kind", "status", "artifact", "artifacts", "metadata")
+	expectFields("A2AEvidenceRef", "id", "evidence_id", "context_ref_id", "ref_id", "ref_type", "type", "kind", "ref_hash", "sha256", "hash", "label", "name", "title", "repo", "repository", "git_branch", "branch", "commit_sha", "commit", "privacy_label", "privacy", "confidence")
+	expectFields("A2ATask", "id", "taskId", "task_id", "contextId", "context_id", "parentTaskId", "parent_task_id", "delegatedByTaskId", "delegated_by_task_id", "parentWorkloadId", "parent_workload_id", "kind", "status", "artifact", "artifacts", "evidence_refs", "evidenceReferences", "metadata")
 	expectRef("A2ATask", "status", "#/components/schemas/A2AStatus")
 	expectArrayRef("A2ATask", "artifacts", "#/components/schemas/A2AArtifact")
+	expectArrayRef("A2ATask", "evidence_refs", "#/components/schemas/A2AEvidenceRef")
+	expectArrayRef("A2ATask", "evidenceReferences", "#/components/schemas/A2AEvidenceRef")
 	expectFields("A2ATaskEnvelope", "task", "result", "tasks", "events")
 	expectArrayRef("A2ATaskEnvelope", "tasks", "#/components/schemas/A2ATask")
 

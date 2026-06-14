@@ -1,0 +1,32 @@
+{
+  "id": "task-delegated-fixture-001",
+  "contextId": "ctx-delegated-fixture-001",
+  "parentTaskId": "task-parent-fixture-001",
+  "kind": "task",
+  "status": {
+    "state": "working",
+    "timestamp": "2026-06-07T12:10:00Z"
+  },
+  "metadata": {
+    "agent_ledger.goal": "Validate delegated A2A fixture",
+    "agent_ledger.parent_goal": "Validate parent A2A workload",
+    "agent_ledger.project": "agent-ledger",
+    "agent_ledger.agent_name": "remote-fixture-agent",
+    "agent_ledger.source": "a2a-delegated-fixture",
+    "agent_ledger.source_version": "a2a-fixture@v1",
+    "agent_ledger.parser_version": "agent-ledger-a2a@v1",
+    "agent_ledger.raw_ref": "a2a:task-delegated-fixture-001",
+    "agent_ledger.evidence_refs": [
+      {
+        "id": "evidence-fixture-001",
+        "ref_type": "evidence_bundle",
+        "ref_hash": "sha256:evidencefixturehash",
+        "label": "delegation evidence",
+        "repo": "zhenzhis/agent-ledger",
+        "git_branch": "main",
+        "commit_sha": "abc123",
+        "privacy_label": "team-share"
+      }
+    ]
+  }
+}

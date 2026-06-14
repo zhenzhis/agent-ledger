@@ -111,6 +111,7 @@ func TestAdapterFixtureFilesPassStrictConformance(t *testing.T) {
 		{"otel", "otel-openinference-span.json"},
 		{"otel", "otlp-resource-spans.json"},
 		{"a2a", "a2a-task.json"},
+		{"a2a", "a2a-delegated-task.json"},
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.file, func(t *testing.T) {

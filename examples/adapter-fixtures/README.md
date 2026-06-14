@@ -17,6 +17,7 @@ agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fi
 agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otel-openinference-span.json
 agent-ledger adapter conformance --kind otel --strict --file examples/adapter-fixtures/otlp-resource-spans.json
 agent-ledger adapter conformance --kind a2a --strict --file examples/adapter-fixtures/a2a-task.json
+agent-ledger adapter conformance --kind a2a --strict --file examples/adapter-fixtures/a2a-delegated-task.json
 ```
 
 These examples intentionally contain metadata, counters, hashes, lifecycle fields, and placeholder stream deltas only. Do not add prompt, response, message, transcript, or raw artifact content to fixtures.

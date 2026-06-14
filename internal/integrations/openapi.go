@@ -666,6 +666,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"OTLPTraceRequest":                  otlpTraceRequestSchema(),
 				"A2AStatus":                         a2aStatusSchema(),
 				"A2AArtifact":                       a2aArtifactSchema(),
+				"A2AEvidenceRef":                    a2aEvidenceRefSchema(),
 				"A2ATask":                           a2aTaskSchema(),
 				"A2ATaskEnvelope":                   a2aTaskEnvelopeSchema(),
 				"A2ATaskRequest":                    a2aTaskRequestSchema(),
@@ -2804,22 +2805,62 @@ func a2aArtifactSchema() map[string]interface{} {
 	}
 }
 
+func a2aEvidenceRefSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe evidence reference for delegated A2A tasks. Raw evidence bodies, URLs, and message content are ignored by conversion.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"id":             stringSchema(),
+			"evidence_id":    stringSchema(),
+			"context_ref_id": stringSchema(),
+			"ref_id":         stringSchema(),
+			"ref_type":       stringSchema(),
+			"type":           stringSchema(),
+			"kind":           stringSchema(),
+			"ref_hash":       stringSchema(),
+			"sha256":         stringSchema(),
+			"hash":           stringSchema(),
+			"label":          stringSchema(),
+			"name":           stringSchema(),
+			"title":          stringSchema(),
+			"repo":           stringSchema(),
+			"repository":     stringSchema(),
+			"git_branch":     stringSchema(),
+			"branch":         stringSchema(),
+			"commit_sha":     stringSchema(),
+			"commit":         stringSchema(),
+			"privacy_label":  stringSchema(),
+			"privacy":        stringSchema(),
+			"confidence":     numberSchema(),
+		},
+	}
+}
+
 func a2aTaskSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":                 "object",
 		"description":          "A2A task snapshot/event accepted as metadata-only telemetry.",
 		"additionalProperties": true,
 		"properties": map[string]interface{}{
-			"id":         stringSchema(),
-			"taskId":     stringSchema(),
-			"task_id":    stringSchema(),
-			"contextId":  stringSchema(),
-			"context_id": stringSchema(),
-			"kind":       stringSchema(),
-			"status":     refSchema("A2AStatus"),
-			"artifact":   refSchema("A2AArtifact"),
-			"artifacts":  refArraySchema("A2AArtifact"),
-			"metadata":   looseObjectSchema("A2A metadata. Message history and artifact parts are ignored by conversion."),
+			"id":                   stringSchema(),
+			"taskId":               stringSchema(),
+			"task_id":              stringSchema(),
+			"contextId":            stringSchema(),
+			"context_id":           stringSchema(),
+			"parentTaskId":         stringSchema(),
+			"parent_task_id":       stringSchema(),
+			"delegatedByTaskId":    stringSchema(),
+			"delegated_by_task_id": stringSchema(),
+			"parentWorkloadId":     stringSchema(),
+			"parent_workload_id":   stringSchema(),
+			"kind":                 stringSchema(),
+			"status":               refSchema("A2AStatus"),
+			"artifact":             refSchema("A2AArtifact"),
+			"artifacts":            refArraySchema("A2AArtifact"),
+			"evidence_refs":        refArraySchema("A2AEvidenceRef"),
+			"evidenceReferences":   refArraySchema("A2AEvidenceRef"),
+			"metadata":             looseObjectSchema("A2A metadata. Message history and artifact parts are ignored by conversion. Metadata may include agent_ledger.parent_* and agent_ledger.evidence_refs."),
 		},
 	}
 }
