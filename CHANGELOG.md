@@ -20,6 +20,7 @@
 - Stable `ETag` revalidation and OpenAPI coverage for workload detail, graph, timeline, and terminal-state read endpoints.
 - OpenAPI/contract coverage for workload close/link and agent run heartbeat write endpoints.
 - MCP resources `agent-ledger://workload/state` and `agent-ledger://workload/timeline` for privacy-safe single-workload monitor context.
+- OpenAPI/contract coverage for OpenTelemetry GenAI, OTLP HTTP traces, A2A task telemetry, provider usage envelopes, and optional provider gateway endpoints.
 - Control-plane readiness now includes privacy-safe workload queue claimability and lease pressure buckets for router and deployment probes.
 - Capability catalog readiness metadata now declares workload queue claimability and lease pressure data classes for integration discovery.
 - MCP resource subscription cursors now ignore volatile `generated_at` fields, preventing queue/readiness subscriptions from emitting no-op router wakeups.

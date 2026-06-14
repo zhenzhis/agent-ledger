@@ -28,6 +28,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			{"name": "adapter-conformance", "description": "Adapter contract and dry-run fixture validation"},
 			{"name": "workload-control", "description": "Retry-safe workload and agent-run control-plane writes"},
 			{"name": "workload-feed", "description": "Cursor-stable workload state feed for local monitors and routers"},
+			{"name": "ecosystem-ingest", "description": "Metadata-only telemetry and provider usage ingestion for agent frameworks and observability protocols"},
+			{"name": "provider-gateway", "description": "Optional local provider proxy surfaces that meter usage without persisting prompt or response content"},
 		},
 		"x-agent-ledger": map[string]interface{}{
 			"contract":                "agent-ledger.control-plane-openapi",
@@ -44,40 +46,48 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"adapter_spec_hash":       AdapterContractFingerprint(),
 		},
 		"paths": map[string]interface{}{
-			"/.well-known/agent-ledger.json": getOperation("contracts", "Get discovery manifest", "Privacy-safe local discovery manifest.", "DiscoveryManifest"),
-			"/api/discovery":                 getOperation("contracts", "Get discovery manifest", "Same discovery manifest under the API namespace.", "DiscoveryManifest"),
-			"/api/contracts":                 getOperation("contracts", "Get contract bundle", "One-shot contract index with document hashes, revalidation semantics, CLI commands, and MCP entrypoints.", "ContractBundle"),
-			"/api/contracts/verify":          getOperation("contracts", "Verify control-plane contracts", "Machine-readable self-check for discovery, contract bundle, OpenAPI, schema, adapter, runtime, and privacy invariants.", "ContractVerificationReport"),
-			"/api/openapi.json":              getOperation("contracts", "Get OpenAPI document", "OpenAPI 3.1 control-plane contract document.", "OpenAPI"),
-			"/api/integrations":              getOperation("contracts", "Get integration catalog", "Privacy-safe integration capability catalog.", "CapabilityCatalog"),
-			"/api/runtime/status":            getOperation("contracts", "Get runtime status", "Process-local observer/control-plane mode and compatibility hashes.", "RuntimeStatus"),
-			"/api/config/status":             getOperation("contracts", "Get config status", "Privacy-safe deployment configuration status without paths, secrets, webhook URLs, prompt content, or session ids.", "ConfigStatusReport"),
-			"/api/readiness":                 getOperation("contracts", "Get readiness", "Privacy-safe control-plane readiness for wrappers, routers, CI, and deployment checks.", "ReadinessReport"),
-			"/api/admission/check":           getOperation("contracts", "Check operation admission", "Privacy-safe dry-run for HTTP, CLI, and MCP operation access in the current runtime.", "AdmissionDecision"),
-			"/api/event-schema":              getOperation("canonical-events", "Get canonical event schema", "Metadata-only canonical event contract and supported event types.", "CanonicalEventSchema"),
-			"/api/event-examples":            eventExamplesOperation(),
-			"/api/events/validate":           canonicalEventPostOperation("canonical-events", "Validate canonical events", "Validate one or more canonical events without writing SQLite.", false),
-			"/api/events":                    canonicalEventPostOperation("canonical-events", "Ingest canonical events", "Ingest one or more metadata-only canonical events.", true),
-			"/api/integrations/adapter-spec": getOperation("adapter-conformance", "Get adapter contract", "Machine-readable adapter contract for privacy-safe integrations.", "AdapterContract"),
-			"/api/integrations/conformance":  adapterConformanceOperation(),
-			"/api/workloads":                 workloadsOperation(),
-			"/api/workloads/close":           workloadCloseOperation(),
-			"/api/workloads/link":            workloadLinkOperation(),
-			"/api/workloads/claim-next":      workloadClaimNextOperation(),
-			"/api/workloads/queue":           workloadQueueOperation(),
-			"/api/workloads/lease":           workloadLeaseAcquireOperation(),
-			"/api/workloads/lease/renew":     workloadLeaseRenewOperation(),
-			"/api/workloads/lease/release":   workloadLeaseReleaseOperation(),
-			"/api/workloads/leases":          workloadLeasesOperation(),
-			"/api/agent-runs":                agentRunsOperation(),
-			"/api/agent-runs/heartbeat":      agentRunHeartbeatOperation(),
-			"/api/agent-runs/liveness":       agentRunLivenessOperation(),
-			"/api/workload-detail":           workloadDetailOperation(),
-			"/api/workload-graph":            workloadGraphOperation(),
-			"/api/workload-timeline":         workloadTimelineOperation(),
-			"/api/workload-state":            workloadStateOperation(),
-			"/api/workload-events":           workloadEventsOperation(false),
-			"/api/workload-events/stream":    workloadEventsOperation(true),
+			"/.well-known/agent-ledger.json":      getOperation("contracts", "Get discovery manifest", "Privacy-safe local discovery manifest.", "DiscoveryManifest"),
+			"/api/discovery":                      getOperation("contracts", "Get discovery manifest", "Same discovery manifest under the API namespace.", "DiscoveryManifest"),
+			"/api/contracts":                      getOperation("contracts", "Get contract bundle", "One-shot contract index with document hashes, revalidation semantics, CLI commands, and MCP entrypoints.", "ContractBundle"),
+			"/api/contracts/verify":               getOperation("contracts", "Verify control-plane contracts", "Machine-readable self-check for discovery, contract bundle, OpenAPI, schema, adapter, runtime, and privacy invariants.", "ContractVerificationReport"),
+			"/api/openapi.json":                   getOperation("contracts", "Get OpenAPI document", "OpenAPI 3.1 control-plane contract document.", "OpenAPI"),
+			"/api/integrations":                   getOperation("contracts", "Get integration catalog", "Privacy-safe integration capability catalog.", "CapabilityCatalog"),
+			"/api/runtime/status":                 getOperation("contracts", "Get runtime status", "Process-local observer/control-plane mode and compatibility hashes.", "RuntimeStatus"),
+			"/api/config/status":                  getOperation("contracts", "Get config status", "Privacy-safe deployment configuration status without paths, secrets, webhook URLs, prompt content, or session ids.", "ConfigStatusReport"),
+			"/api/readiness":                      getOperation("contracts", "Get readiness", "Privacy-safe control-plane readiness for wrappers, routers, CI, and deployment checks.", "ReadinessReport"),
+			"/api/admission/check":                getOperation("contracts", "Check operation admission", "Privacy-safe dry-run for HTTP, CLI, and MCP operation access in the current runtime.", "AdmissionDecision"),
+			"/api/event-schema":                   getOperation("canonical-events", "Get canonical event schema", "Metadata-only canonical event contract and supported event types.", "CanonicalEventSchema"),
+			"/api/event-examples":                 eventExamplesOperation(),
+			"/api/events/validate":                canonicalEventPostOperation("canonical-events", "Validate canonical events", "Validate one or more canonical events without writing SQLite.", false),
+			"/api/events":                         canonicalEventPostOperation("canonical-events", "Ingest canonical events", "Ingest one or more metadata-only canonical events.", true),
+			"/api/integrations/adapter-spec":      getOperation("adapter-conformance", "Get adapter contract", "Machine-readable adapter contract for privacy-safe integrations.", "AdapterContract"),
+			"/api/integrations/conformance":       adapterConformanceOperation(),
+			"/api/workloads":                      workloadsOperation(),
+			"/api/workloads/close":                workloadCloseOperation(),
+			"/api/workloads/link":                 workloadLinkOperation(),
+			"/api/workloads/claim-next":           workloadClaimNextOperation(),
+			"/api/workloads/queue":                workloadQueueOperation(),
+			"/api/workloads/lease":                workloadLeaseAcquireOperation(),
+			"/api/workloads/lease/renew":          workloadLeaseRenewOperation(),
+			"/api/workloads/lease/release":        workloadLeaseReleaseOperation(),
+			"/api/workloads/leases":               workloadLeasesOperation(),
+			"/api/agent-runs":                     agentRunsOperation(),
+			"/api/agent-runs/heartbeat":           agentRunHeartbeatOperation(),
+			"/api/agent-runs/liveness":            agentRunLivenessOperation(),
+			"/api/workload-detail":                workloadDetailOperation(),
+			"/api/workload-graph":                 workloadGraphOperation(),
+			"/api/workload-timeline":              workloadTimelineOperation(),
+			"/api/workload-state":                 workloadStateOperation(),
+			"/api/workload-events":                workloadEventsOperation(false),
+			"/api/workload-events/stream":         workloadEventsOperation(true),
+			"/api/otel/genai":                     ecosystemIngestOperation("Ingest OpenTelemetry GenAI spans", "Convert OpenTelemetry GenAI JSON spans into metadata-only canonical events.", "OTelGenAIRequest", "EcosystemIngestResponse", false),
+			"/api/otlp/v1/traces":                 otlpTracesOperation(),
+			"/v1/traces":                          otlpTracesOperation(),
+			"/api/a2a/tasks":                      ecosystemIngestOperation("Ingest A2A task telemetry", "Convert A2A JSON task snapshots/events into workload, run, artifact, evaluation, and policy metadata events.", "A2ATaskRequest", "EcosystemIngestResponse", false),
+			"/api/provider/calls":                 ecosystemIngestOperation("Ingest provider usage envelopes", "Convert OpenAI-compatible, Anthropic-style, and LiteLLM-style usage envelopes into metadata-only model.call events.", "ProviderUsageRequest", "EcosystemIngestResponse", false),
+			"/gateway/openai/v1/chat/completions": gatewayOperation("Proxy OpenAI-compatible chat completions", "Optional local OpenAI-compatible Chat Completions JSON/SSE proxy. Prompt content is forwarded in memory only; the ledger persists usage metadata only."),
+			"/gateway/openai/v1/responses":        gatewayOperation("Proxy OpenAI Responses", "Optional local OpenAI Responses JSON/SSE proxy. Prompt content is forwarded in memory only; the ledger persists usage metadata only."),
+			"/gateway/anthropic/v1/messages":      gatewayOperation("Proxy Anthropic Messages", "Optional local Anthropic Messages JSON/SSE proxy. Prompt content is forwarded in memory only; the ledger persists usage metadata only."),
 		},
 		"components": map[string]interface{}{
 			"schemas": map[string]interface{}{
@@ -435,6 +445,13 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"WorkloadTimelineResponse":  looseObjectSchema("Chronological metadata-only workload audit timeline."),
 				"WorkloadState":             looseObjectSchema("Derived terminal-state snapshot for one async agent workload."),
 				"WorkloadEventFeed":         looseObjectSchema("Cursor-stable workload state feed."),
+				"OTelGenAIRequest":          looseObjectSchema("OpenTelemetry GenAI JSON span export or span array. Prompt and completion message attributes are ignored by conversion."),
+				"OTLPTraceRequest":          looseObjectSchema("OTLP HTTP JSON/protobuf trace batch. Protobuf requests use application/x-protobuf or application/protobuf."),
+				"A2ATaskRequest":            looseObjectSchema("A2A task snapshot/event payload. Message history, message parts, and artifact parts are excluded from persistence."),
+				"ProviderUsageRequest":      looseObjectSchema("OpenAI-compatible, Anthropic-style, or LiteLLM-style usage envelope without request/response message content."),
+				"EcosystemIngestResponse":   looseObjectSchema("Metadata-only ingest result with accepted row counts and canonical event projection results."),
+				"GatewayRequest":            looseObjectSchema("Provider-compatible request body. Prompt content is proxied in memory only and not persisted by Agent Ledger."),
+				"GatewayResponse":           looseObjectSchema("Provider-compatible upstream response or SSE stream with Agent Ledger metering headers."),
 				"Error": map[string]interface{}{
 					"type":       "object",
 					"properties": map[string]interface{}{"error": stringSchema()},
@@ -866,6 +883,98 @@ func workloadEventsOperation(stream bool) map[string]interface{} {
 		}
 	}
 	return map[string]interface{}{"get": method}
+}
+
+func ecosystemIngestOperation(summary, description, requestSchema, responseSchema string, disabledByDefault bool) map[string]interface{} {
+	meta := map[string]interface{}{
+		"writes_local_state": true,
+		"read_only_safe":     false,
+		"prompt_content":     false,
+		"max_body_bytes":     4 << 20,
+	}
+	if disabledByDefault {
+		meta["disabled_by_default"] = true
+	}
+	return map[string]interface{}{
+		"post": map[string]interface{}{
+			"tags":           []string{"ecosystem-ingest"},
+			"summary":        summary,
+			"description":    description,
+			"x-agent-ledger": meta,
+			"requestBody": map[string]interface{}{
+				"required": true,
+				"content": map[string]interface{}{
+					"application/json": map[string]interface{}{"schema": refSchema(requestSchema)},
+				},
+			},
+			"responses": map[string]interface{}{
+				"200": jsonResponse(responseSchema),
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+			},
+		},
+	}
+}
+
+func otlpTracesOperation() map[string]interface{} {
+	op := ecosystemIngestOperation(
+		"Ingest OTLP traces",
+		"Optional local OTLP HTTP JSON/protobuf trace receiver. Disabled by default and restricted to localhost or authenticated operators.",
+		"OTLPTraceRequest",
+		"EcosystemIngestResponse",
+		true,
+	)
+	post := op["post"].(map[string]interface{})
+	post["requestBody"] = map[string]interface{}{
+		"required": true,
+		"content": map[string]interface{}{
+			"application/json":       map[string]interface{}{"schema": refSchema("OTLPTraceRequest")},
+			"application/x-protobuf": map[string]interface{}{"schema": stringSchema()},
+			"application/protobuf":   map[string]interface{}{"schema": stringSchema()},
+		},
+	}
+	post["responses"].(map[string]interface{})["404"] = jsonResponse("Error")
+	post["responses"].(map[string]interface{})["413"] = jsonResponse("Error")
+	return op
+}
+
+func gatewayOperation(summary, description string) map[string]interface{} {
+	return map[string]interface{}{
+		"post": map[string]interface{}{
+			"tags":        []string{"provider-gateway"},
+			"summary":     summary,
+			"description": description,
+			"x-agent-ledger": map[string]interface{}{
+				"writes_local_state":                 true,
+				"read_only_safe":                     false,
+				"prompt_content":                     false,
+				"prompt_content_forwarded_in_memory": true,
+				"disabled_by_default":                true,
+				"upstream_api_keys":                  "read from environment variables; not persisted",
+				"usage_metadata_persisted":           true,
+				"response_content_persisted":         false,
+			},
+			"requestBody": map[string]interface{}{
+				"required": true,
+				"content": map[string]interface{}{
+					"application/json": map[string]interface{}{"schema": refSchema("GatewayRequest")},
+				},
+			},
+			"responses": map[string]interface{}{
+				"200": map[string]interface{}{
+					"description": "Provider-compatible JSON response or SSE stream.",
+					"content": map[string]interface{}{
+						"application/json":  map[string]interface{}{"schema": refSchema("GatewayResponse")},
+						"text/event-stream": map[string]interface{}{"schema": stringSchema()},
+					},
+				},
+				"400": jsonResponse("Error"),
+				"403": jsonResponse("Error"),
+				"404": jsonResponse("Error"),
+				"415": jsonResponse("Error"),
+			},
+		},
+	}
 }
 
 func jsonResponse(schema interface{}) map[string]interface{} {
