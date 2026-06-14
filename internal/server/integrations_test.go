@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -122,6 +125,42 @@ func TestOpenAPIEndpoint(t *testing.T) {
 		}
 	}
 	assertETagRevalidates(t, srv.handleOpenAPI, "http://127.0.0.1/api/openapi.json", rr.Header().Get("ETag"))
+}
+
+func TestOpenAPIContractPathsMatchRegisteredRoutes(t *testing.T) {
+	raw, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatalf("read server.go: %v", err)
+	}
+	registered := map[string]bool{}
+	matches := regexp.MustCompile(`mux\.HandleFunc\("([^"]+)"`).FindAllStringSubmatch(string(raw), -1)
+	for _, match := range matches {
+		registered[match[1]] = true
+	}
+	if len(registered) == 0 {
+		t.Fatal("no registered routes found in server.go")
+	}
+	contracted := map[string]bool{}
+	for _, path := range integrations.OpenAPIContractPaths() {
+		contracted[path] = true
+	}
+	var missing []string
+	for path := range registered {
+		if !contracted[path] {
+			missing = append(missing, path)
+		}
+	}
+	var stale []string
+	for path := range contracted {
+		if !registered[path] {
+			stale = append(stale, path)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(stale)
+	if len(missing) > 0 || len(stale) > 0 {
+		t.Fatalf("OpenAPI route drift: missing=%v stale=%v", missing, stale)
+	}
 }
 
 func TestConfigStatusEndpointIsPrivacySafe(t *testing.T) {
