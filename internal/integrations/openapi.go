@@ -440,7 +440,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"ok":          boolSchema(),
 						"empty":       boolSchema(),
 						"workload_id": stringSchema(),
-						"workload":    looseObjectSchema("Claimed workload summary."),
+						"workload":    refSchema("WorkloadSummary"),
 						"lease":       refSchema("WorkloadLease"),
 					},
 				},
@@ -510,13 +510,27 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"timestamp": stringSchema(),
 					},
 				},
-				"AgentRunHeartbeatResponse":        looseObjectSchema("Recorded metadata-only agent run heartbeat."),
-				"AgentRunLivenessResponse":         looseObjectSchema("Active async agent run liveness rows with privacy filters applied by the server."),
-				"WorkloadDetail":                   looseObjectSchema("Full workload ledger detail with privacy filters applied by the server."),
-				"WorkloadGraph":                    looseObjectSchema("Compact workload dependency and activity graph."),
-				"WorkloadTimelineResponse":         looseObjectSchema("Chronological metadata-only workload audit timeline."),
-				"WorkloadState":                    looseObjectSchema("Derived terminal-state snapshot for one async agent workload."),
-				"WorkloadEventFeed":                looseObjectSchema("Cursor-stable workload state feed."),
+				"WorkloadPage":                     workloadPageSchema(),
+				"AgentRunRow":                      agentRunRowSchema(),
+				"AgentRunEventRow":                 agentRunEventRowSchema(),
+				"AgentRunHeartbeatResponse":        agentRunHeartbeatResponseSchema(),
+				"AgentRunLivenessRow":              agentRunLivenessRowSchema(),
+				"AgentRunLivenessResponse":         agentRunLivenessResponseSchema(),
+				"ModelCallDetail":                  modelCallDetailSchema(),
+				"ToolCallRow":                      toolCallRowSchema(),
+				"ContextRefRow":                    contextRefRowSchema(),
+				"ArtifactRow":                      artifactRowSchema(),
+				"EvaluationRow":                    evaluationRowSchema(),
+				"WorkloadLinkRow":                  workloadLinkRowSchema(),
+				"WorkloadDetail":                   workloadDetailSchema(),
+				"GraphNode":                        graphNodeSchema(),
+				"GraphEdge":                        graphEdgeSchema(),
+				"WorkloadGraph":                    workloadGraphSchema(),
+				"WorkloadTimelineRow":              workloadTimelineRowSchema(),
+				"WorkloadTimelineResponse":         workloadTimelineResponseSchema(),
+				"WorkloadState":                    workloadStateSchema(),
+				"WorkloadFeedEvent":                workloadFeedEventSchema(),
+				"WorkloadEventFeed":                workloadEventFeedSchema(),
 				"DashboardStats":                   dashboardStatsSchema(),
 				"DashboardConsistencyIssue":        dashboardConsistencyIssueSchema(),
 				"CostByModel":                      costByModelSchema(),
@@ -1290,7 +1304,7 @@ func workloadsOperation() map[string]interface{} {
 				queryParam("cursor", "Cursor alias for offset."),
 			},
 			"responses": map[string]interface{}{
-				"200": jsonResponse(looseObjectSchema("Paginated workload rows.")),
+				"200": jsonResponse("WorkloadPage"),
 				"304": map[string]interface{}{"description": "Not modified when If-None-Match matches the current workload page ETag."},
 				"400": jsonResponse("Error"),
 			},
@@ -2755,6 +2769,476 @@ func workloadSummarySchema() map[string]interface{} {
 			"tokens":        integerSchema(),
 			"cost_usd":      numberSchema(),
 			"last_activity": stringSchema(),
+		},
+	}
+}
+
+func workloadPageSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Server-side paginated workload ledger page for dashboards, wrappers, and routers.",
+		"additionalProperties": true,
+		"required":             []string{"rows", "total", "limit", "offset"},
+		"properties": map[string]interface{}{
+			"rows":        map[string]interface{}{"type": "array", "items": refSchema("WorkloadSummary")},
+			"total":       integerSchema(),
+			"limit":       integerSchema(),
+			"offset":      integerSchema(),
+			"next_cursor": stringSchema(),
+		},
+	}
+}
+
+func agentRunRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One agent execution attached to a workload. Privacy filters may redact command, cwd, and status message.",
+		"additionalProperties": true,
+		"required": []string{
+			"run_id", "workload_id", "parent_run_id", "source", "agent_name", "agent_version", "command", "cwd", "status", "exit_code", "error", "started_at", "ended_at", "duration_ms", "last_heartbeat_at", "heartbeat_count", "phase", "progress", "status_message", "confidence",
+		},
+		"properties": map[string]interface{}{
+			"run_id":            stringSchema(),
+			"workload_id":       stringSchema(),
+			"parent_run_id":     stringSchema(),
+			"source":            stringSchema(),
+			"agent_name":        stringSchema(),
+			"agent_version":     stringSchema(),
+			"command":           stringSchema(),
+			"cwd":               stringSchema(),
+			"status":            stringSchema(),
+			"exit_code":         integerSchema(),
+			"error":             stringSchema(),
+			"started_at":        stringSchema(),
+			"ended_at":          stringSchema(),
+			"duration_ms":       integerSchema(),
+			"last_heartbeat_at": stringSchema(),
+			"heartbeat_count":   integerSchema(),
+			"phase":             stringSchema(),
+			"progress":          numberSchema(),
+			"status_message":    stringSchema(),
+			"confidence":        numberSchema(),
+		},
+	}
+}
+
+func agentRunEventRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Append-only metadata event for async agent run state.",
+		"additionalProperties": true,
+		"required":             []string{"event_id", "run_id", "workload_id", "source", "event_type", "status", "phase", "progress", "message", "metrics", "timestamp", "confidence"},
+		"properties": map[string]interface{}{
+			"event_id":    stringSchema(),
+			"run_id":      stringSchema(),
+			"workload_id": stringSchema(),
+			"source":      stringSchema(),
+			"event_type":  stringSchema(),
+			"status":      stringSchema(),
+			"phase":       stringSchema(),
+			"progress":    numberSchema(),
+			"message":     stringSchema(),
+			"metrics":     stringSchema(),
+			"timestamp":   stringSchema(),
+			"confidence":  numberSchema(),
+		},
+	}
+}
+
+func agentRunHeartbeatResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Recorded metadata-only agent run heartbeat.",
+		"additionalProperties": true,
+		"required":             []string{"ok", "heartbeat"},
+		"properties": map[string]interface{}{
+			"ok":        boolSchema(),
+			"heartbeat": refSchema("AgentRunEventRow"),
+		},
+	}
+}
+
+func agentRunLivenessRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Active async run liveness row with stale heartbeat state.",
+		"additionalProperties": true,
+		"required": []string{
+			"run_id", "workload_id", "goal", "source", "agent_name", "status", "project", "repo", "git_branch", "phase", "progress", "started_at", "last_heartbeat_at", "last_activity", "heartbeat_count", "status_message", "age_seconds", "stale",
+		},
+		"properties": map[string]interface{}{
+			"run_id":            stringSchema(),
+			"workload_id":       stringSchema(),
+			"goal":              stringSchema(),
+			"source":            stringSchema(),
+			"agent_name":        stringSchema(),
+			"status":            stringSchema(),
+			"project":           stringSchema(),
+			"repo":              stringSchema(),
+			"git_branch":        stringSchema(),
+			"phase":             stringSchema(),
+			"progress":          numberSchema(),
+			"started_at":        stringSchema(),
+			"last_heartbeat_at": stringSchema(),
+			"last_activity":     stringSchema(),
+			"heartbeat_count":   integerSchema(),
+			"status_message":    stringSchema(),
+			"age_seconds":       integerSchema(),
+			"stale":             boolSchema(),
+		},
+	}
+}
+
+func agentRunLivenessResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Active async agent run liveness rows with privacy filters applied by the server.",
+		"additionalProperties": true,
+		"required":             []string{"rows", "max_age", "stale_only"},
+		"properties": map[string]interface{}{
+			"rows":       map[string]interface{}{"type": "array", "items": refSchema("AgentRunLivenessRow")},
+			"max_age":    stringSchema(),
+			"stale_only": boolSchema(),
+		},
+	}
+}
+
+func modelCallDetailSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Canonical model call summary by source/model/session for one workload.",
+		"additionalProperties": true,
+		"required": []string{
+			"source", "session_id", "provider", "model", "calls", "input_tokens", "output_tokens", "cache_read", "cache_create", "reasoning", "tokens", "cost_usd", "pricing_source", "pricing_confidence", "first_at", "last_at", "confidence",
+		},
+		"properties": map[string]interface{}{
+			"call_id":            stringSchema(),
+			"run_id":             stringSchema(),
+			"source":             stringSchema(),
+			"session_id":         stringSchema(),
+			"provider":           stringSchema(),
+			"model":              stringSchema(),
+			"calls":              integerSchema(),
+			"input_tokens":       integerSchema(),
+			"output_tokens":      integerSchema(),
+			"cache_read":         integerSchema(),
+			"cache_create":       integerSchema(),
+			"reasoning":          integerSchema(),
+			"tokens":             integerSchema(),
+			"cost_usd":           numberSchema(),
+			"pricing_source":     stringSchema(),
+			"pricing_confidence": stringSchema(),
+			"first_at":           stringSchema(),
+			"last_at":            stringSchema(),
+			"confidence":         numberSchema(),
+		},
+	}
+}
+
+func toolCallRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Canonical tool call metadata row.",
+		"additionalProperties": true,
+		"required":             []string{"tool_call_id", "workload_id", "run_id", "source", "tool_name", "tool_type", "status", "error_class", "duration_ms", "timestamp", "confidence"},
+		"properties": map[string]interface{}{
+			"tool_call_id": stringSchema(),
+			"workload_id":  stringSchema(),
+			"run_id":       stringSchema(),
+			"source":       stringSchema(),
+			"tool_name":    stringSchema(),
+			"tool_type":    stringSchema(),
+			"status":       stringSchema(),
+			"error_class":  stringSchema(),
+			"duration_ms":  integerSchema(),
+			"timestamp":    stringSchema(),
+			"confidence":   numberSchema(),
+		},
+	}
+}
+
+func contextRefRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe context reference attached to a workload.",
+		"additionalProperties": true,
+		"required":             []string{"context_ref_id", "workload_id", "run_id", "ref_type", "ref_hash", "label", "repo", "git_branch", "commit_sha", "privacy_label", "created_at", "confidence"},
+		"properties": map[string]interface{}{
+			"context_ref_id": stringSchema(),
+			"workload_id":    stringSchema(),
+			"run_id":         stringSchema(),
+			"ref_type":       stringSchema(),
+			"ref_hash":       stringSchema(),
+			"label":          stringSchema(),
+			"repo":           stringSchema(),
+			"git_branch":     stringSchema(),
+			"commit_sha":     stringSchema(),
+			"privacy_label":  stringSchema(),
+			"created_at":     stringSchema(),
+			"confidence":     numberSchema(),
+		},
+	}
+}
+
+func artifactRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-safe workload artifact reference.",
+		"additionalProperties": true,
+		"required":             []string{"artifact_id", "workload_id", "run_id", "artifact_type", "label", "path_hash", "sha256", "metadata", "created_at", "confidence"},
+		"properties": map[string]interface{}{
+			"artifact_id":   stringSchema(),
+			"workload_id":   stringSchema(),
+			"run_id":        stringSchema(),
+			"artifact_type": stringSchema(),
+			"label":         stringSchema(),
+			"path_hash":     stringSchema(),
+			"sha256":        stringSchema(),
+			"metadata":      stringSchema(),
+			"created_at":    stringSchema(),
+			"confidence":    numberSchema(),
+		},
+	}
+}
+
+func evaluationRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Outcome and quality signal for a workload.",
+		"additionalProperties": true,
+		"required":             []string{"evaluation_id", "workload_id", "evaluator", "status", "score", "signal", "notes", "created_at"},
+		"properties": map[string]interface{}{
+			"evaluation_id": stringSchema(),
+			"workload_id":   stringSchema(),
+			"evaluator":     stringSchema(),
+			"status":        stringSchema(),
+			"score":         numberSchema(),
+			"signal":        stringSchema(),
+			"notes":         stringSchema(),
+			"created_at":    stringSchema(),
+		},
+	}
+}
+
+func workloadLinkRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Metadata-only dependency or lineage edge between workloads.",
+		"additionalProperties": true,
+		"required":             []string{"link_id", "source_workload_id", "target_workload_id", "relation", "reason", "created_by", "created_at", "confidence"},
+		"properties": map[string]interface{}{
+			"link_id":            stringSchema(),
+			"source_workload_id": stringSchema(),
+			"target_workload_id": stringSchema(),
+			"relation":           stringSchema(),
+			"reason":             stringSchema(),
+			"created_by":         stringSchema(),
+			"created_at":         stringSchema(),
+			"confidence":         numberSchema(),
+		},
+	}
+}
+
+func workloadDetailSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Full workload ledger detail with privacy filters applied by the server.",
+		"additionalProperties": true,
+		"required":             []string{"summary", "runs", "run_events", "model_calls", "tool_calls", "context_refs", "artifacts", "evaluations", "policy_decisions", "links", "sessions"},
+		"properties": map[string]interface{}{
+			"summary":          refSchema("WorkloadSummary"),
+			"runs":             map[string]interface{}{"type": "array", "items": refSchema("AgentRunRow")},
+			"run_events":       map[string]interface{}{"type": "array", "items": refSchema("AgentRunEventRow")},
+			"model_calls":      map[string]interface{}{"type": "array", "items": refSchema("ModelCallDetail")},
+			"tool_calls":       map[string]interface{}{"type": "array", "items": refSchema("ToolCallRow")},
+			"context_refs":     map[string]interface{}{"type": "array", "items": refSchema("ContextRefRow")},
+			"artifacts":        map[string]interface{}{"type": "array", "items": refSchema("ArtifactRow")},
+			"evaluations":      map[string]interface{}{"type": "array", "items": refSchema("EvaluationRow")},
+			"policy_decisions": map[string]interface{}{"type": "array", "items": refSchema("PolicyDecisionRow")},
+			"links":            map[string]interface{}{"type": "array", "items": refSchema("WorkloadLinkRow")},
+			"sessions":         map[string]interface{}{"type": "array", "items": refSchema("SessionInfo")},
+		},
+	}
+}
+
+func graphNodeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Workload graph node.",
+		"additionalProperties": true,
+		"required":             []string{"id", "kind", "label"},
+		"properties": map[string]interface{}{
+			"id":    stringSchema(),
+			"kind":  stringSchema(),
+			"label": stringSchema(),
+			"meta":  map[string]interface{}{"type": "object", "additionalProperties": stringSchema()},
+		},
+	}
+}
+
+func graphEdgeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Workload graph edge.",
+		"additionalProperties": true,
+		"required":             []string{"from", "to", "label"},
+		"properties": map[string]interface{}{
+			"from":  stringSchema(),
+			"to":    stringSchema(),
+			"label": stringSchema(),
+		},
+	}
+}
+
+func workloadGraphSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Compact workload dependency and activity graph.",
+		"additionalProperties": true,
+		"required":             []string{"nodes", "edges"},
+		"properties": map[string]interface{}{
+			"nodes": map[string]interface{}{"type": "array", "items": refSchema("GraphNode")},
+			"edges": map[string]interface{}{"type": "array", "items": refSchema("GraphEdge")},
+		},
+	}
+}
+
+func workloadTimelineRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Chronological metadata-only workload audit timeline row.",
+		"additionalProperties": true,
+		"required":             []string{"kind", "id", "label", "timestamp"},
+		"properties": map[string]interface{}{
+			"kind":        stringSchema(),
+			"id":          stringSchema(),
+			"run_id":      stringSchema(),
+			"source":      stringSchema(),
+			"label":       stringSchema(),
+			"status":      stringSchema(),
+			"detail":      stringSchema(),
+			"tokens":      integerSchema(),
+			"cost_usd":    numberSchema(),
+			"duration_ms": integerSchema(),
+			"timestamp":   stringSchema(),
+			"confidence":  numberSchema(),
+		},
+	}
+}
+
+func workloadTimelineResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Chronological metadata-only workload audit timeline.",
+		"additionalProperties": true,
+		"required":             []string{"workload_id", "rows"},
+		"properties": map[string]interface{}{
+			"workload_id": stringSchema(),
+			"rows":        map[string]interface{}{"type": "array", "items": refSchema("WorkloadTimelineRow")},
+		},
+	}
+}
+
+func workloadStateSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Derived terminal-state snapshot for one async agent workload.",
+		"additionalProperties": true,
+		"required": []string{
+			"workload_id", "goal", "status", "source", "phase", "terminal", "stale", "readiness_score", "progress", "next_action", "reasons", "risks", "project", "repo", "git_branch", "team", "last_activity", "stale_after_seconds", "runs", "active_runs", "stale_runs", "completed_runs", "failed_runs", "model_calls", "tool_calls", "context_refs", "artifacts", "evaluations", "positive_evaluations", "negative_evaluations", "policy_blocks", "policy_approvals_required", "budget_usd", "cost_usd", "tokens", "estimated_remaining_budget", "estimated_budget_exhausted",
+		},
+		"properties": map[string]interface{}{
+			"workload_id":                stringSchema(),
+			"goal":                       stringSchema(),
+			"status":                     stringSchema(),
+			"source":                     stringSchema(),
+			"phase":                      stringSchema(),
+			"terminal":                   boolSchema(),
+			"stale":                      boolSchema(),
+			"readiness_score":            numberSchema(),
+			"progress":                   numberSchema(),
+			"next_action":                stringSchema(),
+			"reasons":                    stringArraySchema(),
+			"risks":                      stringArraySchema(),
+			"project":                    stringSchema(),
+			"repo":                       stringSchema(),
+			"git_branch":                 stringSchema(),
+			"team":                       stringSchema(),
+			"last_activity":              stringSchema(),
+			"stale_after_seconds":        integerSchema(),
+			"runs":                       integerSchema(),
+			"active_runs":                integerSchema(),
+			"stale_runs":                 integerSchema(),
+			"completed_runs":             integerSchema(),
+			"failed_runs":                integerSchema(),
+			"model_calls":                integerSchema(),
+			"tool_calls":                 integerSchema(),
+			"context_refs":               integerSchema(),
+			"artifacts":                  integerSchema(),
+			"evaluations":                integerSchema(),
+			"positive_evaluations":       integerSchema(),
+			"negative_evaluations":       integerSchema(),
+			"policy_blocks":              integerSchema(),
+			"policy_approvals_required":  integerSchema(),
+			"budget_usd":                 numberSchema(),
+			"cost_usd":                   numberSchema(),
+			"tokens":                     integerSchema(),
+			"estimated_remaining_budget": numberSchema(),
+			"estimated_budget_exhausted": boolSchema(),
+		},
+	}
+}
+
+func workloadFeedEventSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Metadata-only derived event for monitoring agent workloads.",
+		"additionalProperties": true,
+		"required": []string{
+			"event_id", "event_type", "workload_id", "goal", "source", "project", "repo", "git_branch", "team", "phase", "severity", "message", "next_action", "timestamp", "terminal", "stale", "readiness_score", "progress", "tokens", "cost_usd", "reasons", "risks",
+		},
+		"properties": map[string]interface{}{
+			"event_id":        stringSchema(),
+			"event_type":      stringSchema(),
+			"workload_id":     stringSchema(),
+			"goal":            stringSchema(),
+			"source":          stringSchema(),
+			"project":         stringSchema(),
+			"repo":            stringSchema(),
+			"git_branch":      stringSchema(),
+			"team":            stringSchema(),
+			"phase":           stringSchema(),
+			"severity":        stringSchema(),
+			"message":         stringSchema(),
+			"next_action":     stringSchema(),
+			"timestamp":       stringSchema(),
+			"terminal":        boolSchema(),
+			"stale":           boolSchema(),
+			"readiness_score": numberSchema(),
+			"progress":        numberSchema(),
+			"tokens":          integerSchema(),
+			"cost_usd":        numberSchema(),
+			"reasons":         stringArraySchema(),
+			"risks":           stringArraySchema(),
+		},
+	}
+}
+
+func workloadEventFeedSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Cursor-stable workload state feed for local monitors and agent routers.",
+		"additionalProperties": true,
+		"required":             []string{"rows", "total", "limit", "generated_at", "cursor", "from", "to", "stale_after_seconds"},
+		"properties": map[string]interface{}{
+			"rows":                map[string]interface{}{"type": "array", "items": refSchema("WorkloadFeedEvent")},
+			"total":               integerSchema(),
+			"limit":               integerSchema(),
+			"generated_at":        stringSchema(),
+			"cursor":              stringSchema(),
+			"from":                stringSchema(),
+			"to":                  stringSchema(),
+			"stale_after_seconds": integerSchema(),
 		},
 	}
 }

@@ -946,6 +946,126 @@ func TestOpenAPIPolicyGovernanceSchemasExposeControlFields(t *testing.T) {
 	expectFields("ApprovalRouteRow", "route_key", "approver", "escalation_target", "pending", "overdue", "due_soon", "approval_votes", "rejection_votes", "max_required_approvals", "due_next", "sources", "models", "projects", "actions")
 }
 
+func TestOpenAPIWorkloadLedgerSchemasExposeRunAndFeedFields(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	schemas := spec["components"].(map[string]interface{})["schemas"].(map[string]interface{})
+	paths := spec["paths"].(map[string]interface{})
+
+	schema := func(name string) map[string]interface{} {
+		t.Helper()
+		raw, ok := schemas[name].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing: %#v", name, schemas[name])
+		}
+		return raw
+	}
+	props := func(name string) map[string]interface{} {
+		t.Helper()
+		raw := schema(name)
+		properties, ok := raw["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing properties: %#v", name, raw)
+		}
+		return properties
+	}
+	expectFields := func(name string, fields ...string) map[string]interface{} {
+		t.Helper()
+		properties := props(name)
+		for _, field := range fields {
+			if properties[field] == nil {
+				t.Fatalf("%s schema missing field %q: %#v", name, field, properties)
+			}
+		}
+		return properties
+	}
+	expectArrayPropertyRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		arraySchema, ok := properties[field].(map[string]interface{})
+		if !ok || arraySchema["type"] != "array" {
+			t.Fatalf("%s.%s should be an array: %#v", name, field, properties[field])
+		}
+		items, ok := arraySchema["items"].(map[string]interface{})
+		if !ok || items["$ref"] != ref {
+			t.Fatalf("%s.%s items should reference %s: %#v", name, field, ref, arraySchema["items"])
+		}
+	}
+	expectRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		fieldSchema, ok := properties[field].(map[string]interface{})
+		if !ok || fieldSchema["$ref"] != ref {
+			t.Fatalf("%s.%s should reference %s: %#v", name, field, ref, properties[field])
+		}
+	}
+	expectType := func(name, field, kind string) {
+		t.Helper()
+		properties := props(name)
+		fieldSchema, ok := properties[field].(map[string]interface{})
+		if !ok || fieldSchema["type"] != kind {
+			t.Fatalf("%s.%s should be %s: %#v", name, field, kind, properties[field])
+		}
+	}
+
+	workloadsGet := paths["/api/workloads"].(map[string]interface{})["get"].(map[string]interface{})
+	workloadsSchema := workloadsGet["responses"].(map[string]interface{})["200"].(map[string]interface{})["content"].(map[string]interface{})["application/json"].(map[string]interface{})["schema"].(map[string]interface{})
+	if workloadsSchema["$ref"] != "#/components/schemas/WorkloadPage" {
+		t.Fatalf("/api/workloads should return WorkloadPage: %#v", workloadsSchema)
+	}
+	expectFields("WorkloadPage", "rows", "total", "limit", "offset", "next_cursor")
+	expectArrayPropertyRef("WorkloadPage", "rows", "#/components/schemas/WorkloadSummary")
+
+	expectFields("AgentRunHeartbeatResponse", "ok", "heartbeat")
+	expectRef("AgentRunHeartbeatResponse", "heartbeat", "#/components/schemas/AgentRunEventRow")
+	expectFields("AgentRunEventRow", "event_id", "run_id", "workload_id", "source", "event_type", "status", "phase", "progress", "message", "metrics", "timestamp", "confidence")
+	expectType("AgentRunEventRow", "progress", "number")
+
+	expectFields("AgentRunLivenessResponse", "rows", "max_age", "stale_only")
+	expectArrayPropertyRef("AgentRunLivenessResponse", "rows", "#/components/schemas/AgentRunLivenessRow")
+	expectFields("AgentRunLivenessRow", "run_id", "workload_id", "goal", "source", "agent_name", "status", "project", "repo", "git_branch", "phase", "progress", "started_at", "last_heartbeat_at", "last_activity", "heartbeat_count", "status_message", "age_seconds", "stale")
+	expectType("AgentRunLivenessRow", "stale", "boolean")
+
+	expectFields("WorkloadDetail", "summary", "runs", "run_events", "model_calls", "tool_calls", "context_refs", "artifacts", "evaluations", "policy_decisions", "links", "sessions")
+	expectRef("WorkloadDetail", "summary", "#/components/schemas/WorkloadSummary")
+	expectArrayPropertyRef("WorkloadDetail", "runs", "#/components/schemas/AgentRunRow")
+	expectArrayPropertyRef("WorkloadDetail", "run_events", "#/components/schemas/AgentRunEventRow")
+	expectArrayPropertyRef("WorkloadDetail", "model_calls", "#/components/schemas/ModelCallDetail")
+	expectArrayPropertyRef("WorkloadDetail", "tool_calls", "#/components/schemas/ToolCallRow")
+	expectArrayPropertyRef("WorkloadDetail", "context_refs", "#/components/schemas/ContextRefRow")
+	expectArrayPropertyRef("WorkloadDetail", "artifacts", "#/components/schemas/ArtifactRow")
+	expectArrayPropertyRef("WorkloadDetail", "evaluations", "#/components/schemas/EvaluationRow")
+	expectArrayPropertyRef("WorkloadDetail", "policy_decisions", "#/components/schemas/PolicyDecisionRow")
+	expectArrayPropertyRef("WorkloadDetail", "links", "#/components/schemas/WorkloadLinkRow")
+	expectArrayPropertyRef("WorkloadDetail", "sessions", "#/components/schemas/SessionInfo")
+
+	expectFields("AgentRunRow", "run_id", "workload_id", "source", "agent_name", "command", "cwd", "status", "duration_ms", "last_heartbeat_at", "heartbeat_count", "phase", "progress", "status_message", "confidence")
+	expectFields("ModelCallDetail", "source", "session_id", "provider", "model", "calls", "input_tokens", "output_tokens", "cache_read", "cache_create", "reasoning", "tokens", "cost_usd", "pricing_source", "pricing_confidence", "first_at", "last_at", "confidence")
+	expectFields("ToolCallRow", "tool_call_id", "workload_id", "run_id", "source", "tool_name", "tool_type", "status", "error_class", "duration_ms", "timestamp", "confidence")
+	expectFields("ContextRefRow", "context_ref_id", "workload_id", "run_id", "ref_type", "ref_hash", "label", "repo", "git_branch", "commit_sha", "privacy_label", "created_at", "confidence")
+	expectFields("ArtifactRow", "artifact_id", "workload_id", "run_id", "artifact_type", "label", "path_hash", "sha256", "metadata", "created_at", "confidence")
+	expectFields("EvaluationRow", "evaluation_id", "workload_id", "evaluator", "status", "score", "signal", "notes", "created_at")
+	expectFields("WorkloadLinkRow", "link_id", "source_workload_id", "target_workload_id", "relation", "reason", "created_by", "created_at", "confidence")
+
+	expectFields("WorkloadGraph", "nodes", "edges")
+	expectArrayPropertyRef("WorkloadGraph", "nodes", "#/components/schemas/GraphNode")
+	expectArrayPropertyRef("WorkloadGraph", "edges", "#/components/schemas/GraphEdge")
+	expectFields("GraphNode", "id", "kind", "label", "meta")
+	expectFields("GraphEdge", "from", "to", "label")
+
+	expectFields("WorkloadTimelineResponse", "workload_id", "rows")
+	expectArrayPropertyRef("WorkloadTimelineResponse", "rows", "#/components/schemas/WorkloadTimelineRow")
+	expectFields("WorkloadTimelineRow", "kind", "id", "run_id", "source", "label", "status", "detail", "tokens", "cost_usd", "duration_ms", "timestamp", "confidence")
+
+	expectFields("WorkloadState", "workload_id", "goal", "status", "source", "phase", "terminal", "stale", "readiness_score", "progress", "next_action", "reasons", "risks", "project", "repo", "git_branch", "team", "last_activity", "stale_after_seconds", "runs", "active_runs", "stale_runs", "completed_runs", "failed_runs", "model_calls", "tool_calls", "context_refs", "artifacts", "evaluations", "positive_evaluations", "negative_evaluations", "policy_blocks", "policy_approvals_required", "budget_usd", "cost_usd", "tokens", "estimated_remaining_budget", "estimated_budget_exhausted")
+	expectType("WorkloadState", "terminal", "boolean")
+	expectType("WorkloadState", "readiness_score", "number")
+
+	expectFields("WorkloadEventFeed", "rows", "total", "limit", "generated_at", "cursor", "from", "to", "stale_after_seconds")
+	expectArrayPropertyRef("WorkloadEventFeed", "rows", "#/components/schemas/WorkloadFeedEvent")
+	expectFields("WorkloadFeedEvent", "event_id", "event_type", "workload_id", "goal", "source", "project", "repo", "git_branch", "team", "phase", "severity", "message", "next_action", "timestamp", "terminal", "stale", "readiness_score", "progress", "tokens", "cost_usd", "reasons", "risks")
+	expectType("WorkloadFeedEvent", "terminal", "boolean")
+}
+
 func TestOpenAPIRequestBodyOperationsAdvertiseBodyLimits(t *testing.T) {
 	spec := OpenAPISpecFor(Options{}, nil)
 	paths := spec["paths"].(map[string]interface{})
