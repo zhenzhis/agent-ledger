@@ -821,6 +821,34 @@ func TestOpenAPIEnterpriseReportSchemasExposeLedgerFields(t *testing.T) {
 			}
 		}
 	}
+	expectOneOfArrayOrRef := func(name string, refs ...string) {
+		t.Helper()
+		raw := schema(name)
+		oneOf, ok := raw["oneOf"].([]map[string]interface{})
+		if !ok {
+			t.Fatalf("%s should expose oneOf variants: %#v", name, raw)
+		}
+		for _, ref := range refs {
+			found := false
+			for _, variant := range oneOf {
+				if variant["$ref"] == ref {
+					found = true
+					break
+				}
+				if variant["type"] != "array" {
+					continue
+				}
+				items, _ := variant["items"].(map[string]interface{})
+				if items["$ref"] == ref {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("%s oneOf missing %s: %#v", name, ref, oneOf)
+			}
+		}
+	}
 	expectPathResponseRef := func(path, method, ref string) {
 		t.Helper()
 		paths := spec["paths"].(map[string]interface{})
@@ -901,6 +929,18 @@ func TestOpenAPIEnterpriseReportSchemasExposeLedgerFields(t *testing.T) {
 	expectFields("PreflightEstimateValues", "cost_usd", "tokens", "calls", "prompts", "duration_minutes")
 	expectArrayRef("ChargebackRows", "#/components/schemas/ChargebackRow")
 	expectFields("ChargebackRow", "team", "project", "source", "model", "calls", "sessions", "tokens", "cost_usd", "avg_tokens_per_call", "cost_per_call", "unpriced_calls", "mapping_source", "data_source", "confidence")
+
+	expectPathResponseRef("/api/export", "get", "#/components/schemas/ExportJSONResponse")
+	expectOneOfArrayOrRef("ExportJSONResponse",
+		"#/components/schemas/WorkloadSummary",
+		"#/components/schemas/SessionInfo",
+		"#/components/schemas/TokenTimeSeriesPoint",
+		"#/components/schemas/CostByModel",
+		"#/components/schemas/ModelCallRow",
+		"#/components/schemas/ChargebackRow",
+		"#/components/schemas/AuditEvent",
+		"#/components/schemas/DataQualityReport",
+	)
 
 	expectPathResponseRef("/api/fleet-attribution", "get", "#/components/schemas/FleetAttributionReport")
 	expectFields("FleetAttributionReport", "generated_at", "from", "to", "runs", "sub_agent_runs", "max_concurrent_runs", "model_calls", "tokens", "cost_usd", "rows")

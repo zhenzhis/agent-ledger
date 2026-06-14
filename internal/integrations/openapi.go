@@ -570,6 +570,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"SessionReplay":                     sessionReplaySchema(),
 				"FleetAttributionRow":               fleetAttributionRowSchema(),
 				"FleetAttributionReport":            fleetAttributionReportSchema(),
+				"ExportJSONResponse":                exportJSONResponseSchema(),
 				"IngestionPathStatus":               ingestionPathStatusSchema(),
 				"IngestionHealth":                   ingestionHealthSchema(),
 				"IngestionHealthRows":               ingestionHealthRowsSchema(),
@@ -1227,7 +1228,7 @@ func exportOperation() map[string]interface{} {
 				"200": map[string]interface{}{
 					"description": "CSV or JSON export attachment.",
 					"content": map[string]interface{}{
-						"application/json": map[string]interface{}{"schema": looseObjectSchema("JSON export payload.")},
+						"application/json": map[string]interface{}{"schema": refSchema("ExportJSONResponse")},
 						"text/csv":         map[string]interface{}{"schema": stringSchema()},
 					},
 				},
@@ -2979,6 +2980,22 @@ func gatewayResponseSchema() map[string]interface{} {
 				"type":  "array",
 				"items": looseObjectSchema("Upstream output object. Output content is not persisted by Agent Ledger."),
 			},
+		},
+	}
+}
+
+func exportJSONResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"description": "JSON export payload. The concrete shape depends on the type query parameter.",
+		"oneOf": []map[string]interface{}{
+			refArraySchema("WorkloadSummary"),
+			refArraySchema("SessionInfo"),
+			refArraySchema("TokenTimeSeriesPoint"),
+			refArraySchema("CostByModel"),
+			refArraySchema("ModelCallRow"),
+			refArraySchema("ChargebackRow"),
+			refArraySchema("AuditEvent"),
+			refSchema("DataQualityReport"),
 		},
 	}
 }
