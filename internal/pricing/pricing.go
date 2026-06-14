@@ -229,27 +229,32 @@ func officialPriceRows() []storage.PricingAuditRow {
 		}
 	}
 	var rows []storage.PricingAuditRow
-	for _, model := range []string{"claude-opus-4.8", "claude-opus-4.7", "claude-opus-4.6", "claude-opus-4.5"} {
-		rows = append(rows, row(model, "anthropic-official", 5, 25, 0.50, 6.25))
+	add := func(models []string, source string, input, output, cacheRead, cacheWrite float64) {
+		for _, model := range models {
+			rows = append(rows, row(model, source, input, output, cacheRead, cacheWrite))
+		}
 	}
-	for _, model := range []string{"claude-sonnet-4.6", "claude-sonnet-4.5", "claude-sonnet-4"} {
-		rows = append(rows, row(model, "anthropic-official", 3, 15, 0.30, 3.75))
-	}
-	for _, model := range []string{"claude-haiku-4.5"} {
-		rows = append(rows, row(model, "anthropic-official", 1, 5, 0.10, 1.25))
-	}
-	for _, model := range []string{"gpt-5", "gpt-5-codex"} {
-		rows = append(rows, row(model, "openai-official", 1.25, 10, 0.125, 0))
-	}
-	for _, model := range []string{"gpt-5-mini"} {
-		rows = append(rows, row(model, "openai-official", 0.25, 2, 0.025, 0))
-	}
-	for _, model := range []string{"gpt-5-nano"} {
-		rows = append(rows, row(model, "openai-official", 0.05, 0.40, 0.005, 0))
-	}
-	for _, model := range []string{"gpt-5.5"} {
-		rows = append(rows, row(model, "openai-official", 5, 30, 0.50, 0))
-	}
+	add([]string{"claude-fable-5", "claude-mythos-5"}, "anthropic-official", 10, 50, 1, 12.5)
+	add([]string{
+		"claude-opus-4.8", "claude-opus-4-8",
+		"claude-opus-4.7", "claude-opus-4-7",
+		"claude-opus-4.6", "claude-opus-4-6",
+		"claude-opus-4.5", "claude-opus-4-5",
+	}, "anthropic-official", 5, 25, 0.50, 6.25)
+	add([]string{"claude-opus-4.1", "claude-opus-4-1", "claude-opus-4"}, "anthropic-official", 15, 75, 1.50, 18.75)
+	add([]string{
+		"claude-sonnet-4.6", "claude-sonnet-4-6",
+		"claude-sonnet-4.5", "claude-sonnet-4-5",
+		"claude-sonnet-4", "claude-sonnet-4-20250514",
+	}, "anthropic-official", 3, 15, 0.30, 3.75)
+	add([]string{"claude-haiku-4.5", "claude-haiku-4-5"}, "anthropic-official", 1, 5, 0.10, 1.25)
+	add([]string{"claude-haiku-3.5", "claude-haiku-3-5"}, "anthropic-official", 0.80, 4, 0.08, 1)
+	add([]string{"gpt-5", "gpt-5-codex"}, "openai-official", 1.25, 10, 0.125, 0)
+	add([]string{"gpt-5-mini"}, "openai-official", 0.25, 2, 0.025, 0)
+	add([]string{"gpt-5-nano"}, "openai-official", 0.05, 0.40, 0.005, 0)
+	add([]string{"gpt-5.5", "gpt-5-5"}, "openai-official", 5, 30, 0.50, 0)
+	add([]string{"gpt-5.4", "gpt-5-4"}, "openai-official", 2, 15, 0.20, 0)
+	add([]string{"gpt-5.4-mini", "gpt-5-4-mini"}, "openai-official", 0.40, 2, 0.04, 0)
 	return rows
 }
 

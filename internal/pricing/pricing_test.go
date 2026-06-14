@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"errors"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -60,6 +61,59 @@ func TestCalcCost_ZeroPrices(t *testing.T) {
 	cost := CalcCost(1000, 500, 200, 300, prices)
 	if cost != 0 {
 		t.Errorf("expected 0, got %f", cost)
+	}
+}
+
+func TestOfficialSeedsCoverCurrentPrimaryModelsAndAliases(t *testing.T) {
+	rows := officialPriceRows()
+	byModel := map[string]storage.PricingAuditRow{}
+	for _, row := range rows {
+		if row.PricingSource == "" || row.MatchedModel != row.Model || row.MatchType != "official-seed" || row.Priority != 20 || row.Confidence != "official" {
+			t.Fatalf("official seed row missing governance metadata: %+v", row)
+		}
+		if _, exists := byModel[row.Model]; exists {
+			t.Fatalf("duplicate official seed row for %q", row.Model)
+		}
+		byModel[row.Model] = row
+	}
+	for _, tc := range []struct {
+		model      string
+		source     string
+		inputPerM  float64
+		outputPerM float64
+		readPerM   float64
+		writePerM  float64
+	}{
+		{model: "gpt-5.4", source: "openai-official", inputPerM: 2, outputPerM: 15, readPerM: 0.20},
+		{model: "gpt-5-4", source: "openai-official", inputPerM: 2, outputPerM: 15, readPerM: 0.20},
+		{model: "gpt-5.4-mini", source: "openai-official", inputPerM: 0.40, outputPerM: 2, readPerM: 0.04},
+		{model: "gpt-5.5", source: "openai-official", inputPerM: 5, outputPerM: 30, readPerM: 0.50},
+		{model: "claude-fable-5", source: "anthropic-official", inputPerM: 10, outputPerM: 50, readPerM: 1, writePerM: 12.5},
+		{model: "claude-mythos-5", source: "anthropic-official", inputPerM: 10, outputPerM: 50, readPerM: 1, writePerM: 12.5},
+		{model: "claude-opus-4.7", source: "anthropic-official", inputPerM: 5, outputPerM: 25, readPerM: 0.50, writePerM: 6.25},
+		{model: "claude-opus-4-7", source: "anthropic-official", inputPerM: 5, outputPerM: 25, readPerM: 0.50, writePerM: 6.25},
+		{model: "claude-sonnet-4-20250514", source: "anthropic-official", inputPerM: 3, outputPerM: 15, readPerM: 0.30, writePerM: 3.75},
+		{model: "claude-haiku-3-5", source: "anthropic-official", inputPerM: 0.80, outputPerM: 4, readPerM: 0.08, writePerM: 1},
+	} {
+		row, ok := byModel[tc.model]
+		if !ok {
+			t.Fatalf("official seed missing %q", tc.model)
+		}
+		if row.PricingSource != tc.source {
+			t.Fatalf("official seed %q source mismatch: %+v", tc.model, row)
+		}
+		assertPerMillionPrice(t, tc.model, "input", row.InputCostPerToken, tc.inputPerM)
+		assertPerMillionPrice(t, tc.model, "output", row.OutputCostPerToken, tc.outputPerM)
+		assertPerMillionPrice(t, tc.model, "cache read", row.CacheReadCostPerToken, tc.readPerM)
+		assertPerMillionPrice(t, tc.model, "cache write", row.CacheWriteCostPerToken, tc.writePerM)
+	}
+}
+
+func assertPerMillionPrice(t *testing.T, model, field string, gotPerToken, wantPerMillion float64) {
+	t.Helper()
+	want := wantPerMillion / 1_000_000
+	if math.Abs(gotPerToken-want) > 1e-12 {
+		t.Fatalf("%s %s price mismatch: got %.12f want %.12f", model, field, gotPerToken, want)
 	}
 }
 
