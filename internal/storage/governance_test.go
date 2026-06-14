@@ -954,6 +954,40 @@ func TestDashboardBundleCoreModulesAreConsistent(t *testing.T) {
 	}
 }
 
+func TestDashboardBundleUsesFreshDailyAggregate(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ts := time.Date(2026, 6, 6, 10, 0, 0, 0, time.UTC)
+	if err := db.InsertUsageBatch([]*UsageRecord{
+		{Source: "codex", SessionID: "s1", Model: "gpt-5", InputTokens: 100, OutputTokens: 40, CacheReadInputTokens: 10, CostUSD: 1.25, Timestamp: ts, Project: "p"},
+		{Source: "codex", SessionID: "s2", Model: "gpt-5-mini", InputTokens: 200, OutputTokens: 50, CacheCreationInputTokens: 20, CostUSD: 2.75, Timestamp: ts.Add(time.Hour), Project: "p"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RebuildUsageAggregates(); err != nil {
+		t.Fatal(err)
+	}
+	if !db.dailyUsageAggregateFresh(time.Date(2026, 6, 6, 0, 0, 0, 0, time.UTC), time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC), "codex", "", "p") {
+		t.Fatal("expected rebuilt daily aggregate to be fresh")
+	}
+	bundle, err := db.GetDashboardBundleFiltered(time.Date(2026, 6, 6, 0, 0, 0, 0, time.UTC), time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC), "1d", "codex", "", "p", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bundle.DataSource != "daily_usage_aggregate" {
+		t.Fatalf("expected dashboard bundle to use fresh aggregate, got %q", bundle.DataSource)
+	}
+	if bundle.Stats.TotalTokens != 420 || !near(bundle.Stats.TotalCost, 4, 0.000001) || bundle.Stats.TotalCalls != 2 {
+		t.Fatalf("unexpected aggregate-backed stats: %+v", bundle.Stats)
+	}
+	if len(bundle.CostOverTime) != 2 || len(bundle.TokensOverTime) != 1 || len(bundle.Consistency) != 0 {
+		t.Fatalf("unexpected aggregate-backed bundle modules: costs=%+v tokens=%+v consistency=%+v", bundle.CostOverTime, bundle.TokensOverTime, bundle.Consistency)
+	}
+}
+
 func TestDashboardBundleIgnoresStaleDailyAggregate(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "agent-ledger.db"))
 	if err != nil {
@@ -978,12 +1012,15 @@ func TestDashboardBundleIgnoresStaleDailyAggregate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.TotalTokens != 100 {
-		t.Fatalf("expected compatibility stats endpoint to use stale aggregate in this setup, got %+v", stats)
+	if stats.TotalTokens != 300 || !near(stats.TotalCost, 3, 0.000001) || stats.TotalCalls != 2 {
+		t.Fatalf("expected stats endpoint to reject stale aggregate and use raw usage, got %+v", stats)
 	}
-	bundle, err := db.GetDashboardBundleFiltered(time.Date(2026, 6, 6, 0, 0, 0, 0, time.UTC), time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC), "1h", "", "", "", 0)
+	bundle, err := db.GetDashboardBundleFiltered(time.Date(2026, 6, 6, 0, 0, 0, 0, time.UTC), time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC), "1d", "", "", "", 0)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if bundle.DataSource != "raw" {
+		t.Fatalf("expected stale aggregate bundle to fall back to raw, got %q", bundle.DataSource)
 	}
 	if bundle.Stats.TotalTokens != 300 || !near(bundle.Stats.TotalCost, 3, 0.000001) {
 		t.Fatalf("expected raw authoritative bundle stats, got %+v", bundle.Stats)

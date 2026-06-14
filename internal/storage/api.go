@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	usageAggregateRebuiltAtMeta          = "usage_aggregates_rebuilt_at"
+	usageAggregateSourceMaxTimestampMeta = "usage_aggregates_source_max_timestamp"
+)
+
 // sourceFilter returns a SQL clause and args for optional source filtering.
 func sourceFilter(source string) (string, []interface{}) {
 	if source == "" {
@@ -124,6 +129,7 @@ type DashboardBundle struct {
 	From           string                      `json:"from"`
 	To             string                      `json:"to"`
 	Granularity    string                      `json:"granularity"`
+	DataSource     string                      `json:"data_source"`
 	Source         string                      `json:"source,omitempty"`
 	Model          string                      `json:"model,omitempty"`
 	Project        string                      `json:"project,omitempty"`
@@ -198,10 +204,9 @@ func (d *DB) getDashboardStatsFiltered(from, to time.Time, source, model, projec
 	args := append([]interface{}{from, to}, fa...)
 	var cacheRead, totalInput int64
 	usedAggregate := false
-	if useAggregate && to.Sub(from) >= 24*time.Hour && isUTCDayAligned(from) && isUTCDayAligned(to) {
+	if useAggregate && dailyAggregateRangeEligible(from, to) && d.dailyUsageAggregateFresh(from, to, source, model, project) {
 		aggFilter, aggArgs := buildUsageFilter(source, model, project)
 		aggArgs = append([]interface{}{from.Format("2006-01-02"), to.Format("2006-01-02")}, aggArgs...)
-		var rowsSeen int
 		err := d.db.QueryRow(`SELECT COALESCE(SUM(cost_usd),0),
 			COALESCE(SUM(input_tokens+cache_read_input_tokens+cache_creation_input_tokens+output_tokens),0),
 			COALESCE(SUM(cache_read_input_tokens),0),
@@ -209,8 +214,7 @@ func (d *DB) getDashboardStatsFiltered(from, to time.Time, source, model, projec
 			COALESCE(SUM(calls),0)
 			FROM daily_usage_aggregate WHERE bucket >= ? AND bucket < ?`+aggFilter, aggArgs...).Scan(&s.TotalCost, &s.TotalTokens, &cacheRead, &totalInput, &s.TotalCalls)
 		if err == nil {
-			_ = d.db.QueryRow(`SELECT COUNT(*) FROM daily_usage_aggregate WHERE bucket >= ? AND bucket < ?`+aggFilter, aggArgs...).Scan(&rowsSeen)
-			usedAggregate = rowsSeen > 0
+			usedAggregate = true
 		}
 	}
 	if !usedAggregate {
@@ -233,6 +237,48 @@ func (d *DB) getDashboardStatsFiltered(from, to time.Time, source, model, projec
 	return s, nil
 }
 
+func dailyAggregateRangeEligible(from, to time.Time) bool {
+	return to.Sub(from) >= 24*time.Hour && isUTCDayAligned(from) && isUTCDayAligned(to)
+}
+
+func (d *DB) dailyUsageAggregateFresh(from, to time.Time, source, model, project string) bool {
+	if !dailyAggregateRangeEligible(from, to) {
+		return false
+	}
+	watermark, err := d.GetMeta(usageAggregateSourceMaxTimestampMeta)
+	if err != nil || strings.TrimSpace(watermark) == "" {
+		return false
+	}
+
+	filter, fa := buildUsageFilter(source, model, project)
+	rawArgs := append([]interface{}{from, to}, fa...)
+	var rawCount int64
+	var rawMax string
+	if err := d.db.QueryRow(`SELECT COUNT(*), COALESCE(MAX(timestamp),'') FROM usage_records WHERE timestamp >= ? AND timestamp < ?`+filter, rawArgs...).Scan(&rawCount, &rawMax); err != nil {
+		return false
+	}
+	if rawCount == 0 || strings.TrimSpace(rawMax) == "" {
+		return false
+	}
+
+	aggFilter, aggArgs := buildUsageFilter(source, model, project)
+	aggArgs = append([]interface{}{from.Format("2006-01-02"), to.Format("2006-01-02")}, aggArgs...)
+	var aggregateCalls int64
+	if err := d.db.QueryRow(`SELECT COALESCE(SUM(calls),0) FROM daily_usage_aggregate WHERE bucket >= ? AND bucket < ?`+aggFilter, aggArgs...).Scan(&aggregateCalls); err != nil {
+		return false
+	}
+	if aggregateCalls != rawCount {
+		return false
+	}
+
+	rawTime, rawOK := parseDBTime(rawMax)
+	watermarkTime, watermarkOK := parseDBTime(watermark)
+	if rawOK && watermarkOK {
+		return !rawTime.After(watermarkTime)
+	}
+	return rawMax <= watermark
+}
+
 func isUTCDayAligned(t time.Time) bool {
 	t = t.UTC()
 	return t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0
@@ -246,27 +292,49 @@ func (d *DB) GetDashboardBundleFiltered(from, to time.Time, granularity, source,
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	stats, err := d.getDashboardStatsFiltered(from, to, source, model, project, false)
+	useDailyAggregate := granularity == "1d" && tzOffset == 0 && model == "" && d.dailyUsageAggregateFresh(from, to, source, "", project)
+	stats, err := d.getDashboardStatsFiltered(from, to, source, model, project, useDailyAggregate)
 	if err != nil {
 		return nil, err
 	}
-	costByModel, err := d.GetCostByModelFiltered(from, to, source, project)
-	if err != nil {
-		return nil, err
-	}
-	costOverTime, err := d.GetCostOverTimeFiltered(from, to, granularity, source, model, project, tzOffset)
-	if err != nil {
-		return nil, err
-	}
-	tokensOverTime, err := d.GetTokensOverTimeFiltered(from, to, granularity, source, model, project, tzOffset)
-	if err != nil {
-		return nil, err
+	dataSource := "raw"
+	var costByModel []CostByModel
+	var costOverTime []TimeSeriesPoint
+	var tokensOverTime []TokenTimeSeriesPoint
+	if useDailyAggregate {
+		dataSource = "daily_usage_aggregate"
+		costByModel, err = d.getCostByModelFromDailyAggregate(from, to, source, project)
+		if err != nil {
+			return nil, err
+		}
+		costOverTime, err = d.getCostOverTimeFromDailyAggregate(from, to, source, "", project)
+		if err != nil {
+			return nil, err
+		}
+		tokensOverTime, err = d.getTokensOverTimeFromDailyAggregate(from, to, source, "", project)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		costByModel, err = d.GetCostByModelFiltered(from, to, source, project)
+		if err != nil {
+			return nil, err
+		}
+		costOverTime, err = d.GetCostOverTimeFiltered(from, to, granularity, source, model, project, tzOffset)
+		if err != nil {
+			return nil, err
+		}
+		tokensOverTime, err = d.GetTokensOverTimeFiltered(from, to, granularity, source, model, project, tzOffset)
+		if err != nil {
+			return nil, err
+		}
 	}
 	bundle := &DashboardBundle{
 		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
 		From:           from.Format(time.RFC3339),
 		To:             to.Format(time.RFC3339),
 		Granularity:    granularity,
+		DataSource:     dataSource,
 		Source:         source,
 		Model:          model,
 		Project:        project,
@@ -362,6 +430,26 @@ func (d *DB) GetCostByModelFiltered(from, to time.Time, source, project string) 
 	return result, nil
 }
 
+func (d *DB) getCostByModelFromDailyAggregate(from, to time.Time, source, project string) ([]CostByModel, error) {
+	aggFilter, aggArgs := buildUsageFilter(source, "", project)
+	args := append([]interface{}{from.Format("2006-01-02"), to.Format("2006-01-02")}, aggArgs...)
+	rows, err := d.db.Query(`SELECT model, SUM(cost_usd) as cost FROM daily_usage_aggregate
+		WHERE bucket >= ? AND bucket < ?`+aggFilter+` GROUP BY model ORDER BY cost DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []CostByModel
+	for rows.Next() {
+		var r CostByModel
+		if err := rows.Scan(&r.Model, &r.Cost); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
 // granularityExpr returns a SQL expression that truncates a timestamp column
 // to the bucket boundary for the given granularity code.
 // Timestamps are stored as Go time strings like "2026-04-03 09:51:45.996 +0000 UTC",
@@ -428,6 +516,27 @@ func (d *DB) GetCostOverTimeFiltered(from, to time.Time, granularity, source, mo
 	return result, nil
 }
 
+func (d *DB) getCostOverTimeFromDailyAggregate(from, to time.Time, source, model, project string) ([]TimeSeriesPoint, error) {
+	aggFilter, aggArgs := buildUsageFilter(source, model, project)
+	args := append([]interface{}{from.Format("2006-01-02"), to.Format("2006-01-02")}, aggArgs...)
+	rows, err := d.db.Query(`SELECT bucket, model, SUM(cost_usd) as cost
+		FROM daily_usage_aggregate WHERE bucket >= ? AND bucket < ?`+aggFilter+`
+		GROUP BY bucket, model ORDER BY bucket`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []TimeSeriesPoint
+	for rows.Next() {
+		var p TimeSeriesPoint
+		if err := rows.Scan(&p.Date, &p.Model, &p.Value); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
 // GetTokensOverTime returns token usage breakdown grouped by the given granularity within the time range.
 func (d *DB) GetTokensOverTime(from, to time.Time, granularity, source, model string, tzOffset int) ([]TokenTimeSeriesPoint, error) {
 	return d.GetTokensOverTimeFiltered(from, to, granularity, source, model, "", tzOffset)
@@ -460,6 +569,29 @@ func (d *DB) GetTokensOverTimeFiltered(from, to time.Time, granularity, source, 
 		return nil, err
 	}
 	return result, nil
+}
+
+func (d *DB) getTokensOverTimeFromDailyAggregate(from, to time.Time, source, model, project string) ([]TokenTimeSeriesPoint, error) {
+	aggFilter, aggArgs := buildUsageFilter(source, model, project)
+	args := append([]interface{}{from.Format("2006-01-02"), to.Format("2006-01-02")}, aggArgs...)
+	rows, err := d.db.Query(`SELECT bucket,
+		SUM(input_tokens) as inp, SUM(output_tokens) as outp,
+		SUM(cache_read_input_tokens) as cr, SUM(cache_creation_input_tokens) as cc
+		FROM daily_usage_aggregate WHERE bucket >= ? AND bucket < ?`+aggFilter+`
+		GROUP BY bucket ORDER BY bucket`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []TokenTimeSeriesPoint
+	for rows.Next() {
+		var p TokenTimeSeriesPoint
+		if err := rows.Scan(&p.Date, &p.InputTokens, &p.OutputTokens, &p.CacheRead, &p.CacheCreate); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
 }
 
 // SessionDetail represents per-model breakdown for a single session.

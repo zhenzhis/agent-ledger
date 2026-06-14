@@ -425,6 +425,19 @@ func (d *DB) RebuildUsageAggregates() error {
 		FROM usage_records GROUP BY 1,2,3,4,5`); err != nil {
 		return err
 	}
+	var sourceMax string
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(timestamp),'') FROM usage_records`).Scan(&sourceMax); err != nil {
+		return err
+	}
+	for key, value := range map[string]string{
+		usageAggregateRebuiltAtMeta:          time.Now().UTC().Format(time.RFC3339Nano),
+		usageAggregateSourceMaxTimestampMeta: sourceMax,
+	} {
+		if _, err := tx.Exec(`INSERT INTO meta(key,value) VALUES(?,?)
+			ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
