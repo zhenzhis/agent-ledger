@@ -61,6 +61,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/adapter-spec": getOperation("adapter-conformance", "Get adapter contract", "Machine-readable adapter contract for privacy-safe integrations.", "AdapterContract"),
 			"/api/integrations/conformance":  adapterConformanceOperation(),
 			"/api/workloads":                 workloadsOperation(),
+			"/api/workloads/close":           workloadCloseOperation(),
+			"/api/workloads/link":            workloadLinkOperation(),
 			"/api/workloads/claim-next":      workloadClaimNextOperation(),
 			"/api/workloads/queue":           workloadQueueOperation(),
 			"/api/workloads/lease":           workloadLeaseAcquireOperation(),
@@ -68,6 +70,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/workloads/lease/release":   workloadLeaseReleaseOperation(),
 			"/api/workloads/leases":          workloadLeasesOperation(),
 			"/api/agent-runs":                agentRunsOperation(),
+			"/api/agent-runs/heartbeat":      agentRunHeartbeatOperation(),
 			"/api/agent-runs/liveness":       agentRunLivenessOperation(),
 			"/api/workload-detail":           workloadDetailOperation(),
 			"/api/workload-graph":            workloadGraphOperation(),
@@ -226,6 +229,50 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"idempotent_replay": boolSchema(),
 					},
 				},
+				"WorkloadCloseRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"workload_id"},
+					"properties": map[string]interface{}{
+						"workload_id": stringSchema(),
+						"status":      stringSchema(),
+						"outcome":     stringSchema(),
+					},
+				},
+				"WorkloadCloseResponse": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"ok", "workload_id", "status"},
+					"properties": map[string]interface{}{
+						"ok":          boolSchema(),
+						"workload_id": stringSchema(),
+						"status":      stringSchema(),
+					},
+				},
+				"WorkloadLinkRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"source_workload_id", "target_workload_id"},
+					"properties": map[string]interface{}{
+						"source_workload_id": stringSchema(),
+						"target_workload_id": stringSchema(),
+						"relation":           stringSchema(),
+						"reason":             stringSchema(),
+						"created_by":         stringSchema(),
+						"confidence":         numberSchema(),
+					},
+				},
+				"WorkloadLinkResponse": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"ok", "link_id", "source_workload_id", "target_workload_id"},
+					"properties": map[string]interface{}{
+						"ok":                 boolSchema(),
+						"link_id":            stringSchema(),
+						"source_workload_id": stringSchema(),
+						"target_workload_id": stringSchema(),
+					},
+				},
 				"WorkloadLeaseAcquireRequest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": false,
@@ -366,12 +413,28 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"idempotent_replay": boolSchema(),
 					},
 				},
-				"AgentRunLivenessResponse": looseObjectSchema("Active async agent run liveness rows with privacy filters applied by the server."),
-				"WorkloadDetail":           looseObjectSchema("Full workload ledger detail with privacy filters applied by the server."),
-				"WorkloadGraph":            looseObjectSchema("Compact workload dependency and activity graph."),
-				"WorkloadTimelineResponse": looseObjectSchema("Chronological metadata-only workload audit timeline."),
-				"WorkloadState":            looseObjectSchema("Derived terminal-state snapshot for one async agent workload."),
-				"WorkloadEventFeed":        looseObjectSchema("Cursor-stable workload state feed."),
+				"AgentRunHeartbeatRequest": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"run_id"},
+					"properties": map[string]interface{}{
+						"event_id":  stringSchema(),
+						"run_id":    stringSchema(),
+						"status":    stringSchema(),
+						"phase":     stringSchema(),
+						"message":   stringSchema(),
+						"progress":  numberSchema(),
+						"metrics":   map[string]interface{}{"type": "object", "additionalProperties": true},
+						"timestamp": stringSchema(),
+					},
+				},
+				"AgentRunHeartbeatResponse": looseObjectSchema("Recorded metadata-only agent run heartbeat."),
+				"AgentRunLivenessResponse":  looseObjectSchema("Active async agent run liveness rows with privacy filters applied by the server."),
+				"WorkloadDetail":            looseObjectSchema("Full workload ledger detail with privacy filters applied by the server."),
+				"WorkloadGraph":             looseObjectSchema("Compact workload dependency and activity graph."),
+				"WorkloadTimelineResponse":  looseObjectSchema("Chronological metadata-only workload audit timeline."),
+				"WorkloadState":             looseObjectSchema("Derived terminal-state snapshot for one async agent workload."),
+				"WorkloadEventFeed":         looseObjectSchema("Cursor-stable workload state feed."),
 				"Error": map[string]interface{}{
 					"type":       "object",
 					"properties": map[string]interface{}{"error": stringSchema()},
@@ -494,6 +557,18 @@ func workloadsOperation() map[string]interface{} {
 	}
 }
 
+func workloadCloseOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": simpleWriteOperation("workload-control", "Close workload", "Mark one workload as terminal with a status and optional outcome. The operation writes local metadata and audit rows only.", "WorkloadCloseRequest", "WorkloadCloseResponse"),
+	}
+}
+
+func workloadLinkOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": simpleWriteOperation("workload-control", "Link workloads", "Create a local metadata-only dependency or lineage edge between two workloads.", "WorkloadLinkRequest", "WorkloadLinkResponse"),
+	}
+}
+
 func workloadLeaseAcquireOperation() map[string]interface{} {
 	return map[string]interface{}{
 		"post": workloadLeaseWriteOperation(
@@ -598,6 +673,12 @@ func agentRunsOperation() map[string]interface{} {
 	}
 }
 
+func agentRunHeartbeatOperation() map[string]interface{} {
+	return map[string]interface{}{
+		"post": simpleWriteOperation("workload-control", "Record agent run heartbeat", "Append one metadata-only liveness/progress heartbeat to an active async agent run.", "AgentRunHeartbeatRequest", "AgentRunHeartbeatResponse"),
+	}
+}
+
 func agentRunLivenessOperation() map[string]interface{} {
 	return map[string]interface{}{
 		"get": map[string]interface{}{
@@ -693,6 +774,29 @@ func workloadLeaseWriteOperation(summary, description, requestSchema, responseSc
 			"200": jsonResponse(responseSchema),
 			"400": jsonResponse("Error"),
 			"409": jsonResponse("Error"),
+		},
+	}
+}
+
+func simpleWriteOperation(tag, summary, description, requestSchema, responseSchema string) map[string]interface{} {
+	return map[string]interface{}{
+		"tags":        []string{tag},
+		"summary":     summary,
+		"description": description,
+		"x-agent-ledger": map[string]interface{}{
+			"writes_local_state": true,
+			"read_only_safe":     false,
+			"prompt_content":     false,
+		},
+		"requestBody": map[string]interface{}{
+			"required": true,
+			"content": map[string]interface{}{
+				"application/json": map[string]interface{}{"schema": refSchema(requestSchema)},
+			},
+		},
+		"responses": map[string]interface{}{
+			"200": jsonResponse(responseSchema),
+			"400": jsonResponse("Error"),
 		},
 	}
 }

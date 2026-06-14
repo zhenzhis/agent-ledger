@@ -239,13 +239,13 @@ func TestOpenAPISpecIndexesStableControlPlane(t *testing.T) {
 		t.Fatalf("unexpected OpenAPI metadata: %#v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
-	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/admission/check", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workloads", "/api/workloads/claim-next", "/api/workloads/queue", "/api/workloads/lease", "/api/workloads/lease/renew", "/api/workloads/lease/release", "/api/workloads/leases", "/api/agent-runs", "/api/agent-runs/liveness", "/api/workload-detail", "/api/workload-graph", "/api/workload-timeline", "/api/workload-state", "/api/workload-events"} {
+	for _, path := range []string{"/api/contracts", "/api/contracts/verify", "/api/openapi.json", "/api/admission/check", "/api/event-schema", "/api/events/validate", "/api/integrations/conformance", "/api/workloads", "/api/workloads/close", "/api/workloads/link", "/api/workloads/claim-next", "/api/workloads/queue", "/api/workloads/lease", "/api/workloads/lease/renew", "/api/workloads/lease/release", "/api/workloads/leases", "/api/agent-runs", "/api/agent-runs/heartbeat", "/api/agent-runs/liveness", "/api/workload-detail", "/api/workload-graph", "/api/workload-timeline", "/api/workload-state", "/api/workload-events"} {
 		if paths[path] == nil {
 			t.Fatalf("OpenAPI missing path %s: %#v", path, paths)
 		}
 	}
 	rawSpec, _ := json.Marshal(spec)
-	for _, needle := range []string{"Idempotency-Key", "WorkloadCreateRequest", "WorkloadLeaseAcquireRequest", "WorkloadLeaseRenewRequest", "WorkloadLeaseReleaseRequest", "AgentRunStartRequest", `"409"`} {
+	for _, needle := range []string{"Idempotency-Key", "WorkloadCreateRequest", "WorkloadCloseRequest", "WorkloadLinkRequest", "WorkloadLeaseAcquireRequest", "WorkloadLeaseRenewRequest", "WorkloadLeaseReleaseRequest", "AgentRunStartRequest", "AgentRunHeartbeatRequest", `"409"`} {
 		if !strings.Contains(string(rawSpec), needle) {
 			t.Fatalf("OpenAPI missing %q: %s", needle, string(rawSpec))
 		}

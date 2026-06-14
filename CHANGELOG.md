@@ -18,6 +18,7 @@
 - MCP resource `agent-ledger://agent-runs/liveness` for privacy-safe async run health context without run ids, workload ids, project metadata, goals, or status messages.
 - Stable `ETag` revalidation for `GET /api/agent-runs/liveness`, plus readiness active/stale run counts for async agent monitors.
 - Stable `ETag` revalidation and OpenAPI coverage for workload detail, graph, timeline, and terminal-state read endpoints.
+- OpenAPI/contract coverage for workload close/link and agent run heartbeat write endpoints.
 - Control-plane readiness now includes privacy-safe workload queue claimability and lease pressure buckets for router and deployment probes.
 - Capability catalog readiness metadata now declares workload queue claimability and lease pressure data classes for integration discovery.
 - MCP resource subscription cursors now ignore volatile `generated_at` fields, preventing queue/readiness subscriptions from emitting no-op router wakeups.
