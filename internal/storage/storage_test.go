@@ -38,6 +38,22 @@ func TestWorkloadClaimFilterIndexesExist(t *testing.T) {
 	}
 }
 
+func TestSessionInsightPerformanceIndexesExist(t *testing.T) {
+	db := tempDB(t)
+	for _, name := range []string{
+		"idx_usage_source_session_time",
+		"idx_usage_session_time",
+		"idx_model_calls_source_session_time",
+		"idx_model_calls_session_time",
+		"idx_insight_kind_scope_created",
+	} {
+		var got string
+		if err := db.db.QueryRow(`SELECT name FROM sqlite_master WHERE type='index' AND name=?`, name).Scan(&got); err != nil {
+			t.Fatalf("index %s missing: %v", name, err)
+		}
+	}
+}
+
 func TestFileState(t *testing.T) {
 	db := tempDB(t)
 

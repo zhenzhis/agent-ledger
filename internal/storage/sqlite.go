@@ -280,6 +280,8 @@ func migrate(db *sql.DB) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage_records(timestamp);
 		CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_records(source, session_id);
+		CREATE INDEX IF NOT EXISTS idx_usage_source_session_time ON usage_records(source, session_id, timestamp, id);
+		CREATE INDEX IF NOT EXISTS idx_usage_session_time ON usage_records(session_id, timestamp, id);
 		CREATE INDEX IF NOT EXISTS idx_usage_source ON usage_records(source);
 		CREATE INDEX IF NOT EXISTS idx_usage_source_timestamp ON usage_records(source, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_usage_source_model_timestamp ON usage_records(source, model, timestamp);
@@ -471,6 +473,7 @@ func migrate(db *sql.DB) error {
 			created_at DATETIME NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_insight_kind_created ON insight_events(kind, created_at);
+		CREATE INDEX IF NOT EXISTS idx_insight_kind_scope_created ON insight_events(kind, source, model, project, created_at);
 
 		CREATE TABLE IF NOT EXISTS hourly_usage_aggregate (
 			bucket DATETIME NOT NULL,
@@ -750,6 +753,8 @@ func migrate(db *sql.DB) error {
 				);
 				CREATE INDEX IF NOT EXISTS idx_model_calls_workload_time ON model_calls(workload_id, timestamp);
 				CREATE INDEX IF NOT EXISTS idx_model_calls_source_model_time ON model_calls(source, model, timestamp);
+				CREATE INDEX IF NOT EXISTS idx_model_calls_source_session_time ON model_calls(source, session_id, timestamp, call_id);
+				CREATE INDEX IF NOT EXISTS idx_model_calls_session_time ON model_calls(session_id, timestamp, call_id);
 
 				CREATE TABLE IF NOT EXISTS tool_calls (
 					tool_call_id TEXT PRIMARY KEY,
@@ -930,6 +935,15 @@ func migrate(db *sql.DB) error {
 			"016_workload_claim_filter_indexes", `
 				CREATE INDEX IF NOT EXISTS idx_workloads_claim_repo ON workloads(status, repo, created_at, updated_at);
 				CREATE INDEX IF NOT EXISTS idx_workloads_claim_owner ON workloads(status, owner, created_at, updated_at);
+			`,
+		},
+		{
+			"017_session_insight_query_indexes", `
+				CREATE INDEX IF NOT EXISTS idx_usage_source_session_time ON usage_records(source, session_id, timestamp, id);
+				CREATE INDEX IF NOT EXISTS idx_usage_session_time ON usage_records(session_id, timestamp, id);
+				CREATE INDEX IF NOT EXISTS idx_model_calls_source_session_time ON model_calls(source, session_id, timestamp, call_id);
+				CREATE INDEX IF NOT EXISTS idx_model_calls_session_time ON model_calls(session_id, timestamp, call_id);
+				CREATE INDEX IF NOT EXISTS idx_insight_kind_scope_created ON insight_events(kind, source, model, project, created_at);
 			`,
 		},
 	}

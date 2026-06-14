@@ -29,6 +29,7 @@
 - MCP resource subscription cursors now ignore volatile `generated_at` fields, preventing queue/readiness subscriptions from emitting no-op router wakeups.
 - `GET /api/workloads/queue` now emits stable `ETag` values and honors `If-None-Match` with `304 Not Modified` when only `generated_at` changes.
 - Added workload claim queue indexes for repo and owner filters to keep scoped router probes efficient as workload history grows.
+- Added session replay/detail and scoped insight-event indexes for large ledgers with many sessions, anomaly rows, and watchdog rows.
 - Short-lived workload leases with `workload_leases`, `POST /api/workloads/lease`, `POST /api/workloads/lease/renew`, `POST /api/workloads/lease/release`, `GET /api/workloads/leases`, `agent-ledger workload lease`, and MCP `ledger.acquire_workload_lease` / `ledger.renew_workload_lease` / `ledger.release_workload_lease` / `ledger.workload_leases`; plaintext lease tokens are returned only on acquire and stored as SHA-256 hashes.
 - Async run start, heartbeat, and liveness ledger with `agent_run_events`, run snapshot fields, `agent.run.heartbeat` canonical events, `POST /api/agent-runs`, `POST /api/agent-runs/heartbeat`, `GET /api/agent-runs/liveness`, `agent-ledger workload start-run|heartbeat|liveness`, and MCP `ledger.start_run` / `ledger.heartbeat_run` / `ledger.run_liveness`.
 - Workload event feeds now include stable content cursors, `generated_at`, HTTP `ETag` / `304 Not Modified` support, and SSE `id` values so local routers and monitors can consume state changes incrementally.
