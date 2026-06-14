@@ -708,6 +708,133 @@ func TestOpenAPIDiagnosticsSchemasExposeControlPlaneFields(t *testing.T) {
 	expectType("InsightEvent", "value", "number")
 }
 
+func TestOpenAPIEnterpriseReportSchemasExposeLedgerFields(t *testing.T) {
+	spec := OpenAPISpecFor(Options{}, nil)
+	schemas := spec["components"].(map[string]interface{})["schemas"].(map[string]interface{})
+
+	schema := func(name string) map[string]interface{} {
+		t.Helper()
+		raw, ok := schemas[name].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing: %#v", name, schemas[name])
+		}
+		return raw
+	}
+	props := func(name string) map[string]interface{} {
+		t.Helper()
+		raw := schema(name)
+		properties, ok := raw["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s schema missing properties: %#v", name, raw)
+		}
+		return properties
+	}
+	expectFields := func(name string, fields ...string) map[string]interface{} {
+		t.Helper()
+		properties := props(name)
+		for _, field := range fields {
+			if properties[field] == nil {
+				t.Fatalf("%s schema missing field %q: %#v", name, field, properties)
+			}
+		}
+		return properties
+	}
+	expectArrayRef := func(name, ref string) {
+		t.Helper()
+		raw := schema(name)
+		if raw["type"] != "array" {
+			t.Fatalf("%s should be an array schema: %#v", name, raw)
+		}
+		items, ok := raw["items"].(map[string]interface{})
+		if !ok || items["$ref"] != ref {
+			t.Fatalf("%s items should reference %s: %#v", name, ref, raw["items"])
+		}
+	}
+	expectArrayPropertyRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		arraySchema, ok := properties[field].(map[string]interface{})
+		if !ok || arraySchema["type"] != "array" {
+			t.Fatalf("%s.%s should be an array: %#v", name, field, properties[field])
+		}
+		items, ok := arraySchema["items"].(map[string]interface{})
+		if !ok || items["$ref"] != ref {
+			t.Fatalf("%s.%s items should reference %s: %#v", name, field, ref, arraySchema["items"])
+		}
+	}
+	expectRef := func(name, field, ref string) {
+		t.Helper()
+		properties := props(name)
+		fieldSchema, ok := properties[field].(map[string]interface{})
+		if !ok || fieldSchema["$ref"] != ref {
+			t.Fatalf("%s.%s should reference %s: %#v", name, field, ref, properties[field])
+		}
+	}
+	expectType := func(name, field, kind string) {
+		t.Helper()
+		properties := props(name)
+		fieldSchema, ok := properties[field].(map[string]interface{})
+		if !ok || fieldSchema["type"] != kind {
+			t.Fatalf("%s.%s should be %s: %#v", name, field, kind, properties[field])
+		}
+	}
+
+	expectArrayRef("PricingAuditRows", "#/components/schemas/PricingAuditRow")
+	expectFields("PricingAuditRow", "model", "pricing_source", "matched_model", "match_type", "priority", "input_cost_per_token", "output_cost_per_token", "cache_read_input_token_cost", "cache_creation_input_token_cost", "effective_at", "updated_at", "confidence")
+	expectType("PricingAuditRow", "priority", "integer")
+	expectType("PricingAuditRow", "input_cost_per_token", "number")
+	expectFields("ProjectionRepairResult", "before", "after", "inserted", "updated", "from", "to", "aggregates_note")
+	expectRef("ProjectionRepairResult", "before", "#/components/schemas/ProjectionQuality")
+
+	expectArrayRef("ModelCallRows", "#/components/schemas/ModelCallRow")
+	expectFields("ModelCallRow", "source", "model", "project", "calls", "tokens", "cost_usd", "avg_tokens_per_call", "cost_per_call", "unpriced_calls")
+	expectArrayRef("ModelRegistryRows", "#/components/schemas/ModelRegistryRow")
+	expectFields("ModelRegistryRow", "model", "vendor", "family", "pricing_source", "matched_model", "match_type", "confidence", "input_cost_per_token", "output_cost_per_token", "cache_read_input_token_cost", "cache_creation_input_token_cost", "calls", "tokens", "cost_usd", "updated_at", "stale")
+	expectType("ModelRegistryRow", "stale", "boolean")
+
+	expectArrayRef("AuditLogRows", "#/components/schemas/AuditEvent")
+	expectFields("AuditEvent", "id", "actor", "role", "action", "target", "params", "created_at")
+	expectArrayRef("ReconciliationRows", "#/components/schemas/ReconciliationImport")
+	expectFields("ReconciliationImport", "id", "provider", "format", "currency", "local_cost_usd", "provider_cost_usd", "diff_usd", "rows_seen", "payload_sha256", "window_start", "window_end", "status", "notes", "warnings", "imported_at")
+	expectFields("ReconciliationImportResponse", "ok", "import")
+	expectRef("ReconciliationImportResponse", "import", "#/components/schemas/ReconciliationImport")
+
+	expectFields("RouterSimulationReport", "generated_at", "from", "to", "to_model", "replacement_ratio", "target_pricing", "status", "summary", "rows")
+	expectRef("RouterSimulationReport", "target_pricing", "#/components/schemas/PricingAuditRow")
+	expectRef("RouterSimulationReport", "summary", "#/components/schemas/RouterSimulationSummary")
+	expectArrayPropertyRef("RouterSimulationReport", "rows", "#/components/schemas/RouterSimulationRow")
+	expectFields("RouterSimulationRow", "source", "from_model", "to_model", "project", "calls", "tokens", "current_cost_usd", "simulated_cost_usd", "delta_usd", "savings_pct", "replacement_ratio", "target_pricing_source", "target_confidence")
+	expectFields("RouterSimulationSummary", "calls", "tokens", "current_cost_usd", "simulated_cost_usd", "delta_usd", "savings_pct", "groups", "unpriced_current_calls")
+
+	expectFields("PreflightEstimateReport", "generated_at", "from", "to", "task", "method", "samples", "confidence", "factor", "baseline", "estimate", "p75")
+	expectRef("PreflightEstimateReport", "estimate", "#/components/schemas/PreflightEstimateValues")
+	expectFields("PreflightEstimateValues", "cost_usd", "tokens", "calls", "prompts", "duration_minutes")
+	expectArrayRef("ChargebackRows", "#/components/schemas/ChargebackRow")
+	expectFields("ChargebackRow", "team", "project", "source", "model", "calls", "sessions", "tokens", "cost_usd", "avg_tokens_per_call", "cost_per_call", "unpriced_calls", "mapping_source", "data_source", "confidence")
+
+	expectFields("AgentWrappedReport", "generated_at", "period", "from", "to", "stats", "top_model", "top_project", "most_active_day", "best_cache_day", "most_expensive_session", "highlights", "issues")
+	expectRef("AgentWrappedReport", "most_expensive_session", "#/components/schemas/CostInsightRow")
+	expectArrayPropertyRef("AgentWrappedReport", "highlights", "#/components/schemas/WrappedHighlight")
+	expectFields("CostInsightRow", "source", "session_id", "tokens", "cost_usd", "pricing_sources", "pricing_confidences", "reasons", "advice")
+
+	expectFields("EvidenceBundle", "product", "generated_at", "window", "privacy", "runtime", "quality", "ingestion_health", "pricing_sources", "pricing_rules", "pricing_audit", "dashboard", "anomaly_events", "watchdog_events", "cost_intelligence", "workload_states")
+	expectRef("EvidenceBundle", "pricing_rules", "#/components/schemas/PricingRuleSummary")
+	expectRef("EvidenceBundle", "dashboard", "#/components/schemas/EvidenceDashboard")
+	expectArrayPropertyRef("EvidenceBundle", "pricing_audit", "#/components/schemas/PricingAuditRow")
+	expectArrayPropertyRef("EvidenceBundle", "cost_intelligence", "#/components/schemas/CostInsightRow")
+
+	expectFields("OfflineBundle", "schema_version", "product", "bundle_id", "generated_at", "window", "filters", "privacy", "data", "integrity")
+	expectRef("OfflineBundle", "data", "#/components/schemas/OfflineBundleData")
+	expectRef("OfflineBundle", "integrity", "#/components/schemas/OfflineBundleIntegrity")
+	expectArrayPropertyRef("OfflineBundleData", "canonical_events", "#/components/schemas/CanonicalEvent")
+	expectArrayPropertyRef("OfflineBundleData", "workloads", "#/components/schemas/WorkloadSummary")
+	expectArrayPropertyRef("OfflineBundleData", "model_calls", "#/components/schemas/ModelCallRow")
+	expectFields("OfflineBundleIntegrity", "hash_algorithm", "payload_sha256", "signature_algorithm", "signature", "key_id")
+	expectFields("OfflineBundleImportResult", "bundle_id", "events_seen", "events_inserted", "events_duplicate", "payload_sha256", "signature_verified")
+	expectFields("OfflineBundleImportResponse", "ok", "result")
+	expectRef("OfflineBundleImportResponse", "result", "#/components/schemas/OfflineBundleImportResult")
+}
+
 func TestOpenAPIRequestBodyOperationsAdvertiseBodyLimits(t *testing.T) {
 	spec := OpenAPISpecFor(Options{}, nil)
 	paths := spec["paths"].(map[string]interface{})

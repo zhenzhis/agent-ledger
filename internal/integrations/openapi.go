@@ -537,10 +537,12 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IngestionHealth":                  ingestionHealthSchema(),
 				"IngestionHealthRows":              ingestionHealthRowsSchema(),
 				"OperationResult":                  looseObjectSchema("Local operation acknowledgement."),
-				"ProjectionRepairResult":           looseObjectSchema("Canonical-to-usage projection repair result."),
+				"ProjectionRepairResult":           projectionRepairResultSchema(),
 				"PricingSourceStatus":              pricingSourceStatusSchema(),
+				"PricingRuleSummary":               pricingRuleSummarySchema(),
 				"PricingStatus":                    pricingStatusSchema(),
-				"PricingAuditRows":                 looseObjectSchema("Pricing audit rows for official, fallback, override, stale, fuzzy, and unpriced matches."),
+				"PricingAuditRow":                  pricingAuditRowSchema(),
+				"PricingAuditRows":                 pricingAuditRowsSchema(),
 				"BudgetStatus":                     budgetStatusSchema(),
 				"BudgetStatusResponse":             budgetStatusResponseSchema(),
 				"QuotaWindow":                      quotaWindowSchema(),
@@ -555,28 +557,45 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"ControlIdempotencyStats":          controlIdempotencyStatsSchema(),
 				"WorkloadLeaseStats":               workloadLeaseStatsSchema(),
 				"DoctorReport":                     doctorReportSchema(),
-				"ModelCallRows":                    looseObjectSchema("Model call analytics grouped by source, model, project, and session."),
-				"ModelRegistryRows":                looseObjectSchema("Model pricing and provenance registry rows."),
+				"ModelCallRow":                     modelCallRowSchema(),
+				"ModelCallRows":                    modelCallRowsSchema(),
+				"ModelRegistryRow":                 modelRegistryRowSchema(),
+				"ModelRegistryRows":                modelRegistryRowsSchema(),
+				"CostInsightRow":                   costInsightRowSchema(),
 				"CostIntelligenceRows":             costIntelligenceRowsSchema(),
 				"CacheDoctorRow":                   cacheDoctorRowSchema(),
 				"CacheDoctorRows":                  cacheDoctorRowsSchema(),
 				"InsightEvent":                     insightEventSchema(),
 				"InsightEventRows":                 insightEventRowsSchema(),
 				"WebhookNotificationResult":        looseObjectSchema("Redacted webhook delivery or dry-run result."),
-				"AuditLogRows":                     looseObjectSchema("Local audit log rows with privacy filters applied by the server."),
-				"ReconciliationRows":               looseObjectSchema("Provider reconciliation import rows."),
+				"AuditEvent":                       auditEventSchema(),
+				"AuditLogRows":                     auditLogRowsSchema(),
+				"ReconciliationImport":             reconciliationImportSchema(),
+				"ReconciliationRows":               reconciliationRowsSchema(),
 				"ReconciliationImportRequest": looseObjectSchema(
 					"Provider CSV/JSON statement or manual reconciliation summary. Payload hashes are persisted; secrets and prompt content are not accepted.",
 				),
-				"ReconciliationImportResponse": looseObjectSchema("Provider reconciliation import result."),
-				"RouterSimulationReport":       looseObjectSchema("Model router what-if savings estimate."),
-				"PreflightEstimateReport":      looseObjectSchema("Historical preflight task cost, token, and duration estimate."),
-				"ChargebackRows":               looseObjectSchema("Team/project/model/source showback and chargeback rows."),
-				"AgentWrappedReport":           looseObjectSchema("Private period summary with top models, projects, sessions, cache days, and efficiency facts."),
-				"EvidenceBundle":               looseObjectSchema("Privacy-redacted incident evidence bundle for local audit, issue reports, and support."),
-				"OfflineBundle":                looseObjectSchema("Offline signed or unsigned local usage bundle."),
+				"ReconciliationImportResponse": reconciliationImportResponseSchema(),
+				"RouterSimulationRow":          routerSimulationRowSchema(),
+				"RouterSimulationSummary":      routerSimulationSummarySchema(),
+				"RouterSimulationReport":       routerSimulationReportSchema(),
+				"PreflightEstimateValues":      preflightEstimateValuesSchema(),
+				"PreflightEstimateReport":      preflightEstimateReportSchema(),
+				"ChargebackRow":                chargebackRowSchema(),
+				"ChargebackRows":               chargebackRowsSchema(),
+				"WrappedProject":               wrappedProjectSchema(),
+				"WrappedDay":                   wrappedDaySchema(),
+				"WrappedHighlight":             wrappedHighlightSchema(),
+				"AgentWrappedReport":           agentWrappedReportSchema(),
+				"WorkloadSummary":              workloadSummarySchema(),
+				"EvidenceDashboard":            evidenceDashboardSchema(),
+				"EvidenceBundle":               evidenceBundleSchema(),
+				"OfflineBundleData":            offlineBundleDataSchema(),
+				"OfflineBundleIntegrity":       offlineBundleIntegritySchema(),
+				"OfflineBundle":                offlineBundleSchema(),
 				"OfflineBundleImportRequest":   looseObjectSchema("Offline bundle JSON. Optional signature verification uses local environment key material only."),
-				"OfflineBundleImportResponse":  looseObjectSchema("Offline bundle import result."),
+				"OfflineBundleImportResult":    offlineBundleImportResultSchema(),
+				"OfflineBundleImportResponse":  offlineBundleImportResponseSchema(),
 				"PolicyStatus":                 looseObjectSchema("Policy configuration and enforcement posture summary."),
 				"PolicyEvaluationRequest":      looseObjectSchema("Policy evaluation request for local advisory rules."),
 				"PolicyEvaluationResponse":     looseObjectSchema("Policy evaluation decision result."),
@@ -2213,6 +2232,652 @@ func costIntelligenceRowsSchema() map[string]interface{} {
 				"advice":                stringArraySchema(),
 				"last_activity":         stringSchema(),
 			},
+		},
+	}
+}
+
+func projectionRepairResultSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Canonical-to-usage projection repair summary with before/after quality evidence.",
+		"additionalProperties": true,
+		"required":             []string{"before", "after", "inserted", "updated", "from", "to", "aggregates_note"},
+		"properties": map[string]interface{}{
+			"before":          refSchema("ProjectionQuality"),
+			"after":           refSchema("ProjectionQuality"),
+			"inserted":        integerSchema(),
+			"updated":         integerSchema(),
+			"from":            stringSchema(),
+			"to":              stringSchema(),
+			"source":          stringSchema(),
+			"model":           stringSchema(),
+			"project":         stringSchema(),
+			"aggregates_note": stringSchema(),
+		},
+	}
+}
+
+func pricingRuleSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Effective pricing rule counts grouped by source priority and confidence.",
+		"additionalProperties": true,
+		"required":             []string{"total_rules", "by_source", "by_confidence", "override_rules", "official_rules", "fallback_rules", "oldest_updated_at", "newest_updated_at"},
+		"properties": map[string]interface{}{
+			"total_rules":       integerSchema(),
+			"by_source":         stringIntMapSchema("Pricing rule counts grouped by pricing source."),
+			"by_confidence":     stringIntMapSchema("Pricing rule counts grouped by confidence."),
+			"override_rules":    integerSchema(),
+			"official_rules":    integerSchema(),
+			"fallback_rules":    integerSchema(),
+			"oldest_updated_at": stringSchema(),
+			"newest_updated_at": stringSchema(),
+		},
+	}
+}
+
+func pricingAuditRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One effective pricing rule with source, matched model, match type, token prices, and confidence.",
+		"additionalProperties": true,
+		"required": []string{
+			"model", "pricing_source", "matched_model", "match_type", "priority", "input_cost_per_token", "output_cost_per_token", "cache_read_input_token_cost", "cache_creation_input_token_cost", "effective_at", "updated_at", "confidence",
+		},
+		"properties": map[string]interface{}{
+			"model":                           stringSchema(),
+			"pricing_source":                  stringSchema(),
+			"matched_model":                   stringSchema(),
+			"match_type":                      stringSchema(),
+			"priority":                        integerSchema(),
+			"input_cost_per_token":            numberSchema(),
+			"output_cost_per_token":           numberSchema(),
+			"cache_read_input_token_cost":     numberSchema(),
+			"cache_creation_input_token_cost": numberSchema(),
+			"effective_at":                    stringSchema(),
+			"updated_at":                      stringSchema(),
+			"confidence":                      stringSchema(),
+		},
+	}
+}
+
+func pricingAuditRowsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Pricing audit rows for official, fallback, override, stale, fuzzy, and unpriced matches.",
+		"items":       refSchema("PricingAuditRow"),
+	}
+}
+
+func modelCallRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Model call analytics grouped by source, model, and project.",
+		"additionalProperties": true,
+		"required":             []string{"source", "model", "project", "calls", "tokens", "cost_usd", "avg_tokens_per_call", "cost_per_call", "unpriced_calls"},
+		"properties": map[string]interface{}{
+			"source":              stringSchema(),
+			"model":               stringSchema(),
+			"project":             stringSchema(),
+			"calls":               integerSchema(),
+			"tokens":              integerSchema(),
+			"cost_usd":            numberSchema(),
+			"avg_tokens_per_call": numberSchema(),
+			"cost_per_call":       numberSchema(),
+			"unpriced_calls":      integerSchema(),
+		},
+	}
+}
+
+func modelCallRowsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Model call analytics grouped by source, model, project, and session.",
+		"items":       refSchema("ModelCallRow"),
+	}
+}
+
+func modelRegistryRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Canonical model registry row derived from pricing governance and observed usage.",
+		"additionalProperties": true,
+		"required": []string{
+			"model", "vendor", "family", "pricing_source", "matched_model", "match_type", "confidence", "input_cost_per_token", "output_cost_per_token", "cache_read_input_token_cost", "cache_creation_input_token_cost", "calls", "tokens", "cost_usd", "updated_at", "stale",
+		},
+		"properties": map[string]interface{}{
+			"model":                           stringSchema(),
+			"vendor":                          stringSchema(),
+			"family":                          stringSchema(),
+			"pricing_source":                  stringSchema(),
+			"matched_model":                   stringSchema(),
+			"match_type":                      stringSchema(),
+			"confidence":                      stringSchema(),
+			"input_cost_per_token":            numberSchema(),
+			"output_cost_per_token":           numberSchema(),
+			"cache_read_input_token_cost":     numberSchema(),
+			"cache_creation_input_token_cost": numberSchema(),
+			"calls":                           integerSchema(),
+			"tokens":                          integerSchema(),
+			"cost_usd":                        numberSchema(),
+			"updated_at":                      stringSchema(),
+			"stale":                           boolSchema(),
+		},
+	}
+}
+
+func modelRegistryRowsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Model pricing and provenance registry rows.",
+		"items":       refSchema("ModelRegistryRow"),
+	}
+}
+
+func costInsightRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "High-impact session explanation with token composition, pricing provenance, and advice. Prompt and response content are never included.",
+		"additionalProperties": true,
+		"required": []string{
+			"source", "session_id", "calls", "tokens", "cost_usd", "cache_hit_rate", "pricing_sources", "pricing_confidences", "quality_score", "reasons", "advice",
+		},
+		"properties": map[string]interface{}{
+			"source":                stringSchema(),
+			"session_id":            stringSchema(),
+			"project":               stringSchema(),
+			"git_branch":            stringSchema(),
+			"models":                integerSchema(),
+			"calls":                 integerSchema(),
+			"prompts":               integerSchema(),
+			"input_tokens":          integerSchema(),
+			"cache_read_tokens":     integerSchema(),
+			"cache_write_tokens":    integerSchema(),
+			"output_tokens":         integerSchema(),
+			"reasoning_tokens":      integerSchema(),
+			"tokens":                integerSchema(),
+			"cost_usd":              numberSchema(),
+			"cost_per_call":         numberSchema(),
+			"cost_per_prompt":       numberSchema(),
+			"tokens_per_prompt":     numberSchema(),
+			"cache_hit_rate":        numberSchema(),
+			"output_ratio":          numberSchema(),
+			"pricing_sources":       stringArraySchema(),
+			"pricing_confidences":   stringArraySchema(),
+			"official_priced_calls": integerSchema(),
+			"override_priced_calls": integerSchema(),
+			"fallback_priced_calls": integerSchema(),
+			"fuzzy_priced_calls":    integerSchema(),
+			"source_reported_calls": integerSchema(),
+			"unpriced_calls":        integerSchema(),
+			"unknown_pricing_calls": integerSchema(),
+			"quality_score":         numberSchema(),
+			"reasons":               stringArraySchema(),
+			"advice":                stringArraySchema(),
+			"last_activity":         stringSchema(),
+		},
+	}
+}
+
+func auditEventSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Local immutable operational audit event. Params are redacted by privacy filters and do not contain prompts or secrets.",
+		"additionalProperties": true,
+		"required":             []string{"id", "actor", "role", "action", "target", "params", "created_at"},
+		"properties": map[string]interface{}{
+			"id":         integerSchema(),
+			"actor":      stringSchema(),
+			"role":       stringSchema(),
+			"action":     stringSchema(),
+			"target":     stringSchema(),
+			"params":     stringSchema(),
+			"created_at": stringSchema(),
+		},
+	}
+}
+
+func auditLogRowsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Local audit log rows with privacy filters applied by the server.",
+		"items":       refSchema("AuditEvent"),
+	}
+}
+
+func reconciliationImportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Imported provider bill comparison summary. Payload hashes are persisted; raw provider statements are not echoed.",
+		"additionalProperties": true,
+		"required": []string{
+			"id", "provider", "format", "currency", "local_cost_usd", "provider_cost_usd", "diff_usd", "rows_seen", "payload_sha256", "window_start", "window_end", "status", "notes", "warnings", "imported_at",
+		},
+		"properties": map[string]interface{}{
+			"id":                integerSchema(),
+			"provider":          stringSchema(),
+			"format":            stringSchema(),
+			"currency":          stringSchema(),
+			"local_cost_usd":    numberSchema(),
+			"provider_cost_usd": numberSchema(),
+			"diff_usd":          numberSchema(),
+			"rows_seen":         integerSchema(),
+			"payload_sha256":    stringSchema(),
+			"window_start":      stringSchema(),
+			"window_end":        stringSchema(),
+			"status":            stringSchema(),
+			"notes":             stringSchema(),
+			"warnings":          stringSchema(),
+			"imported_at":       stringSchema(),
+		},
+	}
+}
+
+func reconciliationRowsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Provider reconciliation import rows.",
+		"items":       refSchema("ReconciliationImport"),
+	}
+}
+
+func reconciliationImportResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Provider reconciliation import result.",
+		"additionalProperties": true,
+		"required":             []string{"ok", "import"},
+		"properties": map[string]interface{}{
+			"ok":     boolSchema(),
+			"import": refSchema("ReconciliationImport"),
+		},
+	}
+}
+
+func routerSimulationRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Cost impact estimate for routing one source/model/project group to a different model.",
+		"additionalProperties": true,
+		"required": []string{
+			"source", "from_model", "to_model", "project", "calls", "input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "tokens", "current_cost_usd", "simulated_cost_usd", "delta_usd", "savings_pct", "replacement_ratio", "unpriced_current_calls", "target_pricing_source", "target_pricing_model", "target_match_type", "target_confidence",
+		},
+		"properties": map[string]interface{}{
+			"source":                      stringSchema(),
+			"from_model":                  stringSchema(),
+			"to_model":                    stringSchema(),
+			"project":                     stringSchema(),
+			"calls":                       integerSchema(),
+			"input_tokens":                integerSchema(),
+			"output_tokens":               integerSchema(),
+			"cache_creation_input_tokens": integerSchema(),
+			"cache_read_input_tokens":     integerSchema(),
+			"tokens":                      integerSchema(),
+			"current_cost_usd":            numberSchema(),
+			"simulated_cost_usd":          numberSchema(),
+			"delta_usd":                   numberSchema(),
+			"savings_pct":                 numberSchema(),
+			"replacement_ratio":           numberSchema(),
+			"unpriced_current_calls":      integerSchema(),
+			"target_pricing_source":       stringSchema(),
+			"target_pricing_model":        stringSchema(),
+			"target_match_type":           stringSchema(),
+			"target_confidence":           stringSchema(),
+			"note":                        stringSchema(),
+		},
+	}
+}
+
+func routerSimulationSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Aggregate modeled cost impact across router simulation rows.",
+		"additionalProperties": true,
+		"required":             []string{"calls", "tokens", "current_cost_usd", "simulated_cost_usd", "delta_usd", "savings_pct", "groups", "unpriced_current_calls"},
+		"properties": map[string]interface{}{
+			"calls":                  integerSchema(),
+			"tokens":                 integerSchema(),
+			"current_cost_usd":       numberSchema(),
+			"simulated_cost_usd":     numberSchema(),
+			"delta_usd":              numberSchema(),
+			"savings_pct":            numberSchema(),
+			"groups":                 integerSchema(),
+			"unpriced_current_calls": integerSchema(),
+		},
+	}
+}
+
+func routerSimulationReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Model router what-if savings estimate. It never mutates ledger records.",
+		"additionalProperties": true,
+		"required":             []string{"generated_at", "from", "to", "to_model", "replacement_ratio", "target_pricing", "status", "summary", "rows"},
+		"properties": map[string]interface{}{
+			"generated_at":      stringSchema(),
+			"from":              stringSchema(),
+			"to":                stringSchema(),
+			"source":            stringSchema(),
+			"from_model":        stringSchema(),
+			"to_model":          stringSchema(),
+			"project":           stringSchema(),
+			"replacement_ratio": numberSchema(),
+			"target_pricing":    refSchema("PricingAuditRow"),
+			"status":            stringSchema(),
+			"issues":            stringArraySchema(),
+			"summary":           refSchema("RouterSimulationSummary"),
+			"rows":              map[string]interface{}{"type": "array", "items": refSchema("RouterSimulationRow")},
+		},
+	}
+}
+
+func preflightEstimateValuesSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Estimated workload cost, token, call, prompt, and duration values.",
+		"additionalProperties": true,
+		"required":             []string{"cost_usd", "tokens", "calls", "prompts", "duration_minutes"},
+		"properties": map[string]interface{}{
+			"cost_usd":         numberSchema(),
+			"tokens":           integerSchema(),
+			"calls":            integerSchema(),
+			"prompts":          integerSchema(),
+			"duration_minutes": numberSchema(),
+		},
+	}
+}
+
+func preflightEstimateReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Historical preflight task cost, token, call, prompt, and duration estimate based only on metadata.",
+		"additionalProperties": true,
+		"required":             []string{"generated_at", "from", "to", "task", "method", "samples", "confidence", "factor", "baseline", "estimate", "p75"},
+		"properties": map[string]interface{}{
+			"generated_at": stringSchema(),
+			"from":         stringSchema(),
+			"to":           stringSchema(),
+			"task":         stringSchema(),
+			"source":       stringSchema(),
+			"model":        stringSchema(),
+			"project":      stringSchema(),
+			"method":       stringSchema(),
+			"samples":      integerSchema(),
+			"confidence":   stringSchema(),
+			"factor":       numberSchema(),
+			"baseline":     refSchema("PreflightEstimateValues"),
+			"estimate":     refSchema("PreflightEstimateValues"),
+			"p75":          refSchema("PreflightEstimateValues"),
+			"issues":       stringArraySchema(),
+		},
+	}
+}
+
+func chargebackRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Team/project/model/source showback row with confidence and mapping provenance.",
+		"additionalProperties": true,
+		"required":             []string{"team", "project", "source", "model", "calls", "sessions", "tokens", "cost_usd", "avg_tokens_per_call", "cost_per_call", "unpriced_calls", "mapping_source", "data_source", "confidence"},
+		"properties": map[string]interface{}{
+			"team":                stringSchema(),
+			"project":             stringSchema(),
+			"source":              stringSchema(),
+			"model":               stringSchema(),
+			"calls":               integerSchema(),
+			"sessions":            integerSchema(),
+			"tokens":              integerSchema(),
+			"cost_usd":            numberSchema(),
+			"avg_tokens_per_call": numberSchema(),
+			"cost_per_call":       numberSchema(),
+			"unpriced_calls":      integerSchema(),
+			"mapping_source":      stringSchema(),
+			"data_source":         stringSchema(),
+			"confidence":          numberSchema(),
+		},
+	}
+}
+
+func chargebackRowsSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "array",
+		"description": "Team/project/model/source showback and chargeback rows.",
+		"items":       refSchema("ChargebackRow"),
+	}
+}
+
+func wrappedProjectSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Project-level Agent Wrapped highlight.",
+		"additionalProperties": true,
+		"required":             []string{"project", "sessions", "calls", "tokens", "cost_usd"},
+		"properties": map[string]interface{}{
+			"project":  stringSchema(),
+			"sessions": integerSchema(),
+			"calls":    integerSchema(),
+			"tokens":   integerSchema(),
+			"cost_usd": numberSchema(),
+		},
+	}
+}
+
+func wrappedDaySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Day-level Agent Wrapped activity/cache highlight.",
+		"additionalProperties": true,
+		"required":             []string{"date", "calls", "tokens", "cost_usd", "cache_hit_rate"},
+		"properties": map[string]interface{}{
+			"date":           stringSchema(),
+			"calls":          integerSchema(),
+			"tokens":         integerSchema(),
+			"cost_usd":       numberSchema(),
+			"cache_hit_rate": numberSchema(),
+		},
+	}
+}
+
+func wrappedHighlightSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Concise narrative-safe Agent Wrapped fact.",
+		"additionalProperties": true,
+		"required":             []string{"label", "value", "detail"},
+		"properties": map[string]interface{}{
+			"label":  stringSchema(),
+			"value":  stringSchema(),
+			"detail": stringSchema(),
+		},
+	}
+}
+
+func agentWrappedReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Private period summary with top models, projects, sessions, cache days, and efficiency facts.",
+		"additionalProperties": true,
+		"required":             []string{"generated_at", "period", "from", "to", "stats", "top_model", "top_project", "most_active_day", "best_cache_day", "most_expensive_session", "highlights", "issues"},
+		"properties": map[string]interface{}{
+			"generated_at":           stringSchema(),
+			"period":                 stringSchema(),
+			"from":                   stringSchema(),
+			"to":                     stringSchema(),
+			"stats":                  refSchema("DashboardStats"),
+			"top_model":              refSchema("CostByModel"),
+			"top_project":            refSchema("WrappedProject"),
+			"most_active_day":        refSchema("WrappedDay"),
+			"best_cache_day":         refSchema("WrappedDay"),
+			"most_expensive_session": refSchema("CostInsightRow"),
+			"highlights":             map[string]interface{}{"type": "array", "items": refSchema("WrappedHighlight")},
+			"issues":                 stringArraySchema(),
+		},
+	}
+}
+
+func workloadSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Canonical goal-level workload ledger summary row.",
+		"additionalProperties": true,
+		"required": []string{
+			"workload_id", "goal", "status", "source", "project", "repo", "git_branch", "owner", "team", "budget_usd", "outcome", "confidence", "created_at", "updated_at", "closed_at", "runs", "model_calls", "tool_calls", "sessions", "tokens", "cost_usd", "last_activity",
+		},
+		"properties": map[string]interface{}{
+			"workload_id":   stringSchema(),
+			"goal":          stringSchema(),
+			"status":        stringSchema(),
+			"source":        stringSchema(),
+			"project":       stringSchema(),
+			"repo":          stringSchema(),
+			"git_branch":    stringSchema(),
+			"owner":         stringSchema(),
+			"team":          stringSchema(),
+			"budget_usd":    numberSchema(),
+			"outcome":       stringSchema(),
+			"confidence":    numberSchema(),
+			"created_at":    stringSchema(),
+			"updated_at":    stringSchema(),
+			"closed_at":     stringSchema(),
+			"runs":          integerSchema(),
+			"model_calls":   integerSchema(),
+			"tool_calls":    integerSchema(),
+			"sessions":      integerSchema(),
+			"tokens":        integerSchema(),
+			"cost_usd":      numberSchema(),
+			"last_activity": stringSchema(),
+		},
+	}
+}
+
+func evidenceDashboardSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-redacted dashboard evidence summary included in incident bundles.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"generated_at": stringSchema(),
+			"from":         stringSchema(),
+			"to":           stringSchema(),
+			"granularity":  stringSchema(),
+			"source":       stringSchema(),
+			"model":        stringSchema(),
+			"project":      stringSchema(),
+			"stats":        refSchema("DashboardStats"),
+			"consistency":  map[string]interface{}{"type": "array", "items": refSchema("DashboardConsistencyIssue")},
+			"runtime":      refSchema("RuntimeStatus"),
+		},
+	}
+}
+
+func evidenceBundleSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Privacy-redacted incident evidence bundle for local audit, issue reports, and support.",
+		"additionalProperties": true,
+		"required":             []string{"product", "generated_at", "window", "privacy", "runtime", "quality", "ingestion_health", "pricing_sources", "pricing_rules", "pricing_audit", "dashboard", "anomaly_events", "watchdog_events", "cost_intelligence", "workload_states"},
+		"properties": map[string]interface{}{
+			"product":          stringSchema(),
+			"generated_at":     stringSchema(),
+			"window":           map[string]interface{}{"type": "object", "additionalProperties": stringSchema()},
+			"privacy":          stringSchema(),
+			"runtime":          refSchema("RuntimeStatus"),
+			"quality":          refSchema("DataQualityReport"),
+			"ingestion_health": map[string]interface{}{"type": "array", "items": refSchema("IngestionHealth")},
+			"pricing_sources":  map[string]interface{}{"type": "array", "items": refSchema("PricingSourceStatus")},
+			"pricing_rules":    refSchema("PricingRuleSummary"),
+			"pricing_audit":    map[string]interface{}{"type": "array", "items": refSchema("PricingAuditRow")},
+			"dashboard":        refSchema("EvidenceDashboard"),
+			"anomaly_events":   map[string]interface{}{"type": "array", "items": refSchema("InsightEvent")},
+			"watchdog_events":  map[string]interface{}{"type": "array", "items": refSchema("InsightEvent")},
+			"cost_intelligence": map[string]interface{}{
+				"type":  "array",
+				"items": refSchema("CostInsightRow"),
+			},
+			"workload_states": map[string]interface{}{"type": "array", "items": refSchema("WorkloadState")},
+		},
+	}
+}
+
+func offlineBundleDataSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Offline bundle data payload containing ingestible canonical events and summary snapshots.",
+		"additionalProperties": true,
+		"required":             []string{"canonical_events", "stats", "workloads", "model_calls", "daily"},
+		"properties": map[string]interface{}{
+			"canonical_events": map[string]interface{}{"type": "array", "items": refSchema("CanonicalEvent")},
+			"stats":            refSchema("DashboardStats"),
+			"workloads":        map[string]interface{}{"type": "array", "items": refSchema("WorkloadSummary")},
+			"model_calls":      map[string]interface{}{"type": "array", "items": refSchema("ModelCallRow")},
+			"daily":            map[string]interface{}{"type": "array", "items": refSchema("TokenTimeSeriesPoint")},
+			"quality":          refSchema("DataQualityReport"),
+		},
+	}
+}
+
+func offlineBundleIntegritySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Payload hash and optional HMAC signature metadata for an offline bundle.",
+		"additionalProperties": true,
+		"required":             []string{"hash_algorithm", "payload_sha256"},
+		"properties": map[string]interface{}{
+			"hash_algorithm":      stringSchema(),
+			"payload_sha256":      stringSchema(),
+			"signature_algorithm": stringSchema(),
+			"signature":           stringSchema(),
+			"key_id":              stringSchema(),
+		},
+	}
+}
+
+func offlineBundleSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Offline signed or unsigned local usage bundle for air-gapped aggregation.",
+		"additionalProperties": true,
+		"required":             []string{"schema_version", "product", "bundle_id", "generated_at", "window", "filters", "privacy", "data", "integrity"},
+		"properties": map[string]interface{}{
+			"schema_version": stringSchema(),
+			"product":        stringSchema(),
+			"bundle_id":      stringSchema(),
+			"generated_at":   stringSchema(),
+			"window":         map[string]interface{}{"type": "object", "additionalProperties": stringSchema()},
+			"filters":        map[string]interface{}{"type": "object", "additionalProperties": stringSchema()},
+			"privacy":        stringSchema(),
+			"data":           refSchema("OfflineBundleData"),
+			"integrity":      refSchema("OfflineBundleIntegrity"),
+		},
+	}
+}
+
+func offlineBundleImportResultSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Offline bundle import and merge outcome.",
+		"additionalProperties": true,
+		"required":             []string{"bundle_id", "events_seen", "events_inserted", "events_duplicate", "payload_sha256", "signature_verified"},
+		"properties": map[string]interface{}{
+			"bundle_id":          stringSchema(),
+			"events_seen":        integerSchema(),
+			"events_inserted":    integerSchema(),
+			"events_duplicate":   integerSchema(),
+			"payload_sha256":     stringSchema(),
+			"signature_verified": boolSchema(),
+		},
+	}
+}
+
+func offlineBundleImportResponseSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Offline bundle import result.",
+		"additionalProperties": true,
+		"required":             []string{"ok", "result"},
+		"properties": map[string]interface{}{
+			"ok":     boolSchema(),
+			"result": refSchema("OfflineBundleImportResult"),
 		},
 	}
 }
