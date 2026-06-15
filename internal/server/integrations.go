@@ -55,6 +55,16 @@ func (s *Server) handleIntegrationReadiness(w http.ResponseWriter, r *http.Reque
 	writeJSONWithETag(w, r, integrations.IntegrationReadiness(opts), integrations.IntegrationReadinessFingerprint(opts))
 }
 
+func (s *Server) handleIntegrationSmoke(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	opts := s.integrationOptions()
+	runtime := s.runtimeStatus()
+	report := integrations.IntegrationSmokeReportFor(opts, runtime)
+	writeJSONWithETag(w, r, report, integrations.IntegrationSmokeFingerprintFrom(report))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

@@ -105,6 +105,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.integration_readiness") {
 		t.Fatalf("expected integration readiness tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.integration_smoke") {
+		t.Fatalf("expected integration smoke tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -188,6 +191,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	integrationReadinessMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_readiness"))
 	if integrationReadinessMeta["write_mode"] != "none" || integrationReadinessMeta["writes_local_state"] != false || integrationReadinessMeta["available_in_read_only"] != true {
 		t.Fatalf("integration readiness tool metadata wrong: %#v", integrationReadinessMeta)
+	}
+	integrationSmokeMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_smoke"))
+	if integrationSmokeMeta["write_mode"] != "none" || integrationSmokeMeta["writes_local_state"] != false || integrationSmokeMeta["available_in_read_only"] != true {
+		t.Fatalf("integration smoke tool metadata wrong: %#v", integrationSmokeMeta)
 	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
@@ -280,6 +287,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/readiness") {
 		t.Fatalf("expected integration readiness resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://integrations/smoke") {
+		t.Fatalf("expected integration smoke resource, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
@@ -536,6 +546,42 @@ func TestMCPIntegrationReadinessToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("integration readiness resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPIntegrationSmokeToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.integration_smoke","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/smoke"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.integration-smoke" ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false {
+		t.Fatalf("unexpected integration smoke tool payload: %#v", toolPayload)
+	}
+	summary := toolPayload["summary"].(map[string]interface{})
+	if summary["failed"] != float64(0) || summary["total_checks"] == float64(0) {
+		t.Fatalf("unexpected integration smoke summary: %#v", summary)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("integration smoke tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.integration-smoke"`) ||
+		!strings.Contains(resourceText, "recommendation.codex_provider_stream") {
+		t.Fatalf("unexpected integration smoke resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("integration smoke resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

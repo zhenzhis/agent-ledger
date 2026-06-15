@@ -94,7 +94,9 @@ func TestCLIReadOnlyGateMatchesAdmission(t *testing.T) {
 		{"provider", "profiles"},
 		{"signals"},
 		{"integrations", "readiness"},
+		{"integrations", "smoke"},
 		{"integration-readiness"},
+		{"integration-smoke"},
 		{"adapter", "matrix"},
 		{"provider", "convert", "--file", "provider.json"},
 		{"provider", "ingest", "--file", "provider.json"},
@@ -235,6 +237,9 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	}
 	if paths["/api/integrations/readiness"] == nil {
 		t.Fatalf("openapi output missing integration readiness path: %+v", paths)
+	}
+	if paths["/api/integrations/smoke"] == nil {
+		t.Fatalf("openapi output missing integration smoke path: %+v", paths)
 	}
 }
 
@@ -397,6 +402,35 @@ func TestIntegrationReadinessCLIOutputsReadOnlyReport(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
 			t.Fatalf("integration readiness leaked %q: %s", forbidden, out)
+		}
+	}
+}
+
+func TestIntegrationSmokeCLIOutputsReadOnlyReport(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"integrations", "smoke"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI integrations smoke: %v", err)
+	}
+	var report integrations.IntegrationSmokeReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode integration smoke output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.integration-smoke" || !report.ReadOnlySafe || report.WritesLocalState ||
+		!report.Runtime.ReadOnly || report.Summary.Failed != 0 || report.FixtureCoverage.Fixtures < 10 {
+		t.Fatalf("unexpected integration smoke report: %+v", report)
+	}
+	if !strings.Contains(out, "recommendation.codex_provider_stream") || !strings.Contains(out, "agent-ledger contracts verify") {
+		t.Fatalf("integration smoke missing rollout checks: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("integration smoke leaked %q: %s", forbidden, out)
 		}
 	}
 }

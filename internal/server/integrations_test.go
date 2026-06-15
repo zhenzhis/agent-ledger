@@ -38,6 +38,7 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		manifest.SignalTaxonomyURI != "/api/signal-taxonomy" ||
 		manifest.SignalCoverageURI != "/api/integrations/signal-coverage" ||
 		manifest.IntegrationReadinessURI != "/api/integrations/readiness" ||
+		manifest.IntegrationSmokeURI != "/api/integrations/smoke" ||
 		manifest.RecommendationURI != "/api/integrations/recommendation" ||
 		manifest.CanonicalSchemaURI != "/api/event-schema" || manifest.EventExamplesURI != "/api/event-examples" ||
 		manifest.AdapterSpecURI != "/api/integrations/adapter-spec" ||
@@ -65,6 +66,9 @@ func TestDiscoveryEndpoint(t *testing.T) {
 	if manifest.IntegrationReadinessHash == "" || manifest.IntegrationReadinessHash != integrations.IntegrationReadinessFingerprint(srv.integrationOptions()) {
 		t.Fatalf("unexpected integration readiness hash: %+v", manifest)
 	}
+	if manifest.IntegrationSmokeHash == "" || manifest.IntegrationSmokeHash != integrations.IntegrationSmokeFingerprint(srv.integrationOptions(), nil) {
+		t.Fatalf("unexpected integration smoke hash: %+v", manifest)
+	}
 	if manifest.RecommendationHash == "" || manifest.RecommendationHash != integrations.IntegrationRecommendationContractFingerprint() {
 		t.Fatalf("unexpected recommendation hash: %+v", manifest)
 	}
@@ -76,7 +80,7 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		!manifest.A2A.SupportsDelegatedLineage || !manifest.A2A.SupportsEvidenceReferences {
 		t.Fatalf("unexpected A2A discovery metadata: %+v", manifest.A2A)
 	}
-	if !discoveryHasProtocol(manifest, "protocol.runtime_status") || !discoveryHasProtocol(manifest, "protocol.config_status") || !discoveryHasProtocol(manifest, "protocol.readiness") || !discoveryHasProtocol(manifest, "protocol.admission_check") || !discoveryHasProtocol(manifest, "protocol.provider_profiles") || !discoveryHasProtocol(manifest, "protocol.agent_profiles") || !discoveryHasProtocol(manifest, "protocol.signal_taxonomy") || !discoveryHasProtocol(manifest, "protocol.signal_coverage") || !discoveryHasProtocol(manifest, "protocol.integration_readiness") || !discoveryHasProtocol(manifest, "protocol.integration_recommendation") || !discoveryHasProtocol(manifest, "protocol.workload_event_feed") {
+	if !discoveryHasProtocol(manifest, "protocol.runtime_status") || !discoveryHasProtocol(manifest, "protocol.config_status") || !discoveryHasProtocol(manifest, "protocol.readiness") || !discoveryHasProtocol(manifest, "protocol.admission_check") || !discoveryHasProtocol(manifest, "protocol.provider_profiles") || !discoveryHasProtocol(manifest, "protocol.agent_profiles") || !discoveryHasProtocol(manifest, "protocol.signal_taxonomy") || !discoveryHasProtocol(manifest, "protocol.signal_coverage") || !discoveryHasProtocol(manifest, "protocol.integration_readiness") || !discoveryHasProtocol(manifest, "protocol.integration_smoke") || !discoveryHasProtocol(manifest, "protocol.integration_recommendation") || !discoveryHasProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("missing control-plane protocols: %+v", manifest.Protocols)
 	}
 	if manifest.PromptContentStored || manifest.UsageDataUploaded {
@@ -101,7 +105,7 @@ func TestContractsEndpoint(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle: %+v", bundle)
 	}
-	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "signal-taxonomy") || !contractBundleHasDocument(bundle, "signal-coverage") || !contractBundleHasDocument(bundle, "integration-readiness") || !contractBundleHasDocument(bundle, "integration-recommendation") || !contractBundleHasDocument(bundle, "runtime-status") ||
+	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "signal-taxonomy") || !contractBundleHasDocument(bundle, "signal-coverage") || !contractBundleHasDocument(bundle, "integration-readiness") || !contractBundleHasDocument(bundle, "integration-smoke") || !contractBundleHasDocument(bundle, "integration-recommendation") || !contractBundleHasDocument(bundle, "runtime-status") ||
 		!contractBundleHasDocument(bundle, "admission-check") || !contractBundleHasDocument(bundle, "canonical-event-schema") || !contractBundleHasDocument(bundle, "adapter-contract") || !contractBundleHasDocument(bundle, "adapter-conformance-matrix") {
 		t.Fatalf("contract bundle missing core documents: %+v", bundle.Documents)
 	}
@@ -225,6 +229,31 @@ func TestIntegrationReadinessEndpoint(t *testing.T) {
 		t.Fatalf("integration readiness should expose activation gates: %s", rr.Body.String())
 	}
 	assertETagRevalidates(t, srv.handleIntegrationReadiness, "http://127.0.0.1/api/integrations/readiness", rr.Header().Get("ETag"))
+}
+
+func TestIntegrationSmokeEndpoint(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/integrations/smoke", nil)
+	rr := httptest.NewRecorder()
+	srv.handleIntegrationSmoke(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("integration smoke status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var report integrations.IntegrationSmokeReport
+	if err := json.Unmarshal(rr.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode integration smoke: %v", err)
+	}
+	if report.Contract != "agent-ledger.integration-smoke" || !report.ReadOnlySafe || report.WritesLocalState ||
+		report.CatalogHash == "" || report.SignalCoverageHash != integrations.SignalCoverageFingerprint() ||
+		report.ConformanceMatrixHash != integrations.AdapterConformanceMatrixFingerprint() ||
+		report.Summary.TotalChecks == 0 || report.Summary.Failed != 0 || report.FixtureCoverage.Fixtures < 10 {
+		t.Fatalf("unexpected integration smoke report: %+v", report)
+	}
+	if !strings.Contains(rr.Body.String(), "recommendation.codex_provider_stream") || !strings.Contains(rr.Body.String(), "agent-ledger contracts verify") {
+		t.Fatalf("integration smoke should expose rollout checks and CI commands: %s", rr.Body.String())
+	}
+	assertETagRevalidates(t, srv.handleIntegrationSmoke, "http://127.0.0.1/api/integrations/smoke", rr.Header().Get("ETag"))
 }
 
 func TestIntegrationRecommendationEndpoint(t *testing.T) {
@@ -351,6 +380,9 @@ func TestContractVerificationEndpoint(t *testing.T) {
 	if !contractVerificationHasCheck(report, "discovery.integration_readiness") || !contractVerificationHasCheck(report, "openapi.integration_readiness_hash") || !contractVerificationHasCheck(report, "bundle.document.integration-readiness") {
 		t.Fatalf("verification report missing integration readiness checks: %+v", report.Checks)
 	}
+	if !contractVerificationHasCheck(report, "discovery.integration_smoke") || !contractVerificationHasCheck(report, "openapi.integration_smoke_hash") || !contractVerificationHasCheck(report, "bundle.document.integration-smoke") {
+		t.Fatalf("verification report missing integration smoke checks: %+v", report.Checks)
+	}
 	if !contractVerificationHasCheck(report, "discovery.conformance_matrix") || !contractVerificationHasCheck(report, "adapter.conformance_matrix") || !contractVerificationHasCheck(report, "openapi.conformance_matrix_hash") || !contractVerificationHasCheck(report, "bundle.document.adapter-conformance-matrix") {
 		t.Fatalf("verification report missing conformance matrix checks: %+v", report.Checks)
 	}
@@ -385,6 +417,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if meta["integration_readiness_hash"] != integrations.IntegrationReadinessFingerprint(srv.integrationOptions()) {
 		t.Fatalf("unexpected integration readiness hash in openapi metadata: %+v", meta)
+	}
+	if meta["integration_smoke_hash"] != integrations.IntegrationSmokeFingerprint(srv.integrationOptions(), srv.runtimeStatus()) {
+		t.Fatalf("unexpected integration smoke hash in openapi metadata: %+v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
 	for _, path := range integrations.OpenAPIContractPaths() {
@@ -613,6 +648,7 @@ func TestControlPlaneEndpointETags(t *testing.T) {
 		{name: "signal-taxonomy", url: "http://127.0.0.1/api/signal-taxonomy", handler: srv.handleSignalTaxonomy},
 		{name: "signal-coverage", url: "http://127.0.0.1/api/integrations/signal-coverage", handler: srv.handleSignalCoverage},
 		{name: "integration-readiness", url: "http://127.0.0.1/api/integrations/readiness", handler: srv.handleIntegrationReadiness},
+		{name: "integration-smoke", url: "http://127.0.0.1/api/integrations/smoke", handler: srv.handleIntegrationSmoke},
 		{name: "integration-recommendation", url: "http://127.0.0.1/api/integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream", handler: srv.handleIntegrationRecommendation},
 		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},
 		{name: "goal-coverage", url: "http://127.0.0.1/api/goal-coverage", handler: srv.handleGoalCoverage},

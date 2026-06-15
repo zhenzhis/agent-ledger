@@ -246,6 +246,22 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				WritesLocalState: false,
 			},
 			{
+				ID:               "integration-smoke",
+				Name:             "Integration Smoke Report",
+				Contract:         "agent-ledger.integration-smoke",
+				Version:          "v1",
+				Hash:             IntegrationSmokeFingerprint(opts, runtime),
+				PrimaryURI:       "/api/integrations/smoke",
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger integrations smoke", "agent-ledger integration-smoke"},
+				MCPTools:         []string{"ledger.integration_smoke"},
+				MCPResources:     []string{"agent-ledger://integrations/smoke"},
+				Revalidation:     "ETag + If-None-Match",
+				Privacy:          "metadata-only contract, conformance, signal, readiness, and recommendation smoke evidence",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
+			{
 				ID:               "integration-recommendation",
 				Name:             "Integration Recommendation Advisor",
 				Contract:         "agent-ledger.integration-recommendation",
@@ -380,6 +396,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	adapter := AdapterContractSpec()
 	coverage := SignalCoverage()
 	integrationReadiness := IntegrationReadiness(opts)
+	integrationSmoke := IntegrationSmokeReportFor(opts, runtime)
 	openAPI := OpenAPISpecFor(opts, runtime)
 	openAPIHash := OpenAPIFingerprint(opts, runtime)
 	bundle := ContractBundleFor(opts, runtime)
@@ -403,6 +420,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.signal_taxonomy", discovery.SignalTaxonomyURI == "/api/signal-taxonomy" && discovery.SignalTaxonomyHash == SignalTaxonomyFingerprint(), "critical", "discovery points to signal taxonomy catalog", "/api/signal-taxonomy "+SignalTaxonomyFingerprint(), discovery.SignalTaxonomyURI+" "+discovery.SignalTaxonomyHash)
 	addCheck("discovery.signal_coverage", discovery.SignalCoverageURI == "/api/integrations/signal-coverage" && discovery.SignalCoverageHash == SignalCoverageFingerprint(), "critical", "discovery points to signal coverage report", "/api/integrations/signal-coverage "+SignalCoverageFingerprint(), discovery.SignalCoverageURI+" "+discovery.SignalCoverageHash)
 	addCheck("discovery.integration_readiness", discovery.IntegrationReadinessURI == "/api/integrations/readiness" && discovery.IntegrationReadinessHash == IntegrationReadinessFingerprint(opts), "critical", "discovery points to integration readiness report", "/api/integrations/readiness "+IntegrationReadinessFingerprint(opts), discovery.IntegrationReadinessURI+" "+discovery.IntegrationReadinessHash)
+	addCheck("discovery.integration_smoke", discovery.IntegrationSmokeURI == "/api/integrations/smoke" && discovery.IntegrationSmokeHash == IntegrationSmokeFingerprint(opts, nil), "critical", "discovery points to integration smoke report", "/api/integrations/smoke "+IntegrationSmokeFingerprint(opts, nil), discovery.IntegrationSmokeURI+" "+discovery.IntegrationSmokeHash)
 	addCheck("discovery.integration_recommendation", discovery.RecommendationURI == "/api/integrations/recommendation" && discovery.RecommendationHash == IntegrationRecommendationContractFingerprint(), "critical", "discovery points to integration recommendation advisor", "/api/integrations/recommendation "+IntegrationRecommendationContractFingerprint(), discovery.RecommendationURI+" "+discovery.RecommendationHash)
 	addCheck("discovery.conformance_matrix", discovery.ConformanceMatrixURI == "/api/integrations/conformance-matrix" && discovery.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint(), "critical", "discovery points to adapter conformance matrix", "/api/integrations/conformance-matrix "+AdapterConformanceMatrixFingerprint(), discovery.ConformanceMatrixURI+" "+discovery.ConformanceMatrixHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
@@ -427,6 +445,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		"contract_bundle":            bundle,
 		"discovery":                  discovery,
 		"goal_coverage":              GoalCoverageReportFor(opts, runtime),
+		"integration_smoke":          integrationSmoke,
 		"integration_recommendation": IntegrationRecommendation(IntegrationRecommendationRequest{
 			AgentProfileID:    "codex-cli",
 			ProviderProfileID: "openai-official",
@@ -456,6 +475,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "signal-taxonomy", hash: SignalTaxonomyFingerprint()},
 		{id: "signal-coverage", hash: SignalCoverageFingerprint()},
 		{id: "integration-readiness", hash: IntegrationReadinessFingerprint(opts)},
+		{id: "integration-smoke", hash: IntegrationSmokeFingerprint(opts, runtime)},
 		{id: "integration-recommendation", hash: IntegrationRecommendationContractFingerprint()},
 		{id: "adapter-conformance-matrix", hash: AdapterConformanceMatrixFingerprint()},
 		{id: "runtime-status", hash: hashJSONPayload(runtime)},
@@ -485,6 +505,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.signal_taxonomy_hash", contractStringValue(meta["signal_taxonomy_hash"]) == SignalTaxonomyFingerprint(), "critical", "OpenAPI signal taxonomy hash matches generated catalog", SignalTaxonomyFingerprint(), contractStringValue(meta["signal_taxonomy_hash"]))
 	addCheck("openapi.signal_coverage_hash", contractStringValue(meta["signal_coverage_hash"]) == SignalCoverageFingerprint(), "critical", "OpenAPI signal coverage hash matches generated report", SignalCoverageFingerprint(), contractStringValue(meta["signal_coverage_hash"]))
 	addCheck("openapi.integration_readiness_hash", contractStringValue(meta["integration_readiness_hash"]) == IntegrationReadinessFingerprint(opts), "critical", "OpenAPI integration readiness hash matches generated report", IntegrationReadinessFingerprint(opts), contractStringValue(meta["integration_readiness_hash"]))
+	addCheck("openapi.integration_smoke_hash", contractStringValue(meta["integration_smoke_hash"]) == IntegrationSmokeFingerprint(opts, runtime), "critical", "OpenAPI integration smoke hash matches generated report", IntegrationSmokeFingerprint(opts, runtime), contractStringValue(meta["integration_smoke_hash"]))
 	addCheck("openapi.integration_recommendation_hash", contractStringValue(meta["integration_recommendation_hash"]) == IntegrationRecommendationContractFingerprint(), "critical", "OpenAPI integration recommendation hash matches generated contract", IntegrationRecommendationContractFingerprint(), contractStringValue(meta["integration_recommendation_hash"]))
 	addCheck("openapi.conformance_matrix_hash", contractStringValue(meta["conformance_matrix_hash"]) == AdapterConformanceMatrixFingerprint(), "critical", "OpenAPI conformance matrix hash matches generated matrix", AdapterConformanceMatrixFingerprint(), contractStringValue(meta["conformance_matrix_hash"]))
 	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))

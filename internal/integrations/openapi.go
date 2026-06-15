@@ -62,6 +62,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"signal_taxonomy_hash":            SignalTaxonomyFingerprint(),
 			"signal_coverage_hash":            SignalCoverageFingerprint(),
 			"integration_readiness_hash":      IntegrationReadinessFingerprint(opts),
+			"integration_smoke_hash":          IntegrationSmokeFingerprint(opts, runtime),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -80,6 +81,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/signal-taxonomy":                 getOperation("contracts", "Get signal taxonomy", "Static privacy-safe signal dictionary for mapping adapter, router, provider, and observability metadata to canonical event families.", "SignalTaxonomyCatalog"),
 			"/api/integrations/signal-coverage":    getOperation("contracts", "Get signal coverage", "Static privacy-safe coverage report linking taxonomy signal ids to adapter, provider, and agent profile contracts.", "SignalCoverageReport"),
 			"/api/integrations/readiness":          getOperation("contracts", "Get integration readiness", "Static privacy-safe activation readiness report for local protocols, gateways, collectors, and notification surfaces.", "IntegrationReadinessReport"),
+			"/api/integrations/smoke":              getOperation("contracts", "Get integration smoke", "Static privacy-safe rollout smoke report combining contract, conformance, signal coverage, readiness, and recommendation checks.", "IntegrationSmokeReport"),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -187,7 +189,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -212,6 +214,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"signal_coverage_hash":            refSchema("Hash"),
 						"integration_readiness_uri":       stringSchema(),
 						"integration_readiness_hash":      refSchema("Hash"),
+						"integration_smoke_uri":           stringSchema(),
+						"integration_smoke_hash":          refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -345,6 +349,11 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IntegrationReadinessSummary":         integrationReadinessSummarySchema(),
 				"IntegrationReadinessCapability":      integrationReadinessCapabilitySchema(),
 				"IntegrationReadinessGate":            integrationReadinessGateSchema(),
+				"IntegrationSmokeReport":              integrationSmokeReportSchema(),
+				"IntegrationSmokeRuntime":             integrationSmokeRuntimeSchema(),
+				"IntegrationSmokeSummary":             integrationSmokeSummarySchema(),
+				"IntegrationSmokeFixtureCoverage":     integrationSmokeFixtureCoverageSchema(),
+				"IntegrationSmokeCheck":               integrationSmokeCheckSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -808,6 +817,36 @@ func OpenAPIFingerprint(opts Options, runtime *storage.RuntimeStatus) string {
 	return hashJSONPayload(OpenAPISpecFor(opts, runtime))
 }
 
+// OpenAPISmokeFingerprint is a non-recursive witness hash for smoke reports.
+// It must not call OpenAPISpecFor because the OpenAPI document itself includes
+// the integration smoke hash in its metadata.
+func OpenAPISmokeFingerprint(opts Options, runtime *storage.RuntimeStatus) string {
+	if runtime == nil {
+		runtime = defaultRuntimeStatus(opts)
+	}
+	catalog := Registry(opts)
+	return hashJSONPayload(map[string]interface{}{
+		"contract":                        "agent-ledger.control-plane-openapi",
+		"version":                         "v1",
+		"paths":                           OpenAPIContractPaths(),
+		"privacy_default":                 catalog.PrivacyDefault,
+		"read_only":                       opts.ReadOnly,
+		"prompt_content_stored":           false,
+		"usage_data_uploaded":             false,
+		"capability_catalog_hash":         CatalogFingerprintFrom(catalog),
+		"provider_profiles_hash":          ProviderProfilesFingerprint(),
+		"agent_profiles_hash":             AgentFrameworkProfilesFingerprint(),
+		"signal_taxonomy_hash":            SignalTaxonomyFingerprint(),
+		"signal_coverage_hash":            SignalCoverageFingerprint(),
+		"integration_readiness_hash":      IntegrationReadinessFingerprint(opts),
+		"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
+		"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
+		"runtime_status_hash":             hashJSONPayload(runtime),
+		"canonical_schema_hash":           storage.CanonicalEventSchemaFingerprint(),
+		"adapter_spec_hash":               AdapterContractFingerprint(),
+	})
+}
+
 func addOperationIDs(spec map[string]interface{}) {
 	paths, ok := spec["paths"].(map[string]interface{})
 	if !ok {
@@ -1033,6 +1072,7 @@ func OpenAPIContractPaths() []string {
 		"/api/signal-taxonomy",
 		"/api/integrations/signal-coverage",
 		"/api/integrations/readiness",
+		"/api/integrations/smoke",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -2546,6 +2586,113 @@ func integrationReadinessGateSchema() map[string]interface{} {
 			"status":      stringSchema(),
 			"message":     stringSchema(),
 			"remediation": stringSchema(),
+		},
+	}
+}
+
+func integrationSmokeReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe rollout smoke report for ecosystem integration activation.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "catalog_hash", "signal_coverage_hash", "integration_readiness_hash", "integration_recommendation_hash", "conformance_matrix_hash", "openapi_hash", "runtime_hash", "runtime", "summary", "fixture_coverage", "checks", "ci_commands", "quality_gates", "operational_guidance"},
+		"properties": map[string]interface{}{
+			"product":                         stringSchema(),
+			"contract":                        constSchema("agent-ledger.integration-smoke"),
+			"version":                         stringSchema(),
+			"local_first":                     boolSchema(),
+			"read_only_safe":                  boolSchema(),
+			"writes_local_state":              boolSchema(),
+			"privacy_policy":                  stringSchema(),
+			"catalog_hash":                    refSchema("Hash"),
+			"signal_coverage_hash":            refSchema("Hash"),
+			"integration_readiness_hash":      refSchema("Hash"),
+			"integration_recommendation_hash": refSchema("Hash"),
+			"conformance_matrix_hash":         refSchema("Hash"),
+			"openapi_hash":                    refSchema("Hash"),
+			"runtime_hash":                    refSchema("Hash"),
+			"runtime":                         refSchema("IntegrationSmokeRuntime"),
+			"summary":                         refSchema("IntegrationSmokeSummary"),
+			"fixture_coverage":                refSchema("IntegrationSmokeFixtureCoverage"),
+			"checks":                          refArraySchema("IntegrationSmokeCheck"),
+			"ci_commands":                     stringArraySchema(),
+			"quality_gates":                   stringArraySchema(),
+			"operational_guidance":            stringArraySchema(),
+		},
+	}
+}
+
+func integrationSmokeRuntimeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Runtime feature flags used by integration smoke without exposing secrets or paths.",
+		"additionalProperties": true,
+		"required":             []string{"read_only", "rbac_enabled", "webhooks_enabled", "otlp_receiver_enabled", "otlp_receiver_grpc_enabled", "gateway_enabled", "pricing_mode"},
+		"properties": map[string]interface{}{
+			"read_only":                  boolSchema(),
+			"rbac_enabled":               boolSchema(),
+			"webhooks_enabled":           boolSchema(),
+			"otlp_receiver_enabled":      boolSchema(),
+			"otlp_receiver_grpc_enabled": boolSchema(),
+			"gateway_enabled":            boolSchema(),
+			"pricing_mode":               stringSchema(),
+		},
+	}
+}
+
+func integrationSmokeSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Stable smoke check counts for CI and wrappers.",
+		"additionalProperties": true,
+		"required":             []string{"status", "total_checks", "passed", "warnings", "failed", "review_required", "disabled_by_config"},
+		"properties": map[string]interface{}{
+			"status":             stringSchema(),
+			"total_checks":       integerSchema(),
+			"passed":             integerSchema(),
+			"warnings":           integerSchema(),
+			"failed":             integerSchema(),
+			"review_required":    integerSchema(),
+			"disabled_by_config": integerSchema(),
+		},
+	}
+}
+
+func integrationSmokeFixtureCoverageSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Compact fixture declaration counts from the adapter conformance matrix.",
+		"additionalProperties": true,
+		"required":             []string{"input_kinds", "fixtures", "strict_fixtures", "provider_fixtures", "provider_stream_fixtures", "otel_fixtures", "a2a_fixtures", "canonical_fixtures", "expected_kinds"},
+		"properties": map[string]interface{}{
+			"input_kinds":              integerSchema(),
+			"fixtures":                 integerSchema(),
+			"strict_fixtures":          integerSchema(),
+			"provider_fixtures":        integerSchema(),
+			"provider_stream_fixtures": integerSchema(),
+			"otel_fixtures":            integerSchema(),
+			"a2a_fixtures":             integerSchema(),
+			"canonical_fixtures":       integerSchema(),
+			"expected_kinds":           stringArraySchema(),
+		},
+	}
+}
+
+func integrationSmokeCheckSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One metadata-only integration smoke assertion.",
+		"additionalProperties": true,
+		"required":             []string{"id", "category", "status", "severity", "message", "evidence"},
+		"properties": map[string]interface{}{
+			"id":          stringSchema(),
+			"category":    stringSchema(),
+			"status":      stringSchema(),
+			"severity":    stringSchema(),
+			"message":     stringSchema(),
+			"evidence":    stringSchema(),
+			"remediation": stringSchema(),
+			"command":     stringSchema(),
 		},
 	}
 }

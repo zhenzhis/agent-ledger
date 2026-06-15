@@ -48,6 +48,8 @@ type DiscoveryManifest struct {
 	SignalCoverageHash       string               `json:"signal_coverage_hash"`
 	IntegrationReadinessURI  string               `json:"integration_readiness_uri"`
 	IntegrationReadinessHash string               `json:"integration_readiness_hash"`
+	IntegrationSmokeURI      string               `json:"integration_smoke_uri"`
+	IntegrationSmokeHash     string               `json:"integration_smoke_hash"`
 	RecommendationURI        string               `json:"integration_recommendation_uri"`
 	RecommendationHash       string               `json:"integration_recommendation_hash"`
 	ContractBundleURI        string               `json:"contract_bundle_uri"`
@@ -149,6 +151,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		SignalCoverageHash:       SignalCoverageFingerprint(),
 		IntegrationReadinessURI:  "/api/integrations/readiness",
 		IntegrationReadinessHash: IntegrationReadinessFingerprint(opts),
+		IntegrationSmokeURI:      "/api/integrations/smoke",
+		IntegrationSmokeHash:     IntegrationSmokeFingerprint(opts, nil),
 		RecommendationURI:        "/api/integrations/recommendation",
 		RecommendationHash:       IntegrationRecommendationContractFingerprint(),
 		ContractBundleURI:        "/api/contracts",

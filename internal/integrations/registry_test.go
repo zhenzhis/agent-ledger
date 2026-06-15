@@ -39,6 +39,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapability(t, catalog, "protocol.signal_taxonomy", "implemented", true)
 	assertCapability(t, catalog, "protocol.signal_coverage", "implemented", true)
 	assertCapability(t, catalog, "protocol.integration_readiness", "implemented", true)
+	assertCapability(t, catalog, "protocol.integration_smoke", "implemented", true)
 	assertCapability(t, catalog, "protocol.openapi", "implemented", true)
 	assertCapability(t, catalog, "protocol.runtime_status", "implemented", true)
 	assertCapability(t, catalog, "protocol.config_status", "implemented", true)
@@ -77,6 +78,9 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityCommand(t, catalog, "protocol.integration_readiness", "agent-ledger integrations readiness")
 	assertCapabilityTool(t, catalog, "protocol.integration_readiness", "ledger.integration_readiness")
 	assertCapabilityResource(t, catalog, "protocol.integration_readiness", "agent-ledger://integrations/readiness")
+	assertCapabilityCommand(t, catalog, "protocol.integration_smoke", "agent-ledger integrations smoke")
+	assertCapabilityTool(t, catalog, "protocol.integration_smoke", "ledger.integration_smoke")
+	assertCapabilityResource(t, catalog, "protocol.integration_smoke", "agent-ledger://integrations/smoke")
 	assertCapabilityCommand(t, catalog, "protocol.integration_recommendation", "agent-ledger agent recommend --profile codex-cli --provider openai-official --surface provider-stream --signals model,usage,cache")
 	assertCapabilityTool(t, catalog, "protocol.integration_recommendation", "ledger.integration_recommendation")
 	assertCapabilityResource(t, catalog, "protocol.integration_recommendation", "agent-ledger://integrations/recommendation")
@@ -102,6 +106,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.signal_taxonomy")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.signal_coverage")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_readiness")
+	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_smoke")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.conformance_matrix")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.claim_next_workload")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.workload_queue")
@@ -120,6 +125,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/signal-taxonomy")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/signal-coverage")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/readiness")
+	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/smoke")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/conformance-matrix")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://runtime/status")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://config/status")
@@ -234,6 +240,7 @@ func TestRegistryAnnotatesReadOnlyRuntimeCapabilities(t *testing.T) {
 	assertRuntimeCapability(t, catalog, "protocol.signal_taxonomy", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.signal_coverage", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.integration_readiness", true, false, true)
+	assertRuntimeCapability(t, catalog, "protocol.integration_smoke", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.runtime_status", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.config_status", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.readiness", true, false, true)
@@ -270,6 +277,8 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 		manifest.SignalCoverageHash != SignalCoverageFingerprint() ||
 		manifest.IntegrationReadinessURI != "/api/integrations/readiness" ||
 		manifest.IntegrationReadinessHash != IntegrationReadinessFingerprint(OptionsFromConfig(cfg)) ||
+		manifest.IntegrationSmokeURI != "/api/integrations/smoke" ||
+		manifest.IntegrationSmokeHash != IntegrationSmokeFingerprint(OptionsFromConfig(cfg), nil) ||
 		manifest.RecommendationURI != "/api/integrations/recommendation" ||
 		manifest.RecommendationHash != IntegrationRecommendationContractFingerprint() ||
 		manifest.ConformanceMatrixURI != "/api/integrations/conformance-matrix" ||
@@ -292,7 +301,7 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	if manifest.AdapterSpecHash == "" || !strings.HasPrefix(manifest.AdapterSpecHash, "sha256:") || manifest.AdapterSpecHash != AdapterContractFingerprint() {
 		t.Fatalf("discovery missing adapter contract hash: %#v", manifest)
 	}
-	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.contract_verification") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.config_status") || !hasDiscoveryProtocol(manifest, "protocol.readiness") || !hasDiscoveryProtocol(manifest, "protocol.admission_check") || !hasDiscoveryProtocol(manifest, "protocol.signal_taxonomy") || !hasDiscoveryProtocol(manifest, "protocol.signal_coverage") || !hasDiscoveryProtocol(manifest, "protocol.integration_readiness") || !hasDiscoveryProtocol(manifest, "protocol.integration_recommendation") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
+	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.contract_verification") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.config_status") || !hasDiscoveryProtocol(manifest, "protocol.readiness") || !hasDiscoveryProtocol(manifest, "protocol.admission_check") || !hasDiscoveryProtocol(manifest, "protocol.signal_taxonomy") || !hasDiscoveryProtocol(manifest, "protocol.signal_coverage") || !hasDiscoveryProtocol(manifest, "protocol.integration_readiness") || !hasDiscoveryProtocol(manifest, "protocol.integration_smoke") || !hasDiscoveryProtocol(manifest, "protocol.integration_recommendation") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("discovery missing agent protocols: %#v", manifest.Protocols)
 	}
 	for _, protocol := range manifest.Protocols {
@@ -319,7 +328,7 @@ func TestContractBundleIndexesCoreContracts(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.Version != "v1" || !bundle.LocalFirst || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle identity: %#v", bundle)
 	}
-	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "agent-profiles", "signal-taxonomy", "signal-coverage", "integration-readiness", "integration-recommendation", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
+	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "agent-profiles", "signal-taxonomy", "signal-coverage", "integration-readiness", "integration-smoke", "integration-recommendation", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
 		if !contractBundleHasDocument(bundle, id) {
 			t.Fatalf("contract bundle missing %s: %#v", id, bundle.Documents)
 		}
@@ -1343,6 +1352,7 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectPathResponseRef("/api/signal-taxonomy", "get", "#/components/schemas/SignalTaxonomyCatalog")
 	expectPathResponseRef("/api/integrations/signal-coverage", "get", "#/components/schemas/SignalCoverageReport")
 	expectPathResponseRef("/api/integrations/readiness", "get", "#/components/schemas/IntegrationReadinessReport")
+	expectPathResponseRef("/api/integrations/smoke", "get", "#/components/schemas/IntegrationSmokeReport")
 	expectPathResponseRef("/api/integrations/recommendation", "get", "#/components/schemas/IntegrationRecommendationReport")
 	expectPathResponseRef("/api/integrations/adapter-spec", "get", "#/components/schemas/AdapterContract")
 	expectPathResponseRef("/api/integrations/conformance-matrix", "get", "#/components/schemas/AdapterConformanceMatrix")
@@ -1379,6 +1389,15 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("IntegrationReadinessCapability", "id", "name", "category", "status", "maturity", "direction", "enabled", "runtime_status", "writes_local_state", "available_in_read_only", "activation_state", "risk_level", "gates", "evidence", "actions")
 	expectArrayRef("IntegrationReadinessCapability", "gates", "#/components/schemas/IntegrationReadinessGate")
 	expectFields("IntegrationReadinessGate", "id", "severity", "status", "message", "remediation")
+	expectFields("IntegrationSmokeReport", "product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "catalog_hash", "signal_coverage_hash", "integration_readiness_hash", "integration_recommendation_hash", "conformance_matrix_hash", "openapi_hash", "runtime_hash", "runtime", "summary", "fixture_coverage", "checks", "ci_commands", "quality_gates", "operational_guidance")
+	expectRef("IntegrationSmokeReport", "runtime", "#/components/schemas/IntegrationSmokeRuntime")
+	expectRef("IntegrationSmokeReport", "summary", "#/components/schemas/IntegrationSmokeSummary")
+	expectRef("IntegrationSmokeReport", "fixture_coverage", "#/components/schemas/IntegrationSmokeFixtureCoverage")
+	expectArrayRef("IntegrationSmokeReport", "checks", "#/components/schemas/IntegrationSmokeCheck")
+	expectFields("IntegrationSmokeRuntime", "read_only", "rbac_enabled", "webhooks_enabled", "otlp_receiver_enabled", "otlp_receiver_grpc_enabled", "gateway_enabled", "pricing_mode")
+	expectFields("IntegrationSmokeSummary", "status", "total_checks", "passed", "warnings", "failed", "review_required", "disabled_by_config")
+	expectFields("IntegrationSmokeFixtureCoverage", "input_kinds", "fixtures", "strict_fixtures", "provider_fixtures", "provider_stream_fixtures", "otel_fixtures", "a2a_fixtures", "canonical_fixtures", "expected_kinds")
+	expectFields("IntegrationSmokeCheck", "id", "category", "status", "severity", "message", "evidence", "remediation", "command")
 
 	expectFields("GoalCoverageReport", "product", "slug", "contract", "version", "status", "local_first", "read_only", "prompt_content_stored", "usage_data_uploaded", "privacy_default", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "canonical_schema_hash", "adapter_spec_hash", "coverage_hash", "summary", "sections", "external_dependencies", "verification", "privacy")
 	expectRef("GoalCoverageReport", "summary", "#/components/schemas/GoalCoverageSummary")
@@ -1566,7 +1585,7 @@ func TestOpenAPIEcosystemIngestSchemasExposeTelemetryFields(t *testing.T) {
 	expectFields("OTelResourceSpansEnvelope", "resourceSpans")
 	expectOneOfRefs("OTLPTraceRequest", "#/components/schemas/OTelResourceSpansEnvelope", "#/components/schemas/OTelSpanEnvelope")
 
-	expectFields("DiscoveryManifest", "contract_bundle_uri", "openapi_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "runtime_status_uri", "canonical_schema_uri", "canonical_schema_hash", "event_examples_uri", "adapter_spec_uri", "adapter_spec_hash", "adapter_conformance_uri", "a2a")
+	expectFields("DiscoveryManifest", "contract_bundle_uri", "openapi_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "runtime_status_uri", "canonical_schema_uri", "canonical_schema_hash", "event_examples_uri", "adapter_spec_uri", "adapter_spec_hash", "adapter_conformance_uri", "a2a")
 	expectRef("DiscoveryManifest", "a2a", "#/components/schemas/A2ADiscoveryMetadata")
 	expectFields("A2ADiscoveryMetadata", "mode", "protocol", "full_server", "endpoint", "http_methods", "required_role", "available_in_read_only", "max_body_bytes", "adapter_spec_uri", "adapter_spec_hash", "conformance_uri", "conformance_kind", "strict_fixture", "supported_task_shapes", "canonical_event_types", "supports_delegated_lineage", "supports_evidence_references", "supports_parent_placeholders", "message_content_stored", "artifact_part_content_stored", "prompt_content_stored", "privacy", "limitations")
 	expectOneOfRefs("A2ATaskRequest", "#/components/schemas/A2ATask", "#/components/schemas/A2ATaskEnvelope")
@@ -1756,7 +1775,7 @@ func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
 		t.Fatalf("verification report missing hashes: %#v", report)
 	}
-	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.agent_profiles", "discovery.signal_taxonomy", "discovery.signal_coverage", "discovery.integration_readiness", "discovery.integration_recommendation", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.agent-profiles", "bundle.document.signal-taxonomy", "bundle.document.signal-coverage", "bundle.document.integration-readiness", "bundle.document.integration-recommendation", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "adapter.signal_coverage", "privacy.public_metadata_language", "openapi.agent_profiles_hash", "openapi.signal_taxonomy_hash", "openapi.signal_coverage_hash", "openapi.integration_readiness_hash", "openapi.integration_recommendation_hash", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.path./api/signal-taxonomy", "openapi.path./api/integrations/signal-coverage", "openapi.path./api/integrations/readiness", "openapi.path./api/integrations/recommendation", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
+	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.agent_profiles", "discovery.signal_taxonomy", "discovery.signal_coverage", "discovery.integration_readiness", "discovery.integration_smoke", "discovery.integration_recommendation", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.agent-profiles", "bundle.document.signal-taxonomy", "bundle.document.signal-coverage", "bundle.document.integration-readiness", "bundle.document.integration-smoke", "bundle.document.integration-recommendation", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "adapter.signal_coverage", "privacy.public_metadata_language", "openapi.agent_profiles_hash", "openapi.signal_taxonomy_hash", "openapi.signal_coverage_hash", "openapi.integration_readiness_hash", "openapi.integration_smoke_hash", "openapi.integration_recommendation_hash", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.path./api/signal-taxonomy", "openapi.path./api/integrations/signal-coverage", "openapi.path./api/integrations/readiness", "openapi.path./api/integrations/smoke", "openapi.path./api/integrations/recommendation", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
 		if !verificationReportHasCheck(report, name) {
 			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
 		}

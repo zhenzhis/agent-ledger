@@ -456,9 +456,16 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		if len(args) > 1 && args[1] == "readiness" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
 		}
+		if len(args) > 1 && args[1] == "smoke" {
+			opts := integrations.OptionsFromConfig(cfg)
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationSmokeReportFor(opts, server.RuntimeStatusFromConfig(cfg)))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "integration-readiness":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
+	case "integration-smoke":
+		opts := integrations.OptionsFromConfig(cfg)
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationSmokeReportFor(opts, server.RuntimeStatusFromConfig(cfg)))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())

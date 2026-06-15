@@ -21,6 +21,7 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 			Signals:           []string{"model", "usage", "cache"},
 		}),
 		"integration_readiness": IntegrationReadiness(Options{}),
+		"integration_smoke":     IntegrationSmokeReportFor(Options{}, nil),
 		"openapi":               OpenAPISpecFor(Options{}, nil),
 		"provider_profiles":     ProviderProfiles(),
 		"registry":              Registry(Options{}),
