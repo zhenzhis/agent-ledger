@@ -278,6 +278,22 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				WritesLocalState: false,
 			},
 			{
+				ID:               "integration-rollout-plan",
+				Name:             "Integration Rollout Plan",
+				Contract:         "agent-ledger.integration-rollout-plan",
+				Version:          "v1",
+				Hash:             IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
+				PrimaryURI:       "/api/integrations/rollout-plan",
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger integrations rollout-plan", "agent-ledger integration-rollout"},
+				MCPTools:         []string{"ledger.integration_rollout_plan"},
+				MCPResources:     []string{"agent-ledger://integrations/rollout-plan"},
+				Revalidation:     "ETag + If-None-Match",
+				Privacy:          "static rollout checklist metadata, fixture paths, validation commands, admission checks, release gates, and rollback hints only",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
+			{
 				ID:               "integration-recommendation",
 				Name:             "Integration Recommendation Advisor",
 				Contract:         "agent-ledger.integration-recommendation",
@@ -438,6 +454,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.integration_readiness", discovery.IntegrationReadinessURI == "/api/integrations/readiness" && discovery.IntegrationReadinessHash == IntegrationReadinessFingerprint(opts), "critical", "discovery points to integration readiness report", "/api/integrations/readiness "+IntegrationReadinessFingerprint(opts), discovery.IntegrationReadinessURI+" "+discovery.IntegrationReadinessHash)
 	addCheck("discovery.integration_smoke", discovery.IntegrationSmokeURI == "/api/integrations/smoke" && discovery.IntegrationSmokeHash == IntegrationSmokeFingerprint(opts, nil), "critical", "discovery points to integration smoke report", "/api/integrations/smoke "+IntegrationSmokeFingerprint(opts, nil), discovery.IntegrationSmokeURI+" "+discovery.IntegrationSmokeHash)
 	addCheck("discovery.integration_compatibility", discovery.CompatibilityURI == "/api/integrations/compatibility" && discovery.CompatibilityHash == IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}), "critical", "discovery points to integration compatibility matrix", "/api/integrations/compatibility "+IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}), discovery.CompatibilityURI+" "+discovery.CompatibilityHash)
+	addCheck("discovery.integration_rollout_plan", discovery.RolloutPlanURI == "/api/integrations/rollout-plan" && discovery.RolloutPlanHash == IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), "critical", "discovery points to integration rollout plan", "/api/integrations/rollout-plan "+IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), discovery.RolloutPlanURI+" "+discovery.RolloutPlanHash)
 	addCheck("discovery.integration_recommendation", discovery.RecommendationURI == "/api/integrations/recommendation" && discovery.RecommendationHash == IntegrationRecommendationContractFingerprint(), "critical", "discovery points to integration recommendation advisor", "/api/integrations/recommendation "+IntegrationRecommendationContractFingerprint(), discovery.RecommendationURI+" "+discovery.RecommendationHash)
 	addCheck("discovery.conformance_matrix", discovery.ConformanceMatrixURI == "/api/integrations/conformance-matrix" && discovery.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint(), "critical", "discovery points to adapter conformance matrix", "/api/integrations/conformance-matrix "+AdapterConformanceMatrixFingerprint(), discovery.ConformanceMatrixURI+" "+discovery.ConformanceMatrixHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
@@ -464,6 +481,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		"goal_coverage":              GoalCoverageReportFor(opts, runtime),
 		"integration_smoke":          integrationSmoke,
 		"integration_compatibility":  IntegrationCompatibilityReportFor(IntegrationCompatibilityRequest{}),
+		"integration_rollout_plan":   IntegrationRolloutPlanFor(IntegrationRolloutRequest{}),
 		"integration_recommendation": IntegrationRecommendation(IntegrationRecommendationRequest{
 			AgentProfileID:    "codex-cli",
 			ProviderProfileID: "openai-official",
@@ -495,6 +513,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "integration-readiness", hash: IntegrationReadinessFingerprint(opts)},
 		{id: "integration-smoke", hash: IntegrationSmokeFingerprint(opts, runtime)},
 		{id: "integration-compatibility", hash: IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{})},
+		{id: "integration-rollout-plan", hash: IntegrationRolloutFingerprint(IntegrationRolloutRequest{})},
 		{id: "integration-recommendation", hash: IntegrationRecommendationContractFingerprint()},
 		{id: "adapter-conformance-matrix", hash: AdapterConformanceMatrixFingerprint()},
 		{id: "runtime-status", hash: hashJSONPayload(runtime)},
@@ -526,6 +545,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.integration_readiness_hash", contractStringValue(meta["integration_readiness_hash"]) == IntegrationReadinessFingerprint(opts), "critical", "OpenAPI integration readiness hash matches generated report", IntegrationReadinessFingerprint(opts), contractStringValue(meta["integration_readiness_hash"]))
 	addCheck("openapi.integration_smoke_hash", contractStringValue(meta["integration_smoke_hash"]) == IntegrationSmokeFingerprint(opts, runtime), "critical", "OpenAPI integration smoke hash matches generated report", IntegrationSmokeFingerprint(opts, runtime), contractStringValue(meta["integration_smoke_hash"]))
 	addCheck("openapi.integration_compatibility_hash", contractStringValue(meta["integration_compatibility_hash"]) == IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}), "critical", "OpenAPI integration compatibility hash matches generated matrix", IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}), contractStringValue(meta["integration_compatibility_hash"]))
+	addCheck("openapi.integration_rollout_plan_hash", contractStringValue(meta["integration_rollout_plan_hash"]) == IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), "critical", "OpenAPI integration rollout plan hash matches generated plan", IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), contractStringValue(meta["integration_rollout_plan_hash"]))
 	addCheck("openapi.integration_recommendation_hash", contractStringValue(meta["integration_recommendation_hash"]) == IntegrationRecommendationContractFingerprint(), "critical", "OpenAPI integration recommendation hash matches generated contract", IntegrationRecommendationContractFingerprint(), contractStringValue(meta["integration_recommendation_hash"]))
 	addCheck("openapi.conformance_matrix_hash", contractStringValue(meta["conformance_matrix_hash"]) == AdapterConformanceMatrixFingerprint(), "critical", "OpenAPI conformance matrix hash matches generated matrix", AdapterConformanceMatrixFingerprint(), contractStringValue(meta["conformance_matrix_hash"]))
 	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))

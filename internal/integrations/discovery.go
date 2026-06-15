@@ -52,6 +52,8 @@ type DiscoveryManifest struct {
 	IntegrationSmokeHash     string               `json:"integration_smoke_hash"`
 	CompatibilityURI         string               `json:"integration_compatibility_uri"`
 	CompatibilityHash        string               `json:"integration_compatibility_hash"`
+	RolloutPlanURI           string               `json:"integration_rollout_plan_uri"`
+	RolloutPlanHash          string               `json:"integration_rollout_plan_hash"`
 	RecommendationURI        string               `json:"integration_recommendation_uri"`
 	RecommendationHash       string               `json:"integration_recommendation_hash"`
 	ContractBundleURI        string               `json:"contract_bundle_uri"`
@@ -157,6 +159,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		IntegrationSmokeHash:     IntegrationSmokeFingerprint(opts, nil),
 		CompatibilityURI:         "/api/integrations/compatibility",
 		CompatibilityHash:        IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}),
+		RolloutPlanURI:           "/api/integrations/rollout-plan",
+		RolloutPlanHash:          IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
 		RecommendationURI:        "/api/integrations/recommendation",
 		RecommendationHash:       IntegrationRecommendationContractFingerprint(),
 		ContractBundleURI:        "/api/contracts",

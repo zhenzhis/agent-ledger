@@ -74,6 +74,15 @@ func (s *Server) handleIntegrationCompatibility(w http.ResponseWriter, r *http.R
 	writeJSONWithETag(w, r, report, integrations.IntegrationCompatibilityFingerprintFrom(report))
 }
 
+func (s *Server) handleIntegrationRolloutPlan(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	req := integrations.IntegrationRolloutFromValues(r.URL.Query())
+	report := integrations.IntegrationRolloutPlanFor(req)
+	writeJSONWithETag(w, r, report, integrations.IntegrationRolloutFingerprintFrom(report))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

@@ -121,6 +121,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/integrations/readiness", s.handleIntegrationReadiness)
 	mux.HandleFunc("/api/integrations/smoke", s.handleIntegrationSmoke)
 	mux.HandleFunc("/api/integrations/compatibility", s.handleIntegrationCompatibility)
+	mux.HandleFunc("/api/integrations/rollout-plan", s.handleIntegrationRolloutPlan)
 	mux.HandleFunc("/api/integrations/recommendation", s.handleIntegrationRecommendation)
 	mux.HandleFunc("/api/integrations/conformance-matrix", s.handleConformanceMatrix)
 	mux.HandleFunc("/api/goal-coverage", s.handleGoalCoverage)
