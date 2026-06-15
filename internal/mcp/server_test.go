@@ -120,6 +120,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.integration_upgrade_gate") {
 		t.Fatalf("expected integration upgrade gate tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.schema_evolution_gate") {
+		t.Fatalf("expected schema evolution gate tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -224,6 +227,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if integrationUpgradeGateMeta["write_mode"] != "none" || integrationUpgradeGateMeta["writes_local_state"] != false || integrationUpgradeGateMeta["available_in_read_only"] != true {
 		t.Fatalf("integration upgrade gate tool metadata wrong: %#v", integrationUpgradeGateMeta)
 	}
+	schemaEvolutionGateMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.schema_evolution_gate"))
+	if schemaEvolutionGateMeta["write_mode"] != "none" || schemaEvolutionGateMeta["writes_local_state"] != false || schemaEvolutionGateMeta["available_in_read_only"] != true {
+		t.Fatalf("schema evolution gate tool metadata wrong: %#v", schemaEvolutionGateMeta)
+	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
 		t.Fatalf("conformance matrix tool metadata wrong: %#v", conformanceMatrixMeta)
@@ -304,7 +311,7 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 		t.Fatalf("resource subscriptions should be advertised: %#v", resourceCaps)
 	}
 	resources := out[1]["result"].(map[string]interface{})["resources"].([]interface{})
-	if !hasResource(resources, "agent-ledger://discovery/manifest") || !hasResource(resources, "agent-ledger://contracts/bundle") || !hasResource(resources, "agent-ledger://contracts/verification") || !hasResource(resources, "agent-ledger://goal/coverage") || !hasResource(resources, "agent-ledger://contracts/openapi") || !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/provider-profiles") || !hasResource(resources, "agent-ledger://integrations/agent-profiles") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://integrations/conformance-matrix") || !hasResource(resources, "agent-ledger://runtime/status") || !hasResource(resources, "agent-ledger://config/status") || !hasResource(resources, "agent-ledger://readiness") || !hasResource(resources, "agent-ledger://admission/check") || !hasResource(resources, "agent-ledger://budget/current") || !hasResource(resources, "agent-ledger://workloads/queue") || !hasResource(resources, "agent-ledger://workloads/leases") || !hasResource(resources, "agent-ledger://workloads/feed") || !hasResource(resources, "agent-ledger://workload/state") || !hasResource(resources, "agent-ledger://workload/timeline") || !hasResource(resources, "agent-ledger://agent-runs/liveness") || !hasResource(resources, "agent-ledger://policy/approvals") || !hasResource(resources, "agent-ledger://policy/approval-routes") {
+	if !hasResource(resources, "agent-ledger://discovery/manifest") || !hasResource(resources, "agent-ledger://contracts/bundle") || !hasResource(resources, "agent-ledger://contracts/verification") || !hasResource(resources, "agent-ledger://goal/coverage") || !hasResource(resources, "agent-ledger://contracts/openapi") || !hasResource(resources, "agent-ledger://schema/canonical-events") || !hasResource(resources, "agent-ledger://schema/evolution-gate") || !hasResource(resources, "agent-ledger://schema/canonical-event-examples") || !hasResource(resources, "agent-ledger://integrations/provider-profiles") || !hasResource(resources, "agent-ledger://integrations/agent-profiles") || !hasResource(resources, "agent-ledger://integrations/adapter-contract") || !hasResource(resources, "agent-ledger://integrations/conformance-matrix") || !hasResource(resources, "agent-ledger://runtime/status") || !hasResource(resources, "agent-ledger://config/status") || !hasResource(resources, "agent-ledger://readiness") || !hasResource(resources, "agent-ledger://admission/check") || !hasResource(resources, "agent-ledger://budget/current") || !hasResource(resources, "agent-ledger://workloads/queue") || !hasResource(resources, "agent-ledger://workloads/leases") || !hasResource(resources, "agent-ledger://workloads/feed") || !hasResource(resources, "agent-ledger://workload/state") || !hasResource(resources, "agent-ledger://workload/timeline") || !hasResource(resources, "agent-ledger://agent-runs/liveness") || !hasResource(resources, "agent-ledger://policy/approvals") || !hasResource(resources, "agent-ledger://policy/approval-routes") {
 		t.Fatalf("expected core resources, got %#v", resources)
 	}
 	if !hasResource(resources, "agent-ledger://integrations/signal-taxonomy") {
@@ -327,6 +334,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/upgrade-gate") {
 		t.Fatalf("expected integration upgrade gate resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://schema/evolution-gate") {
+		t.Fatalf("expected schema evolution gate resource, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
@@ -731,6 +741,44 @@ func TestMCPIntegrationUpgradeGateToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("integration upgrade gate resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPSchemaEvolutionGateToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.schema_evolution_gate","arguments":{"strict":true,"schema_version":"`+storage.CanonicalEventSchemaVersion+`","schema_hash":"`+storage.CanonicalEventSchemaFingerprint()+`","event_type":["model.call","tool.call"],"rejected_key":"prompt"}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://schema/evolution-gate?strict=true&schema_version=`+storage.CanonicalEventSchemaVersion+`&schema_hash=`+storage.CanonicalEventSchemaFingerprint()+`&event_type=model.call&rejected_key=prompt"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.schema-evolution-gate" ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false ||
+		toolPayload["gate_hash"] == "" {
+		t.Fatalf("unexpected schema evolution gate tool payload: %#v", toolPayload)
+	}
+	decision := toolPayload["decision"].(map[string]interface{})
+	if decision["status"] != "pass" || decision["recommended_ci_exit_code"] != float64(0) {
+		t.Fatalf("unexpected schema evolution gate decision: %#v", decision)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("schema evolution gate tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.schema-evolution-gate"`) ||
+		!strings.Contains(resourceText, `"status": "pass"`) ||
+		!strings.Contains(resourceText, `"agent-ledger event schema"`) {
+		t.Fatalf("unexpected schema evolution gate resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("schema evolution gate resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

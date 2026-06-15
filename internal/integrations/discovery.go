@@ -69,6 +69,8 @@ type DiscoveryManifest struct {
 	RuntimeStatusURI         string               `json:"runtime_status_uri"`
 	CanonicalSchemaURI       string               `json:"canonical_schema_uri"`
 	CanonicalSchemaHash      string               `json:"canonical_schema_hash"`
+	SchemaEvolutionGateURI   string               `json:"schema_evolution_gate_uri"`
+	SchemaEvolutionGateHash  string               `json:"schema_evolution_gate_hash"`
 	EventExamplesURI         string               `json:"event_examples_uri"`
 	AdapterSpecURI           string               `json:"adapter_spec_uri"`
 	AdapterSpecHash          string               `json:"adapter_spec_hash"`
@@ -184,6 +186,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		RuntimeStatusURI:         "/api/runtime/status",
 		CanonicalSchemaURI:       "/api/event-schema",
 		CanonicalSchemaHash:      storage.CanonicalEventSchemaFingerprint(),
+		SchemaEvolutionGateURI:   "/api/schema/evolution-gate",
+		SchemaEvolutionGateHash:  SchemaEvolutionGateOpenAPIFingerprint(),
 		EventExamplesURI:         "/api/event-examples",
 		AdapterSpecURI:           "/api/integrations/adapter-spec",
 		AdapterSpecHash:          AdapterContractFingerprint(),

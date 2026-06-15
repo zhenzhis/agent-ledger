@@ -44,6 +44,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapability(t, catalog, "protocol.integration_drift", "implemented", true)
 	assertCapability(t, catalog, "protocol.integration_lockfile", "implemented", true)
 	assertCapability(t, catalog, "protocol.integration_upgrade_gate", "implemented", true)
+	assertCapability(t, catalog, "protocol.schema_evolution_gate", "implemented", true)
 	assertCapability(t, catalog, "protocol.openapi", "implemented", true)
 	assertCapability(t, catalog, "protocol.runtime_status", "implemented", true)
 	assertCapability(t, catalog, "protocol.config_status", "implemented", true)
@@ -97,6 +98,10 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityCommand(t, catalog, "protocol.integration_upgrade_gate", "agent-ledger integrations upgrade-gate")
 	assertCapabilityTool(t, catalog, "protocol.integration_upgrade_gate", "ledger.integration_upgrade_gate")
 	assertCapabilityResource(t, catalog, "protocol.integration_upgrade_gate", "agent-ledger://integrations/upgrade-gate")
+	assertCapabilityCommand(t, catalog, "protocol.schema_evolution_gate", "agent-ledger schema-gate")
+	assertCapabilityCommand(t, catalog, "protocol.schema_evolution_gate", "agent-ledger event schema-gate")
+	assertCapabilityTool(t, catalog, "protocol.schema_evolution_gate", "ledger.schema_evolution_gate")
+	assertCapabilityResource(t, catalog, "protocol.schema_evolution_gate", "agent-ledger://schema/evolution-gate")
 	assertCapabilityCommand(t, catalog, "protocol.integration_recommendation", "agent-ledger agent recommend --profile codex-cli --provider openai-official --surface provider-stream --signals model,usage,cache")
 	assertCapabilityTool(t, catalog, "protocol.integration_recommendation", "ledger.integration_recommendation")
 	assertCapabilityResource(t, catalog, "protocol.integration_recommendation", "agent-ledger://integrations/recommendation")
@@ -127,6 +132,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_drift")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_lockfile")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_upgrade_gate")
+	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.schema_evolution_gate")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.conformance_matrix")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.claim_next_workload")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.workload_queue")
@@ -150,6 +156,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/drift")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/lockfile")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/upgrade-gate")
+	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://schema/evolution-gate")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/conformance-matrix")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://runtime/status")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://config/status")
@@ -1470,6 +1477,20 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("IntegrationUpgradeGateRequest", "strict", "expected")
 	expectFields("IntegrationUpgradeGateDecision", "status", "severity", "reason", "recommended_ci_exit_code", "allow_write_ingest", "requires_human_review", "requires_evidence_refresh")
 	expectFields("IntegrationUpgradeGateCheck", "id", "status", "severity", "message", "evidence", "remediation", "privacy")
+	expectFields("SchemaEvolutionGateReport", "product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "request", "gate_hash", "decision", "current", "summary", "checks", "event_rows", "rejected_key_rows", "ci_commands", "required_artifacts", "migration_guidance", "redaction_rules")
+	expectRef("SchemaEvolutionGateReport", "request", "#/components/schemas/SchemaEvolutionGateRequest")
+	expectRef("SchemaEvolutionGateReport", "decision", "#/components/schemas/SchemaEvolutionDecision")
+	expectRef("SchemaEvolutionGateReport", "current", "#/components/schemas/SchemaEvolutionCurrent")
+	expectRef("SchemaEvolutionGateReport", "summary", "#/components/schemas/SchemaEvolutionSummary")
+	expectArrayRef("SchemaEvolutionGateReport", "checks", "#/components/schemas/SchemaEvolutionCheck")
+	expectArrayRef("SchemaEvolutionGateReport", "event_rows", "#/components/schemas/SchemaEvolutionRow")
+	expectArrayRef("SchemaEvolutionGateReport", "rejected_key_rows", "#/components/schemas/SchemaEvolutionRow")
+	expectFields("SchemaEvolutionGateRequest", "strict", "expected_version", "expected_schema_hash", "required_event_types", "required_rejected_keys")
+	expectFields("SchemaEvolutionCurrent", "schema_version", "schema_hash", "supported_versions", "event_types", "rejected_payload_keys", "adapter_spec_hash")
+	expectFields("SchemaEvolutionDecision", "status", "severity", "reason", "recommended_ci_exit_code", "allow_adapter_ingest", "requires_migration", "requires_human_review", "requires_lockfile_refresh")
+	expectFields("SchemaEvolutionSummary", "status", "known_event_types", "required_event_types", "matched_event_types", "missing_event_types", "known_rejected_keys", "required_rejected_keys", "matched_rejected_keys", "missing_rejected_keys", "version_matches", "schema_hash_matches", "expected_schema_hash_present", "warnings")
+	expectFields("SchemaEvolutionCheck", "id", "status", "severity", "message", "evidence", "remediation", "privacy")
+	expectFields("SchemaEvolutionRow", "id", "kind", "expected", "current", "status", "severity", "action", "privacy")
 
 	expectFields("GoalCoverageReport", "product", "slug", "contract", "version", "status", "local_first", "read_only", "prompt_content_stored", "usage_data_uploaded", "privacy_default", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "canonical_schema_hash", "adapter_spec_hash", "coverage_hash", "summary", "sections", "external_dependencies", "verification", "privacy")
 	expectRef("GoalCoverageReport", "summary", "#/components/schemas/GoalCoverageSummary")
@@ -1657,7 +1678,7 @@ func TestOpenAPIEcosystemIngestSchemasExposeTelemetryFields(t *testing.T) {
 	expectFields("OTelResourceSpansEnvelope", "resourceSpans")
 	expectOneOfRefs("OTLPTraceRequest", "#/components/schemas/OTelResourceSpansEnvelope", "#/components/schemas/OTelSpanEnvelope")
 
-	expectFields("DiscoveryManifest", "contract_bundle_uri", "openapi_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_lockfile_uri", "integration_lockfile_hash", "integration_upgrade_gate_uri", "integration_upgrade_gate_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "runtime_status_uri", "canonical_schema_uri", "canonical_schema_hash", "event_examples_uri", "adapter_spec_uri", "adapter_spec_hash", "adapter_conformance_uri", "a2a")
+	expectFields("DiscoveryManifest", "contract_bundle_uri", "openapi_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_lockfile_uri", "integration_lockfile_hash", "integration_upgrade_gate_uri", "integration_upgrade_gate_hash", "schema_evolution_gate_uri", "schema_evolution_gate_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "runtime_status_uri", "canonical_schema_uri", "canonical_schema_hash", "event_examples_uri", "adapter_spec_uri", "adapter_spec_hash", "adapter_conformance_uri", "a2a")
 	expectRef("DiscoveryManifest", "a2a", "#/components/schemas/A2ADiscoveryMetadata")
 	expectFields("A2ADiscoveryMetadata", "mode", "protocol", "full_server", "endpoint", "http_methods", "required_role", "available_in_read_only", "max_body_bytes", "adapter_spec_uri", "adapter_spec_hash", "conformance_uri", "conformance_kind", "strict_fixture", "supported_task_shapes", "canonical_event_types", "supports_delegated_lineage", "supports_evidence_references", "supports_parent_placeholders", "message_content_stored", "artifact_part_content_stored", "prompt_content_stored", "privacy", "limitations")
 	expectOneOfRefs("A2ATaskRequest", "#/components/schemas/A2ATask", "#/components/schemas/A2ATaskEnvelope")
@@ -1847,7 +1868,7 @@ func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
 		t.Fatalf("verification report missing hashes: %#v", report)
 	}
-	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.agent_profiles", "discovery.signal_taxonomy", "discovery.signal_coverage", "discovery.integration_readiness", "discovery.integration_smoke", "discovery.integration_evidence_kit", "discovery.integration_drift", "discovery.integration_lockfile", "discovery.integration_upgrade_gate", "discovery.integration_recommendation", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.agent-profiles", "bundle.document.signal-taxonomy", "bundle.document.signal-coverage", "bundle.document.integration-readiness", "bundle.document.integration-smoke", "bundle.document.integration-evidence-kit", "bundle.document.integration-drift", "bundle.document.integration-lockfile", "bundle.document.integration-upgrade-gate", "bundle.document.integration-recommendation", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "adapter.signal_coverage", "privacy.public_metadata_language", "openapi.agent_profiles_hash", "openapi.signal_taxonomy_hash", "openapi.signal_coverage_hash", "openapi.integration_readiness_hash", "openapi.integration_smoke_hash", "openapi.integration_evidence_kit_hash", "openapi.integration_drift_hash", "openapi.integration_lockfile_hash", "openapi.integration_upgrade_gate_hash", "openapi.integration_recommendation_hash", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.path./api/signal-taxonomy", "openapi.path./api/integrations/signal-coverage", "openapi.path./api/integrations/readiness", "openapi.path./api/integrations/smoke", "openapi.path./api/integrations/drift", "openapi.path./api/integrations/lockfile", "openapi.path./api/integrations/upgrade-gate", "openapi.path./api/integrations/recommendation", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
+	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.agent_profiles", "discovery.signal_taxonomy", "discovery.signal_coverage", "discovery.integration_readiness", "discovery.integration_smoke", "discovery.integration_evidence_kit", "discovery.integration_drift", "discovery.integration_lockfile", "discovery.integration_upgrade_gate", "discovery.schema_evolution_gate", "discovery.integration_recommendation", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.agent-profiles", "bundle.document.signal-taxonomy", "bundle.document.signal-coverage", "bundle.document.integration-readiness", "bundle.document.integration-smoke", "bundle.document.integration-evidence-kit", "bundle.document.integration-drift", "bundle.document.integration-lockfile", "bundle.document.integration-upgrade-gate", "bundle.document.schema-evolution-gate", "bundle.document.integration-recommendation", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "adapter.signal_coverage", "privacy.public_metadata_language", "openapi.agent_profiles_hash", "openapi.signal_taxonomy_hash", "openapi.signal_coverage_hash", "openapi.integration_readiness_hash", "openapi.integration_smoke_hash", "openapi.integration_evidence_kit_hash", "openapi.integration_drift_hash", "openapi.integration_lockfile_hash", "openapi.integration_upgrade_gate_hash", "openapi.schema_evolution_gate_hash", "openapi.integration_recommendation_hash", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.path./api/signal-taxonomy", "openapi.path./api/integrations/signal-coverage", "openapi.path./api/integrations/readiness", "openapi.path./api/integrations/smoke", "openapi.path./api/integrations/drift", "openapi.path./api/integrations/lockfile", "openapi.path./api/integrations/upgrade-gate", "openapi.path./api/schema/evolution-gate", "openapi.path./api/integrations/recommendation", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
 		if !verificationReportHasCheck(report, name) {
 			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
 		}

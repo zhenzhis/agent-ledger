@@ -482,6 +482,9 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 			opts := integrations.OptionsFromConfig(cfg)
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationUpgradeGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationUpgradeGateRequestFromCLI(args[2:])))
 		}
+		if len(args) > 1 && (args[1] == "schema-gate" || args[1] == "schema") {
+			return json.NewEncoder(os.Stdout).Encode(integrations.SchemaEvolutionGateFor(schemaEvolutionGateRequestFromCLI(args[2:])))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "integration-readiness":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
@@ -504,6 +507,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "integration-upgrade-gate":
 		opts := integrations.OptionsFromConfig(cfg)
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationUpgradeGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationUpgradeGateRequestFromCLI(args[1:])))
+	case "schema-gate", "schema-evolution-gate":
+		return json.NewEncoder(os.Stdout).Encode(integrations.SchemaEvolutionGateFor(schemaEvolutionGateRequestFromCLI(args[1:])))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
@@ -605,6 +610,16 @@ func integrationUpgradeGateRequestFromCLI(args []string) integrations.Integratio
 	return integrations.NormalizeIntegrationUpgradeGateRequest(integrations.IntegrationUpgradeGateRequest{
 		Strict:   drift.Strict,
 		Expected: drift.Expected,
+	})
+}
+
+func schemaEvolutionGateRequestFromCLI(args []string) integrations.SchemaEvolutionGateRequest {
+	return integrations.NormalizeSchemaEvolutionGateRequest(integrations.SchemaEvolutionGateRequest{
+		Strict:               cliBool(args, "--strict"),
+		ExpectedVersion:      firstNonEmptyCLI(cliValue(args, "--schema-version"), cliValue(args, "--schema_version"), cliValue(args, "--version")),
+		ExpectedSchemaHash:   firstNonEmptyCLI(cliValue(args, "--schema-hash"), cliValue(args, "--schema_hash"), cliValue(args, "--canonical-schema-hash"), cliValue(args, "--canonical_schema_hash"), cliValue(args, "--hash")),
+		RequiredEventTypes:   appendCLIValues(cliValues(args, "--event-type"), cliValues(args, "--event_type"), cliValues(args, "--event-types"), cliValues(args, "--event_types"), cliValues(args, "--required-event-type"), cliValues(args, "--required_event_type")),
+		RequiredRejectedKeys: appendCLIValues(cliValues(args, "--rejected-key"), cliValues(args, "--rejected_key"), cliValues(args, "--rejected-keys"), cliValues(args, "--rejected_keys"), cliValues(args, "--required-rejected-key"), cliValues(args, "--required_rejected_key")),
 	})
 }
 
@@ -1718,6 +1733,9 @@ func runEventCLI(args []string, db *storage.DB) error {
 	if len(args) > 0 && args[0] == "schema" {
 		return json.NewEncoder(os.Stdout).Encode(storage.CanonicalEventSchema())
 	}
+	if len(args) > 0 && (args[0] == "schema-gate" || args[0] == "gate") {
+		return json.NewEncoder(os.Stdout).Encode(integrations.SchemaEvolutionGateFor(schemaEvolutionGateRequestFromCLI(args[1:])))
+	}
 	if len(args) > 0 && (args[0] == "examples" || args[0] == "example") {
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{
 			"contract": "agent-ledger.canonical-event-examples",
@@ -1726,7 +1744,7 @@ func runEventCLI(args []string, db *storage.DB) error {
 		})
 	}
 	if len(args) == 0 || (args[0] != "ingest" && args[0] != "validate") {
-		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event examples [--type model.call] | agent-ledger event validate [--file event.json] | agent-ledger event ingest [--file event.json]")
+		return fmt.Errorf("usage: agent-ledger event schema | agent-ledger event schema-gate [--strict --schema-version v1 --schema-hash sha256:...] | agent-ledger event examples [--type model.call] | agent-ledger event validate [--file event.json] | agent-ledger event ingest [--file event.json]")
 	}
 	raw, err := readCLIInput(args[1:], "--file", 4<<20)
 	if err != nil {
@@ -2271,6 +2289,20 @@ func cliValues(args []string, key string) []string {
 		}
 		if strings.HasPrefix(args[i], key+"=") {
 			values = append(values, strings.TrimPrefix(args[i], key+"="))
+		}
+	}
+	return values
+}
+
+func appendCLIValues(groups ...[]string) []string {
+	values := []string{}
+	for _, group := range groups {
+		for _, raw := range group {
+			for _, part := range strings.Split(raw, ",") {
+				if trimmed := strings.TrimSpace(part); trimmed != "" {
+					values = append(values, trimmed)
+				}
+			}
 		}
 	}
 	return values

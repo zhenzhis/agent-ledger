@@ -69,6 +69,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"integration_drift_hash":          IntegrationDriftOpenAPIFingerprint(opts, runtime),
 			"integration_lockfile_hash":       IntegrationLockfileOpenAPIFingerprint(opts, runtime),
 			"integration_upgrade_gate_hash":   IntegrationUpgradeGateOpenAPIFingerprint(opts, runtime),
+			"schema_evolution_gate_hash":      SchemaEvolutionGateOpenAPIFingerprint(),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -94,6 +95,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/drift":              integrationDriftOperation(),
 			"/api/integrations/lockfile":           getOperation("contracts", "Get integration lockfile", "Read-only static control-plane hash baseline for adapter, wrapper, router, and CI release pins.", "IntegrationLockfileReport"),
 			"/api/integrations/upgrade-gate":       integrationUpgradeGateOperation(),
+			"/api/schema/evolution-gate":           schemaEvolutionGateOperation(),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -201,7 +203,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_lockfile_uri", "integration_lockfile_hash", "integration_upgrade_gate_uri", "integration_upgrade_gate_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_lockfile_uri", "integration_lockfile_hash", "integration_upgrade_gate_uri", "integration_upgrade_gate_hash", "schema_evolution_gate_uri", "schema_evolution_gate_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -240,6 +242,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"integration_lockfile_hash":       refSchema("Hash"),
 						"integration_upgrade_gate_uri":    stringSchema(),
 						"integration_upgrade_gate_hash":   refSchema("Hash"),
+						"schema_evolution_gate_uri":       stringSchema(),
+						"schema_evolution_gate_hash":      refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -404,6 +408,13 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IntegrationUpgradeGateRequest":       integrationUpgradeGateRequestSchema(),
 				"IntegrationUpgradeGateDecision":      integrationUpgradeGateDecisionSchema(),
 				"IntegrationUpgradeGateCheck":         integrationUpgradeGateCheckSchema(),
+				"SchemaEvolutionGateReport":           schemaEvolutionGateReportSchema(),
+				"SchemaEvolutionGateRequest":          schemaEvolutionGateRequestSchema(),
+				"SchemaEvolutionCurrent":              schemaEvolutionCurrentSchema(),
+				"SchemaEvolutionDecision":             schemaEvolutionDecisionSchema(),
+				"SchemaEvolutionSummary":              schemaEvolutionSummarySchema(),
+				"SchemaEvolutionCheck":                schemaEvolutionCheckSchema(),
+				"SchemaEvolutionRow":                  schemaEvolutionRowSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -893,6 +904,7 @@ func OpenAPISmokeFingerprint(opts Options, runtime *storage.RuntimeStatus) strin
 		"integration_rollout_plan_hash":   IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
 		"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 		"integration_upgrade_gate_hash":   IntegrationUpgradeGateOpenAPIFingerprint(opts, runtime),
+		"schema_evolution_gate_hash":      SchemaEvolutionGateOpenAPIFingerprint(),
 		"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 		"runtime_status_hash":             hashJSONPayload(runtime),
 		"canonical_schema_hash":           storage.CanonicalEventSchemaFingerprint(),
@@ -1132,6 +1144,7 @@ func OpenAPIContractPaths() []string {
 		"/api/integrations/drift",
 		"/api/integrations/lockfile",
 		"/api/integrations/upgrade-gate",
+		"/api/schema/evolution-gate",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -1286,6 +1299,18 @@ func integrationUpgradeGateOperation() map[string]interface{} {
 		params = append(params, queryParam(id, "Expected pinned hash for "+id+". Hyphenated query names are also accepted."))
 	}
 	op["get"].(map[string]interface{})["parameters"] = params
+	return op
+}
+
+func schemaEvolutionGateOperation() map[string]interface{} {
+	op := getOperation("contracts", "Get schema evolution gate", "Read-only pass/review/block compatibility gate for canonical event schema pins, adapter event families, and rejected payload key privacy checks.", "SchemaEvolutionGateReport")
+	op["get"].(map[string]interface{})["parameters"] = []map[string]interface{}{
+		boolQueryParam("strict", "Block missing schema hash pins and missing required event types instead of returning review status."),
+		queryParam("schema_version", "Expected canonical event schema version, for example v1."),
+		queryParam("schema_hash", "Expected canonical event schema hash from agent-ledger event schema."),
+		queryParam("event_type", "Repeatable or comma-separated canonical event type emitted by the adapter."),
+		queryParam("rejected_key", "Repeatable or comma-separated payload key that must remain rejected by the schema privacy policy."),
+	}
 	return op
 }
 
@@ -3368,6 +3393,148 @@ func integrationUpgradeGateCheckSchema() map[string]interface{} {
 			"evidence":    stringSchema(),
 			"remediation": stringSchema(),
 			"privacy":     stringSchema(),
+		},
+	}
+}
+
+func schemaEvolutionGateReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe canonical schema compatibility gate report.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "request", "gate_hash", "decision", "current", "summary", "checks", "event_rows", "rejected_key_rows", "ci_commands", "required_artifacts", "migration_guidance", "redaction_rules"},
+		"properties": map[string]interface{}{
+			"product":            stringSchema(),
+			"contract":           constSchema("agent-ledger.schema-evolution-gate"),
+			"version":            stringSchema(),
+			"local_first":        boolSchema(),
+			"read_only_safe":     boolSchema(),
+			"writes_local_state": boolSchema(),
+			"privacy_policy":     stringSchema(),
+			"request":            refSchema("SchemaEvolutionGateRequest"),
+			"gate_hash":          refSchema("Hash"),
+			"decision":           refSchema("SchemaEvolutionDecision"),
+			"current":            refSchema("SchemaEvolutionCurrent"),
+			"summary":            refSchema("SchemaEvolutionSummary"),
+			"checks":             refArraySchema("SchemaEvolutionCheck"),
+			"event_rows":         refArraySchema("SchemaEvolutionRow"),
+			"rejected_key_rows":  refArraySchema("SchemaEvolutionRow"),
+			"ci_commands":        stringArraySchema(),
+			"required_artifacts": stringArraySchema(),
+			"migration_guidance": stringArraySchema(),
+			"redaction_rules":    stringArraySchema(),
+		},
+	}
+}
+
+func schemaEvolutionGateRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Expected canonical schema pins and adapter event families for compatibility evaluation.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"strict":                 boolSchema(),
+			"expected_version":       stringSchema(),
+			"expected_schema_hash":   refSchema("Hash"),
+			"required_event_types":   stringArraySchema(),
+			"required_rejected_keys": stringArraySchema(),
+		},
+	}
+}
+
+func schemaEvolutionCurrentSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Current canonical schema compatibility metadata.",
+		"additionalProperties": true,
+		"required":             []string{"schema_version", "schema_hash", "supported_versions", "event_types", "rejected_payload_keys", "adapter_spec_hash"},
+		"properties": map[string]interface{}{
+			"schema_version":        stringSchema(),
+			"schema_hash":           refSchema("Hash"),
+			"supported_versions":    stringArraySchema(),
+			"event_types":           stringArraySchema(),
+			"rejected_payload_keys": stringArraySchema(),
+			"adapter_spec_hash":     refSchema("Hash"),
+		},
+	}
+}
+
+func schemaEvolutionDecisionSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "CI-friendly canonical schema gate decision.",
+		"additionalProperties": true,
+		"required":             []string{"status", "severity", "reason", "recommended_ci_exit_code", "allow_adapter_ingest", "requires_migration", "requires_human_review", "requires_lockfile_refresh"},
+		"properties": map[string]interface{}{
+			"status":                    stringSchema(),
+			"severity":                  stringSchema(),
+			"reason":                    stringSchema(),
+			"recommended_ci_exit_code":  integerSchema(),
+			"allow_adapter_ingest":      boolSchema(),
+			"requires_migration":        boolSchema(),
+			"requires_human_review":     boolSchema(),
+			"requires_lockfile_refresh": boolSchema(),
+		},
+	}
+}
+
+func schemaEvolutionSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Stable schema gate counts for CI.",
+		"additionalProperties": true,
+		"required":             []string{"status", "known_event_types", "required_event_types", "matched_event_types", "missing_event_types", "known_rejected_keys", "required_rejected_keys", "matched_rejected_keys", "missing_rejected_keys", "version_matches", "schema_hash_matches", "expected_schema_hash_present", "warnings"},
+		"properties": map[string]interface{}{
+			"status":                       stringSchema(),
+			"known_event_types":            integerSchema(),
+			"required_event_types":         integerSchema(),
+			"matched_event_types":          integerSchema(),
+			"missing_event_types":          integerSchema(),
+			"known_rejected_keys":          integerSchema(),
+			"required_rejected_keys":       integerSchema(),
+			"matched_rejected_keys":        integerSchema(),
+			"missing_rejected_keys":        integerSchema(),
+			"version_matches":              boolSchema(),
+			"schema_hash_matches":          boolSchema(),
+			"expected_schema_hash_present": boolSchema(),
+			"warnings":                     integerSchema(),
+		},
+	}
+}
+
+func schemaEvolutionCheckSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One schema evolution gate check.",
+		"additionalProperties": true,
+		"required":             []string{"id", "status", "severity", "message", "evidence", "remediation", "privacy"},
+		"properties": map[string]interface{}{
+			"id":          stringSchema(),
+			"status":      stringSchema(),
+			"severity":    stringSchema(),
+			"message":     stringSchema(),
+			"evidence":    stringSchema(),
+			"remediation": stringSchema(),
+			"privacy":     stringSchema(),
+		},
+	}
+}
+
+func schemaEvolutionRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One schema compatibility row for an expected event type or rejected payload key.",
+		"additionalProperties": true,
+		"required":             []string{"id", "kind", "status", "severity", "action", "privacy"},
+		"properties": map[string]interface{}{
+			"id":       stringSchema(),
+			"kind":     stringSchema(),
+			"expected": stringSchema(),
+			"current":  stringSchema(),
+			"status":   stringSchema(),
+			"severity": stringSchema(),
+			"action":   stringSchema(),
+			"privacy":  stringSchema(),
 		},
 	}
 }

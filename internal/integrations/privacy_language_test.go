@@ -42,6 +42,9 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 		"integration_upgrade_gate": IntegrationUpgradeGateFor(Options{}, nil, IntegrationUpgradeGateRequest{
 			Strict: true,
 		}),
+		"schema_evolution_gate": SchemaEvolutionGateFor(SchemaEvolutionGateRequest{
+			Strict: true,
+		}),
 		"openapi":           OpenAPISpecFor(Options{}, nil),
 		"provider_profiles": ProviderProfiles(),
 		"registry":          Registry(Options{}),

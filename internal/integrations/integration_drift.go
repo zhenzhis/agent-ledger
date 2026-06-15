@@ -82,6 +82,7 @@ var integrationDriftHashDefs = []integrationDriftHashDef{
 	{"conformance_matrix_hash", "Adapter conformance matrix", "rerun agent-ledger adapter matrix and strict fixture CI"},
 	{"adapter_spec_hash", "Adapter contract", "rerun agent-ledger adapter spec and update wrapper contract bindings"},
 	{"canonical_schema_hash", "Canonical event schema", "rerun agent-ledger event schema and update canonical event validators"},
+	{"schema_evolution_gate_hash", "Schema evolution gate", "rerun agent-ledger schema-gate and review adapter migration compatibility"},
 	{"openapi_smoke_hash", "OpenAPI smoke witness", "rerun agent-ledger openapi and verify operation metadata"},
 	{"runtime_status_hash", "Runtime status", "review read-only/write/runtime feature flags for the local deployment"},
 }
@@ -221,6 +222,7 @@ func IntegrationDriftCurrentHashes(opts Options, runtime *storage.RuntimeStatus)
 		"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 		"adapter_spec_hash":               AdapterContractFingerprint(),
 		"canonical_schema_hash":           storage.CanonicalEventSchemaFingerprint(),
+		"schema_evolution_gate_hash":      SchemaEvolutionGateOpenAPIFingerprint(),
 		"openapi_smoke_hash":              OpenAPISmokeFingerprint(opts, runtime),
 		"runtime_status_hash":             hashJSONPayload(runtime),
 	}

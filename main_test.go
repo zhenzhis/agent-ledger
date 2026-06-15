@@ -550,6 +550,45 @@ func TestIntegrationUpgradeGateCLIOutputsReadOnlyReport(t *testing.T) {
 	}
 }
 
+func TestSchemaEvolutionGateCLIOutputsReadOnlyReport(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"schema-gate", "--strict", "--schema-version", storage.CanonicalEventSchemaVersion, "--schema-hash", storage.CanonicalEventSchemaFingerprint(), "--event-type", "model.call,tool.call", "--rejected-key", "prompt"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI schema-gate: %v", err)
+	}
+	var report integrations.SchemaEvolutionGateReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode schema evolution gate output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.schema-evolution-gate" || !report.ReadOnlySafe || report.WritesLocalState ||
+		report.Decision.Status != "pass" || report.Decision.RecommendedCIExitCode != 0 ||
+		report.GateHash == "" || report.Summary.MissingEventTypes != 0 {
+		t.Fatalf("unexpected schema evolution gate report: %+v", report)
+	}
+	if !strings.Contains(out, "agent-ledger event schema") || !strings.Contains(out, "model.call") {
+		t.Fatalf("schema evolution gate missing CI guidance: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("schema evolution gate leaked %q: %s", forbidden, out)
+		}
+	}
+
+	aliasOut, err := captureStdout(t, func() error {
+		return runCLI([]string{"event", "schema-gate", "--schema-version", storage.CanonicalEventSchemaVersion, "--schema-hash", storage.CanonicalEventSchemaFingerprint(), "--event-type", "model.call"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI event schema-gate: %v", err)
+	}
+	if !strings.Contains(aliasOut, `"contract":"agent-ledger.schema-evolution-gate"`) {
+		t.Fatalf("event schema-gate alias returned unexpected output: %s", aliasOut)
+	}
+}
+
 func TestAgentRecommendCLIOutputsReadOnlyAdvisor(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()

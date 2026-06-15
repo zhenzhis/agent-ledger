@@ -535,6 +535,15 @@ func tools() []map[string]interface{} {
 			"payload":         objectSchema(),
 		}),
 		tool("ledger.event_schema", "Return the canonical metadata-only event schema and supported event types.", map[string]interface{}{}),
+		tool("ledger.schema_evolution_gate", "Return a privacy-safe pass/review/block compatibility gate for canonical event schema pins and adapter event families.", map[string]interface{}{
+			"strict":                 booleanSchema(),
+			"schema_version":         stringSchema(),
+			"schema_hash":            stringSchema(),
+			"required_event_types":   map[string]interface{}{"type": "array", "items": stringSchema()},
+			"required_rejected_keys": map[string]interface{}{"type": "array", "items": stringSchema()},
+			"event_type":             map[string]interface{}{"oneOf": []map[string]interface{}{stringSchema(), {"type": "array", "items": stringSchema()}}},
+			"rejected_key":           map[string]interface{}{"oneOf": []map[string]interface{}{stringSchema(), {"type": "array", "items": stringSchema()}}},
+		}),
 		tool("ledger.event_examples", "Return privacy-safe canonical event examples for adapter authors.", map[string]interface{}{
 			"event_type": stringSchema(),
 		}),
@@ -734,6 +743,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://goal/coverage", "Goal Coverage", "Privacy-safe Agent Ledger product goal coverage report with implementation evidence and external dependencies.", "application/json"),
 		resource("agent-ledger://contracts/openapi", "Control Plane OpenAPI", "Metadata-only OpenAPI 3.1 document for stable Agent Ledger REST control-plane endpoints.", "application/json"),
 		resource("agent-ledger://schema/canonical-events", "Canonical Event Schema", "Metadata-only event contract for workload, run, model-call, tool-call, artifact, evaluation, and policy events.", "application/json"),
+		resource("agent-ledger://schema/evolution-gate", "Schema Evolution Gate", "Privacy-safe canonical event schema compatibility gate; supports strict=true, schema_hash, event_type, and rejected_key query parameters.", "application/json"),
 		resource("agent-ledger://schema/canonical-event-examples", "Canonical Event Examples", "Privacy-safe templates for all supported canonical event types.", "application/json"),
 		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
 		resource("agent-ledger://integrations/provider-profiles", "Provider Profile Catalog", "Privacy-safe provider/runtime profile catalog for adapters, routers, relays, local runtimes, and edge models.", "application/json"),
@@ -872,6 +882,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolValidateEvent(args)
 	case "ledger.event_schema":
 		return storage.CanonicalEventSchema(), nil
+	case "ledger.schema_evolution_gate":
+		return toolSchemaEvolutionGate(args)
 	case "ledger.event_examples":
 		var req struct {
 			EventType string `json:"event_type"`
@@ -1050,6 +1062,8 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 		return integrations.OpenAPISpecFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
 	case "agent-ledger://schema/canonical-events":
 		return storage.CanonicalEventSchema(), nil
+	case "agent-ledger://schema/evolution-gate":
+		return integrations.SchemaEvolutionGateFor(integrations.SchemaEvolutionGateFromValues(values)), nil
 	case "agent-ledger://schema/canonical-event-examples":
 		return map[string]interface{}{
 			"contract": "agent-ledger.canonical-event-examples",
@@ -2367,6 +2381,33 @@ func (s *Server) toolIntegrationUpgradeGate(args json.RawMessage) (interface{}, 
 	}
 	req := integrations.IntegrationUpgradeGateRequest{Strict: in.Strict, Expected: expected}
 	return integrations.IntegrationUpgradeGateFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus(), req), nil
+}
+
+func toolSchemaEvolutionGate(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		Strict               bool        `json:"strict"`
+		SchemaVersion        string      `json:"schema_version"`
+		SchemaHash           string      `json:"schema_hash"`
+		ExpectedVersion      string      `json:"expected_version"`
+		ExpectedSchemaHash   string      `json:"expected_schema_hash"`
+		RequiredEventTypes   []string    `json:"required_event_types"`
+		RequiredRejectedKeys []string    `json:"required_rejected_keys"`
+		EventType            interface{} `json:"event_type"`
+		RejectedKey          interface{} `json:"rejected_key"`
+	}
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, err
+		}
+	}
+	req := integrations.SchemaEvolutionGateRequest{
+		Strict:               in.Strict,
+		ExpectedVersion:      firstNonEmpty(in.ExpectedVersion, in.SchemaVersion),
+		ExpectedSchemaHash:   firstNonEmpty(in.ExpectedSchemaHash, in.SchemaHash),
+		RequiredEventTypes:   append(append([]string{}, in.RequiredEventTypes...), mcpStringList(in.EventType)...),
+		RequiredRejectedKeys: append(append([]string{}, in.RequiredRejectedKeys...), mcpStringList(in.RejectedKey)...),
+	}
+	return integrations.SchemaEvolutionGateFor(req), nil
 }
 
 func mcpStringList(value interface{}) []string {

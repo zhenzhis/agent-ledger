@@ -118,6 +118,15 @@ func (s *Server) handleIntegrationUpgradeGate(w http.ResponseWriter, r *http.Req
 	writeJSONWithETag(w, r, report, integrations.IntegrationUpgradeGateFingerprintFrom(report))
 }
 
+func (s *Server) handleSchemaEvolutionGate(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	req := integrations.SchemaEvolutionGateFromValues(r.URL.Query())
+	report := integrations.SchemaEvolutionGateFor(req)
+	writeJSONWithETag(w, r, report, integrations.SchemaEvolutionGateFingerprintFrom(report))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return
