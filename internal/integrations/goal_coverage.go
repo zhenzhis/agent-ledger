@@ -297,7 +297,7 @@ func goalCoverageSections(capabilities map[string]Capability) []GoalCoverageSect
 				MCPTools:  []string{"ledger.explain_cost", "ledger.find_similar_workloads"},
 				Tests:     []string{"internal/storage/session_replay_test.go", "internal/storage/preflight_test.go", "internal/storage/router_simulator_test.go", "internal/storage/wrapped_test.go", "internal/storage/fleet_test.go", "internal/server/badge_test.go"},
 			},
-			Privacy: "Insights use token/cost/session metadata only and do not analyze prompt text.",
+			Privacy: "Insights use token/cost/session metadata only and do not analyze prompt content.",
 		},
 		{
 			ID:            "team_finops_audit_policy_notifications",

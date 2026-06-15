@@ -184,7 +184,7 @@ func A2ADiscovery() A2ADiscoveryMetadata {
 		MessageContentStored:       false,
 		ArtifactPartContentStored:  false,
 		PromptContentStored:        false,
-		Privacy:                    "metadata-only task telemetry; message history, message parts, prompt text, response text, artifact bodies, and raw evidence refs are excluded",
+		Privacy:                    "metadata-only task telemetry; message history, message parts, prompt content, response content, artifact bodies, and raw evidence refs are excluded",
 		Limitations:                []string{"local telemetry adapter, not a full A2A task execution server", "parent workloads may be reconstructed with lower confidence when only parent task metadata is provided", "evidence references require ref_hash or a locally hashable stable reference"},
 	}
 }

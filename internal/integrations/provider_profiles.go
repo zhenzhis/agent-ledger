@@ -34,7 +34,7 @@ type ProviderSummary struct {
 	UsageMetadataProfiles int `json:"usage_metadata_profiles"`
 }
 
-// ProviderProfile describes one provider/runtime family without any API keys,
+// ProviderProfile describes one provider/runtime family without any API credentials,
 // endpoints containing secrets, local paths, prompts, or response content.
 type ProviderProfile struct {
 	ID                    string   `json:"id"`
@@ -69,7 +69,7 @@ func ProviderProfiles() ProviderProfileCatalog {
 			RecommendedSource:     "gateway or provider",
 			PricingStrategy:       "official OpenAI seed first, LiteLLM fallback, local override for contract pricing",
 			ReconciliationSupport: "provider CSV/JSON summary import with statement hashes",
-			PrivacyNotes:          []string{"request and response bodies are ignored by provider ingest", "gateway forwards prompts in memory only when explicitly enabled", "API keys are read from environment variables and not persisted"},
+			PrivacyNotes:          []string{"request and response bodies are ignored by provider ingest", "gateway forwards prompts in memory only when explicitly enabled", "API credentials are read from environment variables and not persisted"},
 			ConformanceFixtures:   []string{"examples/adapter-fixtures/provider-openai-response.json", "examples/adapter-fixtures/provider-openai-chat-completion.json", "examples/adapter-fixtures/provider-openai-chat-stream.sse", "examples/adapter-fixtures/provider-openai-responses-stream.sse"},
 		},
 		{
@@ -170,7 +170,7 @@ func ProviderProfiles() ProviderProfileCatalog {
 		Version:       "v1",
 		GeneratedFrom: "static privacy-safe provider/runtime capability profiles",
 		LocalFirst:    true,
-		PrivacyPolicy: "Provider profiles are static metadata. They contain no API keys, raw endpoints with secrets, prompts, responses, local paths, session ids, machine names, authors, or usage rows.",
+		PrivacyPolicy: "Provider profiles are static metadata. They contain no API credentials, raw endpoints with secrets, prompts, responses, local paths, session ids, machine names, authors, or usage rows.",
 		Profiles:      profiles,
 		QualityGates: []string{
 			"new provider adapters must pass adapter conformance before ingest is enabled",

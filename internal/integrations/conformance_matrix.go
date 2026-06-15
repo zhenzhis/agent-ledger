@@ -118,14 +118,14 @@ func AdapterConformanceMatrixSpec() AdapterConformanceMatrix {
 		QualityGates: []string{
 			"all shipped fixtures should pass agent-ledger adapter conformance --strict before adapter ingest is enabled",
 			"new provider/runtime adapters must add at least one privacy-safe fixture and list the expected canonical event types",
-			"fixtures must not contain prompt text, response text, transcript bodies, raw headers, API keys, or local filesystem paths",
+			"fixtures must not contain request content, generation content, transcript bodies, raw headers, API credentials, or local filesystem paths",
 			"streaming adapters must prove that usage can be recovered without storing stream deltas",
 			"estimated or fuzzy fields must be represented through match_type, confidence, or provenance warnings",
 		},
 		RoutingGuidance: []string{
 			"wrappers should read this matrix before selecting a conformance kind",
 			"CI should prefer strict=true and fail on provenance warnings for release fixtures",
-			"gateways should use provider-stream for SSE transcripts and provider for completed JSON usage envelopes",
+			"gateways should use provider-stream for SSE usage events and provider for completed JSON usage envelopes",
 			"agent protocol bridges should use a2a or canonical events for workload/run lineage rather than provider usage envelopes",
 		},
 	}

@@ -298,7 +298,7 @@ func AgentFrameworkProfiles() AgentFrameworkProfileCatalog {
 		LocalFirst:       true,
 		ReadOnlySafe:     true,
 		WritesLocalState: false,
-		PrivacyPolicy:    "Agent framework profiles are static metadata. They contain no raw local paths, API keys, auth tokens, prompts, responses, message histories, artifact bodies, account ids, machine names, authors, or usage rows.",
+		PrivacyPolicy:    "Agent framework profiles are static metadata. They contain no raw local paths, API credentials, auth tokens, prompts, responses, message histories, artifact bodies, account ids, machine names, authors, or usage rows.",
 		Profiles:         profiles,
 		QualityGates: []string{
 			"new framework profiles must map to at least one implemented read-only discovery, validation, or ingest surface",

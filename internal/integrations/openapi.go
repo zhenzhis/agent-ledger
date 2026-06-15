@@ -2150,7 +2150,7 @@ func providerProfileSummarySchema() map[string]interface{} {
 func providerProfileSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":                 "object",
-		"description":          "One provider, relay, local runtime, or edge model profile. This schema carries metadata only and never includes API keys, prompts, outputs, or local paths.",
+		"description":          "One provider, relay, local runtime, or edge model profile. This schema carries metadata only and never includes API credentials, prompts, outputs, or local paths.",
 		"additionalProperties": true,
 		"required":             []string{"id", "label", "kind", "families", "model_name_examples", "usage_schemas", "accepted_input_kinds", "recommended_source", "pricing_strategy", "reconciliation_support", "privacy_notes"},
 		"properties": map[string]interface{}{

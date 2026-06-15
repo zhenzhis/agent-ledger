@@ -69,7 +69,7 @@ func AdapterContractSpec() AdapterContract {
 		Purpose:       "Build metadata-only adapters for agent CLIs, agent frameworks, provider gateways, OpenTelemetry GenAI spans, A2A task telemetry, and future multi-agent routing protocols.",
 		SchemaVersion: storage.CanonicalEventSchemaVersion,
 		SchemaHash:    storage.CanonicalEventSchemaFingerprint(),
-		PrivacyPolicy: "Adapters must never persist prompt text, model output text, secrets, raw tool parameters, or raw transcripts. Use hashes, ids, offsets, and short metadata labels.",
+		PrivacyPolicy: "Adapters must never persist prompt content, model output content, secrets, raw tool parameters, or raw transcripts. Use hashes, ids, offsets, and short metadata labels.",
 		SupportedInputKinds: []AdapterInputKind{
 			{
 				Kind:            "canonical",
@@ -93,12 +93,12 @@ func AdapterContractSpec() AdapterContract {
 			},
 			{
 				Kind:            "provider-stream",
-				Description:     "Provider SSE usage transcripts from OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, or generic usageMetadata relay streaming responses.",
+				Description:     "Provider SSE usage events from OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, or generic usageMetadata relay streaming responses.",
 				ConformanceKind: "provider-stream",
 				ConvertCommand:  "agent-ledger adapter conformance --kind provider-stream --file stream.sse",
 				Endpoint:        "POST /api/integrations/conformance?kind=provider-stream",
 				RequiredSignals: []string{"SSE data events", "provider response id when available", "model", "usage tokens"},
-				PrivacyNotes:    []string{"stream deltas are ignored", "fixtures should include usage events only", "do not store prompt, output, or transcript text"},
+				PrivacyNotes:    []string{"stream deltas are ignored", "fixtures should include usage events only", "do not store request, generation, or transcript content"},
 			},
 			{
 				Kind:            "otel",
