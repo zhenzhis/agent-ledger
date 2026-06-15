@@ -145,15 +145,7 @@ func goalCoverageReportFor(opts Options, runtime *storage.RuntimeStatus, contrac
 	}
 	sections := goalCoverageSections(capabilities)
 	summary := goalCoverageSummary(sections)
-	external := []GoalCoverageExternal{
-		{
-			ID:          "native_mcp_push_subscription",
-			Dependency:  "MCP host/client support for native resource subscription push transport",
-			Reason:      "Agent Ledger already exposes cursor-stable resources and local polling subscription notifications; true host push cannot be claimed until host clients support that transport.",
-			LocalStatus: "implemented_local_polling",
-			Evidence:    []string{"agent-ledger://workloads/feed", "agent-ledger://workload/state", "MCP resources/subscribe local polling"},
-		},
-	}
+	external := []GoalCoverageExternal{}
 	summary.ExternalDependencies = len(external)
 	if summary.Gaps == 0 && summary.Experimental == 0 && summary.ExternalDependencies > 0 {
 		summary.NextAction = "keep external dependencies disclosed until accepted or removed from completion scope"

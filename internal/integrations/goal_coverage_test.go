@@ -29,20 +29,20 @@ func TestGoalCoverageReportHasEvidenceAndNoActionableGaps(t *testing.T) {
 	if report.Summary.TotalSections != len(report.Sections) || report.Summary.TotalSections < 10 {
 		t.Fatalf("unexpected section count: summary=%#v sections=%d", report.Summary, len(report.Sections))
 	}
-	if report.Status != "implemented-with-external-dependencies" || report.Summary.Experimental != 0 {
-		t.Fatalf("expected implemented coverage with only external dependencies remaining: status=%s summary=%#v", report.Status, report.Summary)
+	if report.Status != "implemented" || report.Summary.Experimental != 0 || report.Summary.ExternalDependencies != 0 {
+		t.Fatalf("expected implemented coverage without experimental or external blockers: status=%s summary=%#v", report.Status, report.Summary)
 	}
-	if len(report.ExternalDependencies) == 0 {
-		t.Fatal("expected external dependencies to be disclosed")
+	if len(report.ExternalDependencies) != 0 {
+		t.Fatalf("unexpected external dependencies: %#v", report.ExternalDependencies)
 	}
 	if report.CompletionAudit.Contract != "agent-ledger.goal-completion-audit" ||
-		report.CompletionAudit.Status != "review-required" ||
-		report.CompletionAudit.ReadyToMarkGoalComplete ||
-		report.CompletionAudit.Summary.Review == 0 ||
-		report.CompletionAudit.Summary.ExternalDependencies == 0 ||
+		report.CompletionAudit.Status != "complete" ||
+		!report.CompletionAudit.ReadyToMarkGoalComplete ||
+		report.CompletionAudit.Summary.Review != 0 ||
+		report.CompletionAudit.Summary.ExternalDependencies != 0 ||
 		report.CompletionAudit.Summary.ExperimentalSections != 0 ||
 		report.CompletionAudit.Summary.SectionsWithRemaining != 0 {
-		t.Fatalf("completion audit should conservatively require review: %#v", report.CompletionAudit)
+		t.Fatalf("completion audit should be complete: %#v", report.CompletionAudit)
 	}
 	if !goalCompletionHasCheck(report.CompletionAudit, "coverage_gaps") ||
 		!goalCompletionHasCheck(report.CompletionAudit, "experimental_surfaces") ||

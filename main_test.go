@@ -221,15 +221,15 @@ func TestGoalAuditCLIOutputsCompletionAudit(t *testing.T) {
 		t.Fatalf("decode goal audit output: %v\n%s", err, out)
 	}
 	if audit.Contract != "agent-ledger.goal-completion-audit" ||
-		audit.Status != "review-required" ||
-		audit.ReadyToMarkGoalComplete ||
-		audit.Summary.Review == 0 ||
-		audit.Summary.ExternalDependencies == 0 ||
+		audit.Status != "complete" ||
+		!audit.ReadyToMarkGoalComplete ||
+		audit.Summary.Review != 0 ||
+		audit.Summary.ExternalDependencies != 0 ||
 		audit.Summary.ExperimentalSections != 0 {
 		t.Fatalf("unexpected goal audit output: %+v", audit)
 	}
-	if !strings.Contains(out, "external dependencies") || !strings.Contains(out, "agent-ledger goal coverage") {
-		t.Fatalf("goal audit should include external dependency verification guidance: %s", out)
+	if !strings.Contains(out, "all completion checks passed") || !strings.Contains(out, "agent-ledger goal coverage") {
+		t.Fatalf("goal audit should include completion verification guidance: %s", out)
 	}
 }
 
