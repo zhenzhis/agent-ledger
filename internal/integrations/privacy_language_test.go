@@ -24,6 +24,10 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 		"provider_profiles": ProviderProfiles(),
 		"registry":          Registry(Options{}),
 	}
+	ok, actual := contractPublicPrivacyLanguageStatus(docs)
+	if !ok {
+		t.Fatalf("contract privacy language status failed: %s", actual)
+	}
 	for name, doc := range docs {
 		raw, err := json.Marshal(doc)
 		if err != nil {
@@ -43,5 +47,14 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 				t.Fatalf("%s uses unsafe privacy phrase %q: %s", name, forbidden, raw)
 			}
 		}
+	}
+}
+
+func TestPublicMetadataPrivacyLanguageStatusFailsUnsafePhrase(t *testing.T) {
+	ok, actual := contractPublicPrivacyLanguageStatus(map[string]interface{}{
+		"unsafe": map[string]string{"privacy": "do not store prompt text"},
+	})
+	if ok || !strings.Contains(actual, "unsafe:prompt text") {
+		t.Fatalf("expected unsafe phrase failure, ok=%v actual=%q", ok, actual)
 	}
 }

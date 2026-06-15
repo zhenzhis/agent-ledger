@@ -529,6 +529,7 @@ agent-ledger doctor --format markdown
 
 - 默认绑定 `127.0.0.1`。
 - `agent-ledger config status`、`GET /api/config/status` 和 MCP `ledger.config_status` 用于部署检查，不暴露原始路径、auth token、API 凭据、webhook URL、机器名、作者、prompt、response 或 session id。
+- `agent-ledger contracts verify`、`GET /api/contracts/verify` 和 MCP `ledger.contracts_verify` 包含 `privacy.public_metadata_language` 运行时检查，用于确认公开 metadata 文档保持内容安全的隐私表述，不回退到容易误解为内容采集的措辞。
 - `agent-ledger readiness`、`GET /api/readiness`、MCP `ledger.readiness` 与 `agent-ledger://readiness` 用于控制面探针，只暴露状态、计数、检查标识和修复建议，包括隐私安全的 control idempotency key/replay 计数、workload queue 可领取状态、workload lease 计数，以及 active/stale agent run 计数。
 - `agent-ledger admission check`、`GET /api/admission/check`、MCP `ledger.admission_check` 与 `agent-ledger://admission/check` 只暴露操作访问决策；不暴露 request body、完整 CLI 参数、原始路径、token、prompt、session、项目、分支、机器名或作者。
 - 只读取本地 agent 日志和数据库，不上传 usage 数据。

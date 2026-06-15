@@ -4,7 +4,7 @@
 
 ### Added
 
-- Public metadata privacy language now consistently describes content-safe telemetry across discovery, adapter contracts, conformance matrix, provider/agent profiles, OpenAPI, and docs.
+- Public metadata privacy language now consistently describes content-safe telemetry across discovery, adapter contracts, conformance matrix, provider/agent profiles, OpenAPI, and docs; `contracts verify` now includes the `privacy.public_metadata_language` invariant.
 - Official Agent Ledger naming across module path, binary, Docker, release metadata, and documentation.
 - Read-only `agent-ledger ui check` static UI/UX contract for the embedded black/white/gray dashboard, covering local assets, accessibility, chart summaries, privacy entrypoints, monochrome palette, responsive breakpoints, touch targets, skeleton reduced-motion, and contained table overflow.
 - Provider/runtime profile catalog through `GET /api/provider-profiles`, `agent-ledger provider profiles`, MCP `ledger.provider_profiles`, `agent-ledger://integrations/provider-profiles`, discovery, adapter contract, OpenAPI, and contract verification, covering official providers, OpenAI-compatible relays, LiteLLM proxies, Gemini-style usage metadata, Ollama, vLLM, LM Studio, local models, and edge runtimes without storing prompt or response content.

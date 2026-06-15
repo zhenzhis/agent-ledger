@@ -364,6 +364,25 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("adapter.provider_profiles", adapter.ProviderProfilesURI == "/api/provider-profiles" && adapter.ProviderProfilesHash == ProviderProfilesFingerprint(), "critical", "adapter contract links provider profile catalog", "/api/provider-profiles "+ProviderProfilesFingerprint(), adapter.ProviderProfilesURI+" "+adapter.ProviderProfilesHash)
 	matrix := AdapterConformanceMatrixSpec()
 	addCheck("adapter.conformance_matrix", matrix.AdapterSpecHash == AdapterContractFingerprint() && matrix.ProviderProfilesHash == ProviderProfilesFingerprint() && len(matrix.Kinds) == len(SupportedAdapterConformanceKinds()), "critical", "adapter conformance matrix links schema, provider profiles, and every decoder kind", AdapterContractFingerprint()+" "+ProviderProfilesFingerprint()+" kinds="+strconv.Itoa(len(SupportedAdapterConformanceKinds())), matrix.AdapterSpecHash+" "+matrix.ProviderProfilesHash+" kinds="+strconv.Itoa(len(matrix.Kinds)))
+	privacyLanguageOK, privacyLanguageActual := contractPublicPrivacyLanguageStatus(map[string]interface{}{
+		"adapter_contract":           adapter,
+		"adapter_conformance_matrix": matrix,
+		"agent_profiles":             AgentFrameworkProfiles(),
+		"a2a_discovery":              discovery.A2A,
+		"capability_catalog":         catalog,
+		"contract_bundle":            bundle,
+		"discovery":                  discovery,
+		"goal_coverage":              GoalCoverageReportFor(opts, runtime),
+		"integration_recommendation": IntegrationRecommendation(IntegrationRecommendationRequest{
+			AgentProfileID:    "codex-cli",
+			ProviderProfileID: "openai-official",
+			Surface:           "provider-stream",
+			Signals:           []string{"model", "usage", "cache"},
+		}),
+		"openapi":           openAPI,
+		"provider_profiles": ProviderProfiles(),
+	})
+	addCheck("privacy.public_metadata_language", privacyLanguageOK, "critical", "public metadata uses content-safe privacy language", "no unsafe content-capture phrases in public metadata documents", privacyLanguageActual)
 	addCheck("bundle.hash", bundle.BundleHash == ContractBundleFingerprint(bundle), "critical", "contract bundle hash matches deterministic fingerprint", ContractBundleFingerprint(bundle), bundle.BundleHash)
 
 	requiredDocs := []struct {
@@ -522,6 +541,36 @@ func contractCanonicalEventExamplesStatus() (bool, string) {
 		",invalid=" + intString(invalid) +
 		",duplicates=" + intString(duplicate)
 	return ok, actual
+}
+
+func contractPublicPrivacyLanguageStatus(docs map[string]interface{}) (bool, string) {
+	forbidden := []string{
+		"api keys",
+		"model output text",
+		"output text",
+		"prompt text",
+		"prompt, output",
+		"response text",
+		"transcript text",
+	}
+	failures := []string{}
+	for name, doc := range docs {
+		raw, err := json.Marshal(doc)
+		if err != nil {
+			failures = append(failures, name+":marshal_error")
+			continue
+		}
+		lower := strings.ToLower(string(raw))
+		for _, phrase := range forbidden {
+			if strings.Contains(lower, phrase) {
+				failures = append(failures, name+":"+phrase)
+			}
+		}
+	}
+	if len(failures) == 0 {
+		return true, "checked=" + intString(len(docs)) + ",failures=0"
+	}
+	return false, "checked=" + intString(len(docs)) + ",failures=" + intString(len(failures)) + ",first=" + strings.Join(firstContractStrings(failures, 5), "|")
 }
 
 func contractAdapterSchemaStatus(adapter AdapterContract) (bool, string) {
@@ -959,6 +1008,16 @@ func boolString(v bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func firstContractStrings(values []string, limit int) []string {
+	if limit <= 0 || len(values) == 0 {
+		return nil
+	}
+	if len(values) <= limit {
+		return values
+	}
+	return values[:limit]
 }
 
 func stringSliceContains(values []string, want string) bool {
