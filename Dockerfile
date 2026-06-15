@@ -7,9 +7,10 @@ ARG DATE=unknown
 ARG GOPROXY=https://proxy.golang.org,direct
 
 WORKDIR /src
-COPY go.mod go.sum ./
-RUN GOPROXY=${GOPROXY} go mod download
 COPY . .
+# Offline smoke builds can provide a temporary vendor/ directory. Normal builds
+# download through GOPROXY when no vendor tree is present in the build context.
+RUN if [ ! -d vendor ]; then GOPROXY=${GOPROXY} go mod download; fi
 
 RUN CGO_ENABLED=0 GOOS=linux GOPROXY=${GOPROXY} go build \
     -ldflags="-s -w \
