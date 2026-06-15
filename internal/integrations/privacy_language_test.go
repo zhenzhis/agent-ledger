@@ -32,6 +32,11 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 			ProviderProfileID: "openai-official",
 			Surface:           "provider-stream",
 		}),
+		"integration_evidence_kit": IntegrationEvidenceKitFor(Options{}, nil, IntegrationEvidenceKitRequest{
+			AgentProfileID:    "codex-cli",
+			ProviderProfileID: "openai-official",
+			Surface:           "provider-stream",
+		}),
 		"openapi":           OpenAPISpecFor(Options{}, nil),
 		"provider_profiles": ProviderProfiles(),
 		"registry":          Registry(Options{}),

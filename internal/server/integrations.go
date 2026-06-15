@@ -83,6 +83,15 @@ func (s *Server) handleIntegrationRolloutPlan(w http.ResponseWriter, r *http.Req
 	writeJSONWithETag(w, r, report, integrations.IntegrationRolloutFingerprintFrom(report))
 }
 
+func (s *Server) handleIntegrationEvidenceKit(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	req := integrations.IntegrationEvidenceKitFromValues(r.URL.Query())
+	report := integrations.IntegrationEvidenceKitFor(s.integrationOptions(), s.runtimeStatus(), req)
+	writeJSONWithETag(w, r, report, integrations.IntegrationEvidenceKitFingerprintFrom(report))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

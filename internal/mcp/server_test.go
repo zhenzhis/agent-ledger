@@ -108,6 +108,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.integration_smoke") {
 		t.Fatalf("expected integration smoke tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.integration_evidence_kit") {
+		t.Fatalf("expected integration evidence kit tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -195,6 +198,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	integrationSmokeMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_smoke"))
 	if integrationSmokeMeta["write_mode"] != "none" || integrationSmokeMeta["writes_local_state"] != false || integrationSmokeMeta["available_in_read_only"] != true {
 		t.Fatalf("integration smoke tool metadata wrong: %#v", integrationSmokeMeta)
+	}
+	integrationEvidenceMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_evidence_kit"))
+	if integrationEvidenceMeta["write_mode"] != "none" || integrationEvidenceMeta["writes_local_state"] != false || integrationEvidenceMeta["available_in_read_only"] != true {
+		t.Fatalf("integration evidence kit tool metadata wrong: %#v", integrationEvidenceMeta)
 	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {

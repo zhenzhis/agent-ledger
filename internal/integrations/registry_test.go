@@ -40,6 +40,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapability(t, catalog, "protocol.signal_coverage", "implemented", true)
 	assertCapability(t, catalog, "protocol.integration_readiness", "implemented", true)
 	assertCapability(t, catalog, "protocol.integration_smoke", "implemented", true)
+	assertCapability(t, catalog, "protocol.integration_evidence_kit", "implemented", true)
 	assertCapability(t, catalog, "protocol.openapi", "implemented", true)
 	assertCapability(t, catalog, "protocol.runtime_status", "implemented", true)
 	assertCapability(t, catalog, "protocol.config_status", "implemented", true)
@@ -81,6 +82,9 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityCommand(t, catalog, "protocol.integration_smoke", "agent-ledger integrations smoke")
 	assertCapabilityTool(t, catalog, "protocol.integration_smoke", "ledger.integration_smoke")
 	assertCapabilityResource(t, catalog, "protocol.integration_smoke", "agent-ledger://integrations/smoke")
+	assertCapabilityCommand(t, catalog, "protocol.integration_evidence_kit", "agent-ledger integrations evidence-kit")
+	assertCapabilityTool(t, catalog, "protocol.integration_evidence_kit", "ledger.integration_evidence_kit")
+	assertCapabilityResource(t, catalog, "protocol.integration_evidence_kit", "agent-ledger://integrations/evidence-kit")
 	assertCapabilityCommand(t, catalog, "protocol.integration_recommendation", "agent-ledger agent recommend --profile codex-cli --provider openai-official --surface provider-stream --signals model,usage,cache")
 	assertCapabilityTool(t, catalog, "protocol.integration_recommendation", "ledger.integration_recommendation")
 	assertCapabilityResource(t, catalog, "protocol.integration_recommendation", "agent-ledger://integrations/recommendation")
@@ -107,6 +111,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.signal_coverage")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_readiness")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_smoke")
+	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.integration_evidence_kit")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.conformance_matrix")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.claim_next_workload")
 	assertCapabilityTool(t, catalog, "protocol.mcp_stdio", "ledger.workload_queue")
@@ -126,6 +131,7 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/signal-coverage")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/readiness")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/smoke")
+	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/evidence-kit")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://integrations/conformance-matrix")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://runtime/status")
 	assertCapabilityResource(t, catalog, "protocol.mcp_stdio", "agent-ledger://config/status")
@@ -241,6 +247,7 @@ func TestRegistryAnnotatesReadOnlyRuntimeCapabilities(t *testing.T) {
 	assertRuntimeCapability(t, catalog, "protocol.signal_coverage", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.integration_readiness", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.integration_smoke", true, false, true)
+	assertRuntimeCapability(t, catalog, "protocol.integration_evidence_kit", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.runtime_status", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.config_status", true, false, true)
 	assertRuntimeCapability(t, catalog, "protocol.readiness", true, false, true)
@@ -279,6 +286,8 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 		manifest.IntegrationReadinessHash != IntegrationReadinessFingerprint(OptionsFromConfig(cfg)) ||
 		manifest.IntegrationSmokeURI != "/api/integrations/smoke" ||
 		manifest.IntegrationSmokeHash != IntegrationSmokeFingerprint(OptionsFromConfig(cfg), nil) ||
+		manifest.EvidenceKitURI != "/api/integrations/evidence-kit" ||
+		manifest.EvidenceKitHash != IntegrationEvidenceKitFingerprint(OptionsFromConfig(cfg), nil, IntegrationEvidenceKitRequest{}) ||
 		manifest.RecommendationURI != "/api/integrations/recommendation" ||
 		manifest.RecommendationHash != IntegrationRecommendationContractFingerprint() ||
 		manifest.ConformanceMatrixURI != "/api/integrations/conformance-matrix" ||
@@ -301,7 +310,7 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	if manifest.AdapterSpecHash == "" || !strings.HasPrefix(manifest.AdapterSpecHash, "sha256:") || manifest.AdapterSpecHash != AdapterContractFingerprint() {
 		t.Fatalf("discovery missing adapter contract hash: %#v", manifest)
 	}
-	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.contract_verification") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.config_status") || !hasDiscoveryProtocol(manifest, "protocol.readiness") || !hasDiscoveryProtocol(manifest, "protocol.admission_check") || !hasDiscoveryProtocol(manifest, "protocol.signal_taxonomy") || !hasDiscoveryProtocol(manifest, "protocol.signal_coverage") || !hasDiscoveryProtocol(manifest, "protocol.integration_readiness") || !hasDiscoveryProtocol(manifest, "protocol.integration_smoke") || !hasDiscoveryProtocol(manifest, "protocol.integration_recommendation") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
+	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.contract_verification") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.config_status") || !hasDiscoveryProtocol(manifest, "protocol.readiness") || !hasDiscoveryProtocol(manifest, "protocol.admission_check") || !hasDiscoveryProtocol(manifest, "protocol.signal_taxonomy") || !hasDiscoveryProtocol(manifest, "protocol.signal_coverage") || !hasDiscoveryProtocol(manifest, "protocol.integration_readiness") || !hasDiscoveryProtocol(manifest, "protocol.integration_smoke") || !hasDiscoveryProtocol(manifest, "protocol.integration_evidence_kit") || !hasDiscoveryProtocol(manifest, "protocol.integration_recommendation") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("discovery missing agent protocols: %#v", manifest.Protocols)
 	}
 	for _, protocol := range manifest.Protocols {
@@ -328,7 +337,7 @@ func TestContractBundleIndexesCoreContracts(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.Version != "v1" || !bundle.LocalFirst || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle identity: %#v", bundle)
 	}
-	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "agent-profiles", "signal-taxonomy", "signal-coverage", "integration-readiness", "integration-smoke", "integration-recommendation", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
+	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "agent-profiles", "signal-taxonomy", "signal-coverage", "integration-readiness", "integration-smoke", "integration-evidence-kit", "integration-recommendation", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
 		if !contractBundleHasDocument(bundle, id) {
 			t.Fatalf("contract bundle missing %s: %#v", id, bundle.Documents)
 		}
@@ -1398,6 +1407,19 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("IntegrationSmokeSummary", "status", "total_checks", "passed", "warnings", "failed", "review_required", "disabled_by_config")
 	expectFields("IntegrationSmokeFixtureCoverage", "input_kinds", "fixtures", "strict_fixtures", "provider_fixtures", "provider_stream_fixtures", "otel_fixtures", "a2a_fixtures", "canonical_fixtures", "expected_kinds")
 	expectFields("IntegrationSmokeCheck", "id", "category", "status", "severity", "message", "evidence", "remediation", "command")
+	expectFields("IntegrationEvidenceKitReport", "product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "request", "kit_hash", "hashes", "summary", "target", "evidence_items", "fixture_evidence", "ci_commands", "reviewer_checklist", "redaction_rules", "operational_guidance")
+	expectRef("IntegrationEvidenceKitReport", "request", "#/components/schemas/IntegrationEvidenceKitRequest")
+	expectRef("IntegrationEvidenceKitReport", "hashes", "#/components/schemas/IntegrationEvidenceKitHashes")
+	expectRef("IntegrationEvidenceKitReport", "summary", "#/components/schemas/IntegrationEvidenceKitSummary")
+	expectRef("IntegrationEvidenceKitReport", "target", "#/components/schemas/IntegrationRolloutTarget")
+	expectArrayRef("IntegrationEvidenceKitReport", "evidence_items", "#/components/schemas/IntegrationEvidenceItem")
+	expectArrayRef("IntegrationEvidenceKitReport", "fixture_evidence", "#/components/schemas/IntegrationRolloutFixture")
+	expectArrayRef("IntegrationEvidenceKitReport", "reviewer_checklist", "#/components/schemas/IntegrationEvidenceChecklist")
+	expectFields("IntegrationEvidenceKitRequest", "agent_profile_id", "provider_profile_id", "surface", "min_confidence")
+	expectFields("IntegrationEvidenceKitHashes", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "signal_taxonomy_hash", "signal_coverage_hash", "integration_readiness_hash", "integration_smoke_hash", "integration_compatibility_hash", "integration_rollout_plan_hash", "integration_recommendation_hash", "conformance_matrix_hash", "adapter_spec_hash", "canonical_schema_hash", "openapi_smoke_hash", "runtime_status_hash")
+	expectFields("IntegrationEvidenceKitSummary", "status", "evidence_items", "required_items", "fixture_evidence", "strict_fixtures", "ci_commands", "reviewer_checks", "warnings", "requires_pricing_review", "requires_outbound_review")
+	expectFields("IntegrationEvidenceItem", "id", "category", "title", "kind", "command", "endpoint", "mcp_tool", "resource", "hash", "required", "gate", "privacy", "evidence")
+	expectFields("IntegrationEvidenceChecklist", "id", "owner", "title", "required", "checks", "privacy")
 
 	expectFields("GoalCoverageReport", "product", "slug", "contract", "version", "status", "local_first", "read_only", "prompt_content_stored", "usage_data_uploaded", "privacy_default", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "canonical_schema_hash", "adapter_spec_hash", "coverage_hash", "summary", "sections", "external_dependencies", "verification", "privacy")
 	expectRef("GoalCoverageReport", "summary", "#/components/schemas/GoalCoverageSummary")

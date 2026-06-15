@@ -466,6 +466,10 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		if len(args) > 1 && (args[1] == "rollout-plan" || args[1] == "rollout") {
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationRolloutPlanFor(integrationRolloutRequestFromCLI(args[2:])))
 		}
+		if len(args) > 1 && (args[1] == "evidence-kit" || args[1] == "evidence") {
+			opts := integrations.OptionsFromConfig(cfg)
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationEvidenceKitFor(opts, server.RuntimeStatusFromConfig(cfg), integrationEvidenceKitRequestFromCLI(args[2:])))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "integration-readiness":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
@@ -476,6 +480,9 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationCompatibilityReportFor(integrationCompatibilityRequestFromCLI(args[1:])))
 	case "integration-rollout", "integration-rollout-plan":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationRolloutPlanFor(integrationRolloutRequestFromCLI(args[1:])))
+	case "integration-evidence", "integration-evidence-kit":
+		opts := integrations.OptionsFromConfig(cfg)
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationEvidenceKitFor(opts, server.RuntimeStatusFromConfig(cfg), integrationEvidenceKitRequestFromCLI(args[1:])))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
@@ -531,6 +538,15 @@ func integrationCompatibilityRequestFromCLI(args []string) integrations.Integrat
 
 func integrationRolloutRequestFromCLI(args []string) integrations.IntegrationRolloutRequest {
 	return integrations.NormalizeIntegrationRolloutRequest(integrations.IntegrationRolloutRequest{
+		AgentProfileID:    firstNonEmptyCLI(cliValue(args, "--agent-profile-id"), cliValue(args, "--agent"), cliValue(args, "--profile"), cliValue(args, "--framework")),
+		ProviderProfileID: firstNonEmptyCLI(cliValue(args, "--provider-profile-id"), cliValue(args, "--provider"), cliValue(args, "--runtime")),
+		Surface:           firstNonEmptyCLI(cliValue(args, "--surface"), cliValue(args, "--ingest"), cliValue(args, "--kind")),
+		MinConfidence:     firstNonEmptyCLI(cliValue(args, "--min-confidence"), cliValue(args, "--min_confidence")),
+	})
+}
+
+func integrationEvidenceKitRequestFromCLI(args []string) integrations.IntegrationEvidenceKitRequest {
+	return integrations.NormalizeIntegrationEvidenceKitRequest(integrations.IntegrationEvidenceKitRequest{
 		AgentProfileID:    firstNonEmptyCLI(cliValue(args, "--agent-profile-id"), cliValue(args, "--agent"), cliValue(args, "--profile"), cliValue(args, "--framework")),
 		ProviderProfileID: firstNonEmptyCLI(cliValue(args, "--provider-profile-id"), cliValue(args, "--provider"), cliValue(args, "--runtime")),
 		Surface:           firstNonEmptyCLI(cliValue(args, "--surface"), cliValue(args, "--ingest"), cliValue(args, "--kind")),

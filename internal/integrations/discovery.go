@@ -54,6 +54,8 @@ type DiscoveryManifest struct {
 	CompatibilityHash        string               `json:"integration_compatibility_hash"`
 	RolloutPlanURI           string               `json:"integration_rollout_plan_uri"`
 	RolloutPlanHash          string               `json:"integration_rollout_plan_hash"`
+	EvidenceKitURI           string               `json:"integration_evidence_kit_uri"`
+	EvidenceKitHash          string               `json:"integration_evidence_kit_hash"`
 	RecommendationURI        string               `json:"integration_recommendation_uri"`
 	RecommendationHash       string               `json:"integration_recommendation_hash"`
 	ContractBundleURI        string               `json:"contract_bundle_uri"`
@@ -161,6 +163,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		CompatibilityHash:        IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}),
 		RolloutPlanURI:           "/api/integrations/rollout-plan",
 		RolloutPlanHash:          IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
+		EvidenceKitURI:           "/api/integrations/evidence-kit",
+		EvidenceKitHash:          IntegrationEvidenceKitFingerprint(opts, nil, IntegrationEvidenceKitRequest{}),
 		RecommendationURI:        "/api/integrations/recommendation",
 		RecommendationHash:       IntegrationRecommendationContractFingerprint(),
 		ContractBundleURI:        "/api/contracts",
