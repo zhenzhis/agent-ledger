@@ -1057,7 +1057,18 @@ func runAgentCLI(args []string) error {
 	if len(args) > 0 && args[0] == "profiles" {
 		return json.NewEncoder(os.Stdout).Encode(integrations.AgentFrameworkProfiles())
 	}
-	return fmt.Errorf("usage: agent-ledger agent profiles")
+	if len(args) > 0 && args[0] == "recommend" {
+		req := integrations.NormalizeIntegrationRecommendationRequest(integrations.IntegrationRecommendationRequest{
+			AgentProfileID:    firstNonEmptyCLI(cliValue(args[1:], "--profile"), cliValue(args[1:], "--agent"), cliValue(args[1:], "--framework")),
+			ProviderProfileID: firstNonEmptyCLI(cliValue(args[1:], "--provider"), cliValue(args[1:], "--runtime")),
+			Surface:           cliValue(args[1:], "--surface"),
+			Signals:           strings.Split(cliValue(args[1:], "--signals"), ","),
+			RuntimeMode:       firstNonEmptyCLI(cliValue(args[1:], "--runtime-mode"), cliValue(args[1:], "--mode")),
+			ReadOnly:          cliBool(args[1:], "--read-only") || cliBool(args[1:], "--readonly"),
+		})
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationRecommendation(req))
+	}
+	return fmt.Errorf("usage: agent-ledger agent profiles|recommend [--profile codex-cli] [--provider openai-official] [--surface provider-stream] [--signals model,usage,cache]")
 }
 
 func runAdapterCLI(args []string) error {

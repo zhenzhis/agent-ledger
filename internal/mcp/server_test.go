@@ -397,6 +397,41 @@ func TestMCPAgentProfilesToolAndResource(t *testing.T) {
 	}
 }
 
+func TestMCPIntegrationRecommendationToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.integration_recommendation","arguments":{"agent":"codex-cli","provider":"openai-official","surface":"provider-stream","signals":["model","usage","cache"]}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream&signals=model,usage,cache"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.integration-recommendation" || toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false {
+		t.Fatalf("unexpected recommendation tool payload: %#v", toolPayload)
+	}
+	if toolPayload["recommended_surface"] != "provider-stream" || toolPayload["confidence"].(float64) < 0.8 {
+		t.Fatalf("unexpected recommendation match: %#v", toolPayload)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("recommendation tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.integration-recommendation"`) ||
+		!strings.Contains(resourceText, `"recommended_surface": "provider-stream"`) ||
+		!strings.Contains(resourceText, `"recommendation_contract"`) {
+		t.Fatalf("unexpected recommendation resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("recommendation resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
 func TestMCPConformanceMatrixToolAndResource(t *testing.T) {
 	db := openTestDB(t)
 	srv := New(db, config.DefaultConfig())

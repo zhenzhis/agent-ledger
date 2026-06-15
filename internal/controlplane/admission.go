@@ -264,6 +264,7 @@ func isReadOnlyHTTPPath(path string) bool {
 		"/api/integrations",
 		"/api/provider-profiles",
 		"/api/agent-profiles",
+		"/api/integrations/recommendation",
 		"/api/goal-coverage",
 		"/api/contracts",
 		"/api/contracts/verify",

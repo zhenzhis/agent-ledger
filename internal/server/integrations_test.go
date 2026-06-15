@@ -35,6 +35,7 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		manifest.OpenAPIURI != "/api/openapi.json" ||
 		manifest.ProviderProfilesURI != "/api/provider-profiles" ||
 		manifest.AgentProfilesURI != "/api/agent-profiles" ||
+		manifest.RecommendationURI != "/api/integrations/recommendation" ||
 		manifest.CanonicalSchemaURI != "/api/event-schema" || manifest.EventExamplesURI != "/api/event-examples" ||
 		manifest.AdapterSpecURI != "/api/integrations/adapter-spec" ||
 		manifest.AdapterConformanceURI != "/api/integrations/conformance" ||
@@ -52,6 +53,9 @@ func TestDiscoveryEndpoint(t *testing.T) {
 	if manifest.AgentProfilesHash == "" || manifest.AgentProfilesHash != integrations.AgentFrameworkProfilesFingerprint() {
 		t.Fatalf("unexpected agent profile hash: %+v", manifest)
 	}
+	if manifest.RecommendationHash == "" || manifest.RecommendationHash != integrations.IntegrationRecommendationContractFingerprint() {
+		t.Fatalf("unexpected recommendation hash: %+v", manifest)
+	}
 	if manifest.ConformanceMatrixHash == "" || manifest.ConformanceMatrixHash != integrations.AdapterConformanceMatrixFingerprint() {
 		t.Fatalf("unexpected conformance matrix hash: %+v", manifest)
 	}
@@ -60,7 +64,7 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		!manifest.A2A.SupportsDelegatedLineage || !manifest.A2A.SupportsEvidenceReferences {
 		t.Fatalf("unexpected A2A discovery metadata: %+v", manifest.A2A)
 	}
-	if !discoveryHasProtocol(manifest, "protocol.runtime_status") || !discoveryHasProtocol(manifest, "protocol.config_status") || !discoveryHasProtocol(manifest, "protocol.readiness") || !discoveryHasProtocol(manifest, "protocol.admission_check") || !discoveryHasProtocol(manifest, "protocol.provider_profiles") || !discoveryHasProtocol(manifest, "protocol.agent_profiles") || !discoveryHasProtocol(manifest, "protocol.workload_event_feed") {
+	if !discoveryHasProtocol(manifest, "protocol.runtime_status") || !discoveryHasProtocol(manifest, "protocol.config_status") || !discoveryHasProtocol(manifest, "protocol.readiness") || !discoveryHasProtocol(manifest, "protocol.admission_check") || !discoveryHasProtocol(manifest, "protocol.provider_profiles") || !discoveryHasProtocol(manifest, "protocol.agent_profiles") || !discoveryHasProtocol(manifest, "protocol.integration_recommendation") || !discoveryHasProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("missing control-plane protocols: %+v", manifest.Protocols)
 	}
 	if manifest.PromptContentStored || manifest.UsageDataUploaded {
@@ -85,7 +89,7 @@ func TestContractsEndpoint(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle: %+v", bundle)
 	}
-	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "runtime-status") ||
+	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "integration-recommendation") || !contractBundleHasDocument(bundle, "runtime-status") ||
 		!contractBundleHasDocument(bundle, "admission-check") || !contractBundleHasDocument(bundle, "canonical-event-schema") || !contractBundleHasDocument(bundle, "adapter-contract") || !contractBundleHasDocument(bundle, "adapter-conformance-matrix") {
 		t.Fatalf("contract bundle missing core documents: %+v", bundle.Documents)
 	}
@@ -137,6 +141,28 @@ func TestAgentProfilesEndpoint(t *testing.T) {
 		t.Fatalf("agent profiles should cover current and future agent surfaces: %s", rr.Body.String())
 	}
 	assertETagRevalidates(t, srv.handleAgentProfiles, "http://127.0.0.1/api/agent-profiles", rr.Header().Get("ETag"))
+}
+
+func TestIntegrationRecommendationEndpoint(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream&signals=model,usage,cache", nil)
+	rr := httptest.NewRecorder()
+	srv.handleIntegrationRecommendation(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("recommendation status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var report integrations.IntegrationRecommendationReport
+	if err := json.Unmarshal(rr.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode recommendation: %v", err)
+	}
+	if report.Contract != "agent-ledger.integration-recommendation" || report.RecommendedSurface != "provider-stream" || report.MatchedAgentProfile == nil || report.MatchedAgentProfile.ID != "codex-cli" {
+		t.Fatalf("unexpected recommendation: %+v", report)
+	}
+	if report.Hashes["recommendation_contract"] != integrations.IntegrationRecommendationContractFingerprint() {
+		t.Fatalf("missing recommendation contract hash: %+v", report.Hashes)
+	}
+	assertETagRevalidates(t, srv.handleIntegrationRecommendation, req.URL.String(), rr.Header().Get("ETag"))
 }
 
 func TestConformanceMatrixEndpoint(t *testing.T) {
@@ -482,6 +508,7 @@ func TestControlPlaneEndpointETags(t *testing.T) {
 		{name: "integrations", url: "http://127.0.0.1/api/integrations", handler: srv.handleIntegrations},
 		{name: "provider-profiles", url: "http://127.0.0.1/api/provider-profiles", handler: srv.handleProviderProfiles},
 		{name: "agent-profiles", url: "http://127.0.0.1/api/agent-profiles", handler: srv.handleAgentProfiles},
+		{name: "integration-recommendation", url: "http://127.0.0.1/api/integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream", handler: srv.handleIntegrationRecommendation},
 		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},
 		{name: "goal-coverage", url: "http://127.0.0.1/api/goal-coverage", handler: srv.handleGoalCoverage},
 		{name: "contracts", url: "http://127.0.0.1/api/contracts", handler: srv.handleContracts},
@@ -567,6 +594,7 @@ func TestControlPlaneEndpointsRejectNonGET(t *testing.T) {
 		{name: "integrations", url: "http://127.0.0.1/api/integrations", handler: srv.handleIntegrations},
 		{name: "provider-profiles", url: "http://127.0.0.1/api/provider-profiles", handler: srv.handleProviderProfiles},
 		{name: "agent-profiles", url: "http://127.0.0.1/api/agent-profiles", handler: srv.handleAgentProfiles},
+		{name: "integration-recommendation", url: "http://127.0.0.1/api/integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream", handler: srv.handleIntegrationRecommendation},
 		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},
 		{name: "discovery", url: "http://127.0.0.1/api/discovery", handler: srv.handleDiscovery},
 		{name: "contracts", url: "http://127.0.0.1/api/contracts", handler: srv.handleContracts},

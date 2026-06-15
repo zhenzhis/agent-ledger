@@ -302,6 +302,29 @@ func TestAgentProfilesCLIOutputsReadOnlyCatalog(t *testing.T) {
 	}
 }
 
+func TestAgentRecommendCLIOutputsReadOnlyAdvisor(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"agent", "recommend", "--profile", "codex-cli", "--provider", "openai-official", "--surface", "provider-stream", "--signals", "model,usage,cache"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI agent recommend: %v", err)
+	}
+	var report integrations.IntegrationRecommendationReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode recommendation output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.integration-recommendation" || report.RecommendedSurface != "provider-stream" || !report.ReadOnlySafe || report.WritesLocalState {
+		t.Fatalf("unexpected recommendation report: %+v", report)
+	}
+	if report.Hashes["recommendation_contract"] != integrations.IntegrationRecommendationContractFingerprint() {
+		t.Fatalf("recommendation output missing contract hash: %+v", report.Hashes)
+	}
+}
+
 func TestAdapterMatrixCLIOutputsReadOnlyCatalog(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()

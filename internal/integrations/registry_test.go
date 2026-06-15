@@ -65,6 +65,9 @@ func TestRegistryReportsImplementedAndPlannedCapabilities(t *testing.T) {
 	assertCapabilityCommand(t, catalog, "protocol.agent_profiles", "agent-ledger agent profiles")
 	assertCapabilityTool(t, catalog, "protocol.agent_profiles", "ledger.agent_profiles")
 	assertCapabilityResource(t, catalog, "protocol.agent_profiles", "agent-ledger://integrations/agent-profiles")
+	assertCapabilityCommand(t, catalog, "protocol.integration_recommendation", "agent-ledger agent recommend --profile codex-cli --provider openai-official --surface provider-stream --signals model,usage,cache")
+	assertCapabilityTool(t, catalog, "protocol.integration_recommendation", "ledger.integration_recommendation")
+	assertCapabilityResource(t, catalog, "protocol.integration_recommendation", "agent-ledger://integrations/recommendation")
 	assertCapabilityCommand(t, catalog, "protocol.openapi", "agent-ledger openapi")
 	assertCapabilityCommand(t, catalog, "protocol.runtime_status", "agent-ledger runtime")
 	assertCapabilityCommand(t, catalog, "protocol.config_status", "agent-ledger config status")
@@ -240,6 +243,8 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 		manifest.RuntimeStatusURI != "/api/runtime/status" || manifest.CanonicalSchemaURI != "/api/event-schema" ||
 		manifest.EventExamplesURI != "/api/event-examples" || manifest.AdapterSpecURI != "/api/integrations/adapter-spec" ||
 		manifest.AdapterConformanceURI != "/api/integrations/conformance" ||
+		manifest.RecommendationURI != "/api/integrations/recommendation" ||
+		manifest.RecommendationHash != IntegrationRecommendationContractFingerprint() ||
 		manifest.ConformanceMatrixURI != "/api/integrations/conformance-matrix" ||
 		manifest.ConformanceMatrixHash != AdapterConformanceMatrixFingerprint() {
 		t.Fatalf("discovery missing entrypoints: %#v", manifest)
@@ -260,7 +265,7 @@ func TestDiscoveryManifestIsPrivacySafe(t *testing.T) {
 	if manifest.AdapterSpecHash == "" || !strings.HasPrefix(manifest.AdapterSpecHash, "sha256:") || manifest.AdapterSpecHash != AdapterContractFingerprint() {
 		t.Fatalf("discovery missing adapter contract hash: %#v", manifest)
 	}
-	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.contract_verification") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.config_status") || !hasDiscoveryProtocol(manifest, "protocol.readiness") || !hasDiscoveryProtocol(manifest, "protocol.admission_check") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
+	if !hasDiscoveryProtocol(manifest, "protocol.discovery_manifest") || !hasDiscoveryProtocol(manifest, "protocol.contract_bundle") || !hasDiscoveryProtocol(manifest, "protocol.contract_verification") || !hasDiscoveryProtocol(manifest, "protocol.openapi") || !hasDiscoveryProtocol(manifest, "protocol.mcp_stdio") || !hasDiscoveryProtocol(manifest, "protocol.runtime_status") || !hasDiscoveryProtocol(manifest, "protocol.config_status") || !hasDiscoveryProtocol(manifest, "protocol.readiness") || !hasDiscoveryProtocol(manifest, "protocol.admission_check") || !hasDiscoveryProtocol(manifest, "protocol.integration_recommendation") || !hasDiscoveryProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("discovery missing agent protocols: %#v", manifest.Protocols)
 	}
 	for _, protocol := range manifest.Protocols {
@@ -287,7 +292,7 @@ func TestContractBundleIndexesCoreContracts(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.Version != "v1" || !bundle.LocalFirst || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle identity: %#v", bundle)
 	}
-	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "agent-profiles", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
+	for _, id := range []string{"discovery", "contract-bundle", "openapi", "capability-catalog", "provider-profiles", "agent-profiles", "integration-recommendation", "runtime-status", "admission-check", "canonical-event-schema", "adapter-contract", "adapter-conformance-matrix", "a2a-discovery"} {
 		if !contractBundleHasDocument(bundle, id) {
 			t.Fatalf("contract bundle missing %s: %#v", id, bundle.Documents)
 		}
@@ -1308,6 +1313,7 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectPathResponseRef("/api/goal-coverage", "get", "#/components/schemas/GoalCoverageReport")
 	expectPathResponseRef("/api/event-schema", "get", "#/components/schemas/CanonicalEventSchema")
 	expectPathResponseRef("/api/agent-profiles", "get", "#/components/schemas/AgentFrameworkProfileCatalog")
+	expectPathResponseRef("/api/integrations/recommendation", "get", "#/components/schemas/IntegrationRecommendationReport")
 	expectPathResponseRef("/api/integrations/adapter-spec", "get", "#/components/schemas/AdapterContract")
 	expectPathResponseRef("/api/integrations/conformance-matrix", "get", "#/components/schemas/AdapterConformanceMatrix")
 	expectPathResponseRef("/api/events/validate", "post", "#/components/schemas/ValidationResponse")
@@ -1376,6 +1382,13 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectArrayRef("AgentFrameworkProfileCatalog", "profiles", "#/components/schemas/AgentFrameworkProfile")
 	expectFields("AgentFrameworkSummary", "profiles", "local_collectors", "canonical_event_ingest", "provider_envelope_ingest", "provider_stream_ingest", "mcp_tooling", "a2a_telemetry", "otel_telemetry", "workload_heartbeats", "multi_agent_routers")
 	expectFields("AgentFrameworkProfile", "id", "label", "kind", "families", "supported_surfaces", "recommended_ingest", "fallback_ingest", "available_signals", "canonical_event_types", "collector_sources", "adapter_input_kinds", "mcp_tools", "mcp_resources", "http_endpoints", "cli_commands", "privacy_notes", "quality_gates", "limitations")
+	expectFields("IntegrationRecommendationReport", "product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "request", "matched_agent_profile", "matched_provider_profile", "recommended_surface", "recommendation", "confidence", "ingest_path", "fallback_paths", "http", "cli", "mcp_tools", "mcp_resources", "validation", "strict_ci", "expected_event_types", "required_signals", "missing_signals", "privacy_checklist", "quality_gates", "limitations", "hashes", "next_steps", "related_profiles")
+	expectRef("IntegrationRecommendationReport", "request", "#/components/schemas/IntegrationRecommendationRequest")
+	expectRef("IntegrationRecommendationReport", "matched_agent_profile", "#/components/schemas/AgentFrameworkProfile")
+	expectRef("IntegrationRecommendationReport", "matched_provider_profile", "#/components/schemas/ProviderProfile")
+	expectRef("IntegrationRecommendationReport", "related_profiles", "#/components/schemas/IntegrationRecommendationProfileRef")
+	expectFields("IntegrationRecommendationRequest", "agent_profile_id", "provider_profile_id", "surface", "signals", "runtime_mode", "read_only")
+	expectFields("IntegrationRecommendationProfileRef", "agent_profile_ids", "provider_profile_ids", "conformance_kinds")
 
 	expectFields("OperationResult", "ok", "source", "reset", "mode", "result")
 	expectRef("OperationResult", "result", "#/components/schemas/ProjectionRepairResult")
@@ -1500,7 +1513,7 @@ func TestOpenAPIEcosystemIngestSchemasExposeTelemetryFields(t *testing.T) {
 	expectFields("OTelResourceSpansEnvelope", "resourceSpans")
 	expectOneOfRefs("OTLPTraceRequest", "#/components/schemas/OTelResourceSpansEnvelope", "#/components/schemas/OTelSpanEnvelope")
 
-	expectFields("DiscoveryManifest", "contract_bundle_uri", "openapi_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "conformance_matrix_uri", "conformance_matrix_hash", "runtime_status_uri", "canonical_schema_uri", "canonical_schema_hash", "event_examples_uri", "adapter_spec_uri", "adapter_spec_hash", "adapter_conformance_uri", "a2a")
+	expectFields("DiscoveryManifest", "contract_bundle_uri", "openapi_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "runtime_status_uri", "canonical_schema_uri", "canonical_schema_hash", "event_examples_uri", "adapter_spec_uri", "adapter_spec_hash", "adapter_conformance_uri", "a2a")
 	expectRef("DiscoveryManifest", "a2a", "#/components/schemas/A2ADiscoveryMetadata")
 	expectFields("A2ADiscoveryMetadata", "mode", "protocol", "full_server", "endpoint", "http_methods", "required_role", "available_in_read_only", "max_body_bytes", "adapter_spec_uri", "adapter_spec_hash", "conformance_uri", "conformance_kind", "strict_fixture", "supported_task_shapes", "canonical_event_types", "supports_delegated_lineage", "supports_evidence_references", "supports_parent_placeholders", "message_content_stored", "artifact_part_content_stored", "prompt_content_stored", "privacy", "limitations")
 	expectOneOfRefs("A2ATaskRequest", "#/components/schemas/A2ATask", "#/components/schemas/A2ATaskEnvelope")
@@ -1690,7 +1703,7 @@ func TestContractVerificationReportIsOKAndPrivacySafe(t *testing.T) {
 	if report.BundleHash == "" || report.OpenAPIHash == "" || !strings.HasPrefix(report.BundleHash, "sha256:") || !strings.HasPrefix(report.OpenAPIHash, "sha256:") {
 		t.Fatalf("verification report missing hashes: %#v", report)
 	}
-	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.agent_profiles", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.agent-profiles", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "openapi.agent_profiles_hash", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
+	for _, name := range []string{"discovery.contract_bundle_uri", "discovery.agent_profiles", "discovery.integration_recommendation", "discovery.conformance_matrix", "discovery.a2a_metadata", "bundle.document.openapi", "bundle.document.agent-profiles", "bundle.document.integration-recommendation", "bundle.document.adapter-conformance-matrix", "bundle.document.a2a-discovery", "canonical.examples", "adapter.schema_alignment", "adapter.input_kinds", "adapter.conformance_matrix", "openapi.agent_profiles_hash", "openapi.integration_recommendation_hash", "openapi.conformance_matrix_hash", "openapi.path./api/contracts/verify", "openapi.path./api/integrations/recommendation", "openapi.privacy", "openapi.auth_scheme", "openapi.operation_auth", "openapi.operation_ids", "openapi.operation_admission", "openapi.operation_methods", "openapi.request_body_limits", "openapi.idempotency", "openapi.get_revalidation"} {
 		if !verificationReportHasCheck(report, name) {
 			t.Fatalf("verification report missing check %q: %#v", name, report.Checks)
 		}

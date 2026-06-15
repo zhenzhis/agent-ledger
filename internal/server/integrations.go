@@ -33,6 +33,20 @@ func (s *Server) handleAgentProfiles(w http.ResponseWriter, r *http.Request) {
 	writeJSONWithETag(w, r, integrations.AgentFrameworkProfiles(), integrations.AgentFrameworkProfilesFingerprint())
 }
 
+func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	req := integrations.IntegrationRecommendationFromValues(r.URL.Query())
+	report := integrations.IntegrationRecommendation(req)
+	etag, err := jsonPayloadETag(report)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSONWithETag(w, r, report, etag)
+}
+
 func (s *Server) handleConformanceMatrix(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

@@ -549,6 +549,19 @@ func tools() []map[string]interface{} {
 		tool("ledger.integrations", "Return the Agent Ledger integration capability catalog.", map[string]interface{}{}),
 		tool("ledger.provider_profiles", "Return the privacy-safe provider and runtime profile catalog for adapters, routers, relays, local runtimes, and edge models.", map[string]interface{}{}),
 		tool("ledger.agent_profiles", "Return the privacy-safe agent framework profile catalog for CLIs, wrappers, routers, protocol adapters, and observability bridges.", map[string]interface{}{}),
+		tool("ledger.integration_recommendation", "Return a read-only integration recommendation for an agent/profile/provider/surface combination using static Agent Ledger catalogs.", map[string]interface{}{
+			"agent_profile_id":    stringSchema(),
+			"agent":               stringSchema(),
+			"profile":             stringSchema(),
+			"framework":           stringSchema(),
+			"provider_profile_id": stringSchema(),
+			"provider":            stringSchema(),
+			"runtime":             stringSchema(),
+			"surface":             stringSchema(),
+			"signals":             map[string]interface{}{"oneOf": []map[string]interface{}{stringSchema(), {"type": "array", "items": stringSchema()}}},
+			"runtime_mode":        stringSchema(),
+			"read_only":           booleanSchema(),
+		}),
 		tool("ledger.get_policy", "Evaluate local advisory policy rules for a proposed agent action.", map[string]interface{}{
 			"workload_id": stringSchema(),
 			"run_id":      stringSchema(),
@@ -677,6 +690,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://integrations/catalog", "Integration Capability Catalog", "Privacy-safe catalog of implemented, experimental, and planned integration surfaces.", "application/json"),
 		resource("agent-ledger://integrations/provider-profiles", "Provider Profile Catalog", "Privacy-safe provider/runtime profile catalog for adapters, routers, relays, local runtimes, and edge models.", "application/json"),
 		resource("agent-ledger://integrations/agent-profiles", "Agent Framework Profile Catalog", "Privacy-safe agent CLI, framework, wrapper, router, protocol, and observability profile catalog.", "application/json"),
+		resource("agent-ledger://integrations/recommendation", "Integration Recommendation", "Read-only advisor for choosing Agent Ledger ingest, validation, privacy, and quality gates from static integration catalogs; supports agent/provider/surface/signals query parameters.", "application/json"),
 		resource("agent-ledger://integrations/adapter-contract", "Adapter Contract", "Machine-readable contract for writing privacy-safe Agent Ledger adapters.", "application/json"),
 		resource("agent-ledger://integrations/conformance-matrix", "Adapter Conformance Matrix", "Privacy-safe matrix of supported adapter input kinds, strict CI fixtures, expected event families, and validation entrypoints.", "application/json"),
 		resource("agent-ledger://runtime/status", "Runtime Status", "Process-level observer/control-plane mode, read-only state, background task state, and write-operation status.", "application/json"),
@@ -822,6 +836,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return integrations.ProviderProfiles(), nil
 	case "ledger.agent_profiles":
 		return integrations.AgentFrameworkProfiles(), nil
+	case "ledger.integration_recommendation":
+		return toolIntegrationRecommendation(args)
 	case "ledger.get_policy":
 		return s.toolGetPolicy(args)
 	case "ledger.policy_audit":
@@ -967,6 +983,8 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 		return integrations.ProviderProfiles(), nil
 	case "agent-ledger://integrations/agent-profiles":
 		return integrations.AgentFrameworkProfiles(), nil
+	case "agent-ledger://integrations/recommendation":
+		return integrations.IntegrationRecommendation(integrations.IntegrationRecommendationFromValues(values)), nil
 	case "agent-ledger://integrations/adapter-contract":
 		return integrations.AdapterContractSpec(), nil
 	case "agent-ledger://integrations/conformance-matrix":
@@ -2091,6 +2109,60 @@ func (s *Server) toolAdapterConformance(args json.RawMessage) (interface{}, erro
 		Kind:   in.Kind,
 		Strict: in.Strict,
 	}, []byte(raw))
+}
+
+func toolIntegrationRecommendation(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		AgentProfileID    string      `json:"agent_profile_id"`
+		Agent             string      `json:"agent"`
+		Profile           string      `json:"profile"`
+		Framework         string      `json:"framework"`
+		ProviderProfileID string      `json:"provider_profile_id"`
+		Provider          string      `json:"provider"`
+		Runtime           string      `json:"runtime"`
+		Surface           string      `json:"surface"`
+		Signals           interface{} `json:"signals"`
+		RuntimeMode       string      `json:"runtime_mode"`
+		ReadOnly          bool        `json:"read_only"`
+	}
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, err
+		}
+	}
+	req := integrations.IntegrationRecommendationRequest{
+		AgentProfileID:    firstNonEmpty(in.AgentProfileID, in.Agent, in.Profile, in.Framework),
+		ProviderProfileID: firstNonEmpty(in.ProviderProfileID, in.Provider, in.Runtime),
+		Surface:           in.Surface,
+		Signals:           mcpStringList(in.Signals),
+		RuntimeMode:       in.RuntimeMode,
+		ReadOnly:          in.ReadOnly,
+	}
+	return integrations.IntegrationRecommendation(req), nil
+}
+
+func mcpStringList(value interface{}) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return nil
+		}
+		return strings.Split(v, ",")
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []string:
+		return v
+	default:
+		return nil
+	}
 }
 
 func (s *Server) toolGetPolicy(args json.RawMessage) (interface{}, error) {
