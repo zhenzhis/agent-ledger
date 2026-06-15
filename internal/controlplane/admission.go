@@ -272,6 +272,7 @@ func isReadOnlyHTTPPath(path string) bool {
 		"/api/integrations/rollout-plan",
 		"/api/integrations/evidence-kit",
 		"/api/integrations/drift",
+		"/api/integrations/lockfile",
 		"/api/integrations/recommendation",
 		"/api/goal-coverage",
 		"/api/contracts",
@@ -386,7 +387,7 @@ func CLICommandAccessFor(command string, input AdmissionInput) OperationAccess {
 		return unknownAccess("missing CLI command")
 	}
 	switch parts[0] {
-	case "version", "today", "top", "doctor", "battery", "wrapped", "discovery", "contracts", "openapi", "integrations", "integration-readiness", "integration-smoke", "integration-compatibility", "integration-rollout", "integration-rollout-plan", "integration-evidence", "integration-evidence-kit", "integration-drift", "signals", "signal-taxonomy", "signal-coverage", "goal", "ui", "runtime", "config", "readiness", "admission", "adapter", "agent", "replay", "badge", "preflight", "chargeback", "fleet", "export", "audit", "router":
+	case "version", "today", "top", "doctor", "battery", "wrapped", "discovery", "contracts", "openapi", "integrations", "integration-readiness", "integration-smoke", "integration-compatibility", "integration-rollout", "integration-rollout-plan", "integration-evidence", "integration-evidence-kit", "integration-drift", "integration-lockfile", "signals", "signal-taxonomy", "signal-coverage", "goal", "ui", "runtime", "config", "readiness", "admission", "adapter", "agent", "replay", "badge", "preflight", "chargeback", "fleet", "export", "audit", "router":
 		return OperationAccess{Known: true, WriteMode: "none", AvailableInReadOnly: true, ReadOnlyBehavior: "available in read-only mode", RequiredRole: "viewer", Reason: "CLI command is read-only or dry-run validation"}
 	case "event":
 		if len(parts) > 1 && parts[1] == "ingest" {

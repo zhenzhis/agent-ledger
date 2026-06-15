@@ -326,6 +326,22 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				WritesLocalState: false,
 			},
 			{
+				ID:               "integration-lockfile",
+				Name:             "Integration Lockfile",
+				Contract:         "agent-ledger.integration-lockfile",
+				Version:          "v1",
+				Hash:             IntegrationLockfileOpenAPIFingerprint(opts, runtime),
+				PrimaryURI:       "/api/integrations/lockfile",
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger integrations lockfile", "agent-ledger integration-lockfile"},
+				MCPTools:         []string{"ledger.integration_lockfile"},
+				MCPResources:     []string{"agent-ledger://integrations/lockfile"},
+				Revalidation:     "ETag + If-None-Match",
+				Privacy:          "static hash baseline metadata, refresh commands, and redaction rules only",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
+			{
 				ID:               "integration-recommendation",
 				Name:             "Integration Recommendation Advisor",
 				Contract:         "agent-ledger.integration-recommendation",
@@ -489,6 +505,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.integration_rollout_plan", discovery.RolloutPlanURI == "/api/integrations/rollout-plan" && discovery.RolloutPlanHash == IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), "critical", "discovery points to integration rollout plan", "/api/integrations/rollout-plan "+IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), discovery.RolloutPlanURI+" "+discovery.RolloutPlanHash)
 	addCheck("discovery.integration_evidence_kit", discovery.EvidenceKitURI == "/api/integrations/evidence-kit" && discovery.EvidenceKitHash == IntegrationEvidenceKitFingerprint(opts, nil, IntegrationEvidenceKitRequest{}), "critical", "discovery points to integration evidence kit", "/api/integrations/evidence-kit "+IntegrationEvidenceKitFingerprint(opts, nil, IntegrationEvidenceKitRequest{}), discovery.EvidenceKitURI+" "+discovery.EvidenceKitHash)
 	addCheck("discovery.integration_drift", discovery.DriftURI == "/api/integrations/drift" && discovery.DriftHash == IntegrationDriftOpenAPIFingerprint(opts, nil), "critical", "discovery points to integration drift report", "/api/integrations/drift "+IntegrationDriftOpenAPIFingerprint(opts, nil), discovery.DriftURI+" "+discovery.DriftHash)
+	addCheck("discovery.integration_lockfile", discovery.LockfileURI == "/api/integrations/lockfile" && discovery.LockfileHash == IntegrationLockfileOpenAPIFingerprint(opts, nil), "critical", "discovery points to integration lockfile", "/api/integrations/lockfile "+IntegrationLockfileOpenAPIFingerprint(opts, nil), discovery.LockfileURI+" "+discovery.LockfileHash)
 	addCheck("discovery.integration_recommendation", discovery.RecommendationURI == "/api/integrations/recommendation" && discovery.RecommendationHash == IntegrationRecommendationContractFingerprint(), "critical", "discovery points to integration recommendation advisor", "/api/integrations/recommendation "+IntegrationRecommendationContractFingerprint(), discovery.RecommendationURI+" "+discovery.RecommendationHash)
 	addCheck("discovery.conformance_matrix", discovery.ConformanceMatrixURI == "/api/integrations/conformance-matrix" && discovery.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint(), "critical", "discovery points to adapter conformance matrix", "/api/integrations/conformance-matrix "+AdapterConformanceMatrixFingerprint(), discovery.ConformanceMatrixURI+" "+discovery.ConformanceMatrixHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
@@ -522,6 +539,12 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 			"version":  "v1",
 			"privacy":  "metadata-only current-vs-expected hash comparison; excludes prompts, responses, sessions, secrets, local paths, machine names, authors, and webhook URLs",
 			"hash":     IntegrationDriftOpenAPIFingerprint(opts, runtime),
+		},
+		"integration_lockfile": map[string]interface{}{
+			"contract": "agent-ledger.integration-lockfile",
+			"version":  "v1",
+			"privacy":  "metadata-only lockfile witness; excludes prompts, responses, sessions, secrets, local paths, machine names, authors, and webhook URLs",
+			"hash":     IntegrationLockfileOpenAPIFingerprint(opts, runtime),
 		},
 		"integration_recommendation": IntegrationRecommendation(IntegrationRecommendationRequest{
 			AgentProfileID:    "codex-cli",
@@ -557,6 +580,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "integration-rollout-plan", hash: IntegrationRolloutFingerprint(IntegrationRolloutRequest{})},
 		{id: "integration-evidence-kit", hash: IntegrationEvidenceKitFingerprint(opts, runtime, IntegrationEvidenceKitRequest{})},
 		{id: "integration-drift", hash: IntegrationDriftOpenAPIFingerprint(opts, runtime)},
+		{id: "integration-lockfile", hash: IntegrationLockfileOpenAPIFingerprint(opts, runtime)},
 		{id: "integration-recommendation", hash: IntegrationRecommendationContractFingerprint()},
 		{id: "adapter-conformance-matrix", hash: AdapterConformanceMatrixFingerprint()},
 		{id: "runtime-status", hash: hashJSONPayload(runtime)},
@@ -591,6 +615,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.integration_rollout_plan_hash", contractStringValue(meta["integration_rollout_plan_hash"]) == IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), "critical", "OpenAPI integration rollout plan hash matches generated plan", IntegrationRolloutFingerprint(IntegrationRolloutRequest{}), contractStringValue(meta["integration_rollout_plan_hash"]))
 	addCheck("openapi.integration_evidence_kit_hash", contractStringValue(meta["integration_evidence_kit_hash"]) == IntegrationEvidenceKitOpenAPIFingerprint(opts, runtime), "critical", "OpenAPI integration evidence kit witness hash matches generated metadata", IntegrationEvidenceKitOpenAPIFingerprint(opts, runtime), contractStringValue(meta["integration_evidence_kit_hash"]))
 	addCheck("openapi.integration_drift_hash", contractStringValue(meta["integration_drift_hash"]) == IntegrationDriftOpenAPIFingerprint(opts, runtime), "critical", "OpenAPI integration drift witness hash matches generated metadata", IntegrationDriftOpenAPIFingerprint(opts, runtime), contractStringValue(meta["integration_drift_hash"]))
+	addCheck("openapi.integration_lockfile_hash", contractStringValue(meta["integration_lockfile_hash"]) == IntegrationLockfileOpenAPIFingerprint(opts, runtime), "critical", "OpenAPI integration lockfile witness hash matches generated metadata", IntegrationLockfileOpenAPIFingerprint(opts, runtime), contractStringValue(meta["integration_lockfile_hash"]))
 	addCheck("openapi.integration_recommendation_hash", contractStringValue(meta["integration_recommendation_hash"]) == IntegrationRecommendationContractFingerprint(), "critical", "OpenAPI integration recommendation hash matches generated contract", IntegrationRecommendationContractFingerprint(), contractStringValue(meta["integration_recommendation_hash"]))
 	addCheck("openapi.conformance_matrix_hash", contractStringValue(meta["conformance_matrix_hash"]) == AdapterConformanceMatrixFingerprint(), "critical", "OpenAPI conformance matrix hash matches generated matrix", AdapterConformanceMatrixFingerprint(), contractStringValue(meta["conformance_matrix_hash"]))
 	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))

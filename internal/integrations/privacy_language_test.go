@@ -37,12 +37,13 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 			ProviderProfileID: "openai-official",
 			Surface:           "provider-stream",
 		}),
-		"integration_drift": IntegrationDriftReportFor(Options{}, nil, IntegrationDriftRequest{}),
-		"openapi":           OpenAPISpecFor(Options{}, nil),
-		"provider_profiles": ProviderProfiles(),
-		"registry":          Registry(Options{}),
-		"signal_coverage":   SignalCoverage(),
-		"signal_taxonomy":   SignalTaxonomy(),
+		"integration_drift":    IntegrationDriftReportFor(Options{}, nil, IntegrationDriftRequest{}),
+		"integration_lockfile": IntegrationLockfileFor(Options{}, nil),
+		"openapi":              OpenAPISpecFor(Options{}, nil),
+		"provider_profiles":    ProviderProfiles(),
+		"registry":             Registry(Options{}),
+		"signal_coverage":      SignalCoverage(),
+		"signal_taxonomy":      SignalTaxonomy(),
 	}
 	ok, actual := contractPublicPrivacyLanguageStatus(docs)
 	if !ok {

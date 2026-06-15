@@ -468,6 +468,47 @@ func TestIntegrationDriftCLIOutputsReadOnlyReport(t *testing.T) {
 	}
 }
 
+func TestIntegrationLockfileCLIOutputsReadOnlyReport(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"integrations", "lockfile"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI integrations lockfile: %v", err)
+	}
+	var report integrations.IntegrationLockfileReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode integration lockfile output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.integration-lockfile" || report.Format != "agent-ledger.integration-lockfile.v1" ||
+		!report.ReadOnlySafe || report.WritesLocalState || report.LockfileHash == "" ||
+		report.Hashes["adapter_spec_hash"] != integrations.AdapterContractFingerprint() ||
+		report.DriftCommand != "agent-ledger integrations drift --strict" {
+		t.Fatalf("unexpected integration lockfile report: %+v", report)
+	}
+	if !strings.Contains(out, "agent-ledger integrations lockfile") || !strings.Contains(out, "agent-ledger integrations drift --strict") {
+		t.Fatalf("integration lockfile missing CI guidance: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("integration lockfile leaked %q: %s", forbidden, out)
+		}
+	}
+
+	aliasOut, err := captureStdout(t, func() error {
+		return runCLI([]string{"integration-lockfile"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI integration-lockfile: %v", err)
+	}
+	if !strings.Contains(aliasOut, `"contract":"agent-ledger.integration-lockfile"`) {
+		t.Fatalf("integration-lockfile alias returned unexpected output: %s", aliasOut)
+	}
+}
+
 func TestAgentRecommendCLIOutputsReadOnlyAdvisor(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()

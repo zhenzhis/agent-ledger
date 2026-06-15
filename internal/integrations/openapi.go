@@ -67,6 +67,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"integration_rollout_plan_hash":   IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
 			"integration_evidence_kit_hash":   IntegrationEvidenceKitOpenAPIFingerprint(opts, runtime),
 			"integration_drift_hash":          IntegrationDriftOpenAPIFingerprint(opts, runtime),
+			"integration_lockfile_hash":       IntegrationLockfileOpenAPIFingerprint(opts, runtime),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -90,6 +91,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/rollout-plan":       integrationRolloutPlanOperation(),
 			"/api/integrations/evidence-kit":       integrationEvidenceKitOperation(),
 			"/api/integrations/drift":              integrationDriftOperation(),
+			"/api/integrations/lockfile":           getOperation("contracts", "Get integration lockfile", "Read-only static control-plane hash baseline for adapter, wrapper, router, and CI release pins.", "IntegrationLockfileReport"),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -197,7 +199,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_lockfile_uri", "integration_lockfile_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -232,6 +234,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"integration_evidence_kit_hash":   refSchema("Hash"),
 						"integration_drift_uri":           stringSchema(),
 						"integration_drift_hash":          refSchema("Hash"),
+						"integration_lockfile_uri":        stringSchema(),
+						"integration_lockfile_hash":       refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -391,6 +395,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IntegrationDriftRequest":             integrationDriftRequestSchema(),
 				"IntegrationDriftSummary":             integrationDriftSummarySchema(),
 				"IntegrationDriftRow":                 integrationDriftRowSchema(),
+				"IntegrationLockfileReport":           integrationLockfileReportSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -1116,6 +1121,7 @@ func OpenAPIContractPaths() []string {
 		"/api/integrations/rollout-plan",
 		"/api/integrations/evidence-kit",
 		"/api/integrations/drift",
+		"/api/integrations/lockfile",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -3235,6 +3241,32 @@ func integrationDriftRowSchema() map[string]interface{} {
 			"severity": stringSchema(),
 			"action":   stringSchema(),
 			"privacy":  stringSchema(),
+		},
+	}
+}
+
+func integrationLockfileReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe integration lockfile baseline.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "format", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "lockfile_hash", "hash_ids", "hashes", "drift_command", "refresh_commands", "operational_guidance", "redaction_rules"},
+		"properties": map[string]interface{}{
+			"product":              stringSchema(),
+			"contract":             constSchema("agent-ledger.integration-lockfile"),
+			"version":              stringSchema(),
+			"format":               constSchema("agent-ledger.integration-lockfile.v1"),
+			"local_first":          boolSchema(),
+			"read_only_safe":       boolSchema(),
+			"writes_local_state":   boolSchema(),
+			"privacy_policy":       stringSchema(),
+			"lockfile_hash":        refSchema("Hash"),
+			"hash_ids":             stringArraySchema(),
+			"hashes":               stringMapSchema(),
+			"drift_command":        stringSchema(),
+			"refresh_commands":     stringArraySchema(),
+			"operational_guidance": stringArraySchema(),
+			"redaction_rules":      stringArraySchema(),
 		},
 	}
 }

@@ -101,6 +101,14 @@ func (s *Server) handleIntegrationDrift(w http.ResponseWriter, r *http.Request) 
 	writeJSONWithETag(w, r, report, integrations.IntegrationDriftFingerprintFrom(report))
 }
 
+func (s *Server) handleIntegrationLockfile(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	report := integrations.IntegrationLockfileFor(s.integrationOptions(), s.runtimeStatus())
+	writeJSONWithETag(w, r, report, integrations.IntegrationLockfileFingerprintFrom(report))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

@@ -114,6 +114,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.integration_drift") {
 		t.Fatalf("expected integration drift tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.integration_lockfile") {
+		t.Fatalf("expected integration lockfile tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -209,6 +212,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	integrationDriftMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_drift"))
 	if integrationDriftMeta["write_mode"] != "none" || integrationDriftMeta["writes_local_state"] != false || integrationDriftMeta["available_in_read_only"] != true {
 		t.Fatalf("integration drift tool metadata wrong: %#v", integrationDriftMeta)
+	}
+	integrationLockfileMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_lockfile"))
+	if integrationLockfileMeta["write_mode"] != "none" || integrationLockfileMeta["writes_local_state"] != false || integrationLockfileMeta["available_in_read_only"] != true {
+		t.Fatalf("integration lockfile tool metadata wrong: %#v", integrationLockfileMeta)
 	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
@@ -307,6 +314,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/drift") {
 		t.Fatalf("expected integration drift resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://integrations/lockfile") {
+		t.Fatalf("expected integration lockfile resource, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
@@ -637,6 +647,41 @@ func TestMCPIntegrationDriftToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("integration drift resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPIntegrationLockfileToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.integration_lockfile","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/lockfile"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.integration-lockfile" ||
+		toolPayload["format"] != "agent-ledger.integration-lockfile.v1" ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false ||
+		toolPayload["lockfile_hash"] == "" {
+		t.Fatalf("unexpected integration lockfile tool payload: %#v", toolPayload)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("integration lockfile tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.integration-lockfile"`) ||
+		!strings.Contains(resourceText, `"drift_command": "agent-ledger integrations drift --strict"`) ||
+		!strings.Contains(resourceText, `"adapter_spec_hash": "sha256:`) {
+		t.Fatalf("unexpected integration lockfile resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("integration lockfile resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

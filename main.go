@@ -474,6 +474,10 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 			opts := integrations.OptionsFromConfig(cfg)
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationDriftReportFor(opts, server.RuntimeStatusFromConfig(cfg), integrationDriftRequestFromCLI(args[2:])))
 		}
+		if len(args) > 1 && (args[1] == "lockfile" || args[1] == "lock") {
+			opts := integrations.OptionsFromConfig(cfg)
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationLockfileFor(opts, server.RuntimeStatusFromConfig(cfg)))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "integration-readiness":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
@@ -490,6 +494,9 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "integration-drift":
 		opts := integrations.OptionsFromConfig(cfg)
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationDriftReportFor(opts, server.RuntimeStatusFromConfig(cfg), integrationDriftRequestFromCLI(args[1:])))
+	case "integration-lockfile":
+		opts := integrations.OptionsFromConfig(cfg)
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationLockfileFor(opts, server.RuntimeStatusFromConfig(cfg)))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
