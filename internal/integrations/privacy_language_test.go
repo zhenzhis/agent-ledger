@@ -20,11 +20,12 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 			Surface:           "provider-stream",
 			Signals:           []string{"model", "usage", "cache"},
 		}),
-		"openapi":           OpenAPISpecFor(Options{}, nil),
-		"provider_profiles": ProviderProfiles(),
-		"registry":          Registry(Options{}),
-		"signal_coverage":   SignalCoverage(),
-		"signal_taxonomy":   SignalTaxonomy(),
+		"integration_readiness": IntegrationReadiness(Options{}),
+		"openapi":               OpenAPISpecFor(Options{}, nil),
+		"provider_profiles":     ProviderProfiles(),
+		"registry":              Registry(Options{}),
+		"signal_coverage":       SignalCoverage(),
+		"signal_taxonomy":       SignalTaxonomy(),
 	}
 	ok, actual := contractPublicPrivacyLanguageStatus(docs)
 	if !ok {

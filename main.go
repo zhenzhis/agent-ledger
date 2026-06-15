@@ -453,7 +453,12 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "openapi":
 		return json.NewEncoder(os.Stdout).Encode(integrations.OpenAPISpecFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
 	case "integrations":
+		if len(args) > 1 && args[1] == "readiness" {
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
+	case "integration-readiness":
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())

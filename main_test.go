@@ -93,6 +93,8 @@ func TestCLIReadOnlyGateMatchesAdmission(t *testing.T) {
 		{"reconcile", "import", "--file", "provider.csv"},
 		{"provider", "profiles"},
 		{"signals"},
+		{"integrations", "readiness"},
+		{"integration-readiness"},
 		{"adapter", "matrix"},
 		{"provider", "convert", "--file", "provider.json"},
 		{"provider", "ingest", "--file", "provider.json"},
@@ -231,6 +233,9 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	if paths["/api/integrations/signal-coverage"] == nil {
 		t.Fatalf("openapi output missing signal coverage path: %+v", paths)
 	}
+	if paths["/api/integrations/readiness"] == nil {
+		t.Fatalf("openapi output missing integration readiness path: %+v", paths)
+	}
 }
 
 func TestUICLICheckOutputsContractReport(t *testing.T) {
@@ -362,6 +367,36 @@ func TestSignalCoverageCLIOutputsReadOnlyReport(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
 			t.Fatalf("signal coverage leaked %q: %s", forbidden, out)
+		}
+	}
+}
+
+func TestIntegrationReadinessCLIOutputsReadOnlyReport(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+	cfg.Integrations.OTLPReceiver.GRPCEnabled = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"integrations", "readiness"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI integrations readiness: %v", err)
+	}
+	var report integrations.IntegrationReadinessReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode integration readiness output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.integration-readiness" || !report.ReadOnlySafe || report.WritesLocalState ||
+		!report.Runtime.ReadOnly || !report.Runtime.OTLPReceiverGRPCEnabled || report.Summary.Failures == 0 {
+		t.Fatalf("unexpected integration readiness report: %+v", report)
+	}
+	if !strings.Contains(out, "gateway.provider_live_proxy") || !strings.Contains(out, "otlp.grpc_requires_receiver") {
+		t.Fatalf("integration readiness missing activation gates: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("integration readiness leaked %q: %s", forbidden, out)
 		}
 	}
 }

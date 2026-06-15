@@ -61,6 +61,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"agent_profiles_hash":             AgentFrameworkProfilesFingerprint(),
 			"signal_taxonomy_hash":            SignalTaxonomyFingerprint(),
 			"signal_coverage_hash":            SignalCoverageFingerprint(),
+			"integration_readiness_hash":      IntegrationReadinessFingerprint(opts),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -78,6 +79,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/agent-profiles":                  getOperation("contracts", "Get agent framework profiles", "Static privacy-safe agent CLI, framework, wrapper, router, protocol, and observability profile catalog.", "AgentFrameworkProfileCatalog"),
 			"/api/signal-taxonomy":                 getOperation("contracts", "Get signal taxonomy", "Static privacy-safe signal dictionary for mapping adapter, router, provider, and observability metadata to canonical event families.", "SignalTaxonomyCatalog"),
 			"/api/integrations/signal-coverage":    getOperation("contracts", "Get signal coverage", "Static privacy-safe coverage report linking taxonomy signal ids to adapter, provider, and agent profile contracts.", "SignalCoverageReport"),
+			"/api/integrations/readiness":          getOperation("contracts", "Get integration readiness", "Static privacy-safe activation readiness report for local protocols, gateways, collectors, and notification surfaces.", "IntegrationReadinessReport"),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -185,7 +187,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -208,6 +210,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"signal_taxonomy_hash":            refSchema("Hash"),
 						"signal_coverage_uri":             stringSchema(),
 						"signal_coverage_hash":            refSchema("Hash"),
+						"integration_readiness_uri":       stringSchema(),
+						"integration_readiness_hash":      refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -336,6 +340,11 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"SignalCoverageSignal":                signalCoverageSignalSchema(),
 				"SignalCoverageAdapter":               signalCoverageAdapterSchema(),
 				"SignalCoverageGap":                   signalCoverageGapSchema(),
+				"IntegrationReadinessReport":          integrationReadinessReportSchema(),
+				"IntegrationReadinessRuntime":         integrationReadinessRuntimeSchema(),
+				"IntegrationReadinessSummary":         integrationReadinessSummarySchema(),
+				"IntegrationReadinessCapability":      integrationReadinessCapabilitySchema(),
+				"IntegrationReadinessGate":            integrationReadinessGateSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -1023,6 +1032,7 @@ func OpenAPIContractPaths() []string {
 		"/api/agent-profiles",
 		"/api/signal-taxonomy",
 		"/api/integrations/signal-coverage",
+		"/api/integrations/readiness",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -2426,6 +2436,114 @@ func signalCoverageGapSchema() map[string]interface{} {
 			"severity":    stringSchema(),
 			"surface":     stringSchema(),
 			"reference":   stringSchema(),
+			"message":     stringSchema(),
+			"remediation": stringSchema(),
+		},
+	}
+}
+
+func integrationReadinessReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe activation readiness report for local integration surfaces.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "catalog_hash", "signal_coverage_hash", "runtime", "privacy_policy", "summary", "capabilities", "quality_gates", "operational_guidance"},
+		"properties": map[string]interface{}{
+			"product":              stringSchema(),
+			"contract":             constSchema("agent-ledger.integration-readiness"),
+			"version":              stringSchema(),
+			"local_first":          boolSchema(),
+			"read_only_safe":       boolSchema(),
+			"writes_local_state":   boolSchema(),
+			"catalog_hash":         refSchema("Hash"),
+			"signal_coverage_hash": refSchema("Hash"),
+			"runtime":              refSchema("IntegrationReadinessRuntime"),
+			"privacy_policy":       stringSchema(),
+			"summary":              refSchema("IntegrationReadinessSummary"),
+			"capabilities":         refArraySchema("IntegrationReadinessCapability"),
+			"quality_gates":        stringArraySchema(),
+			"operational_guidance": stringArraySchema(),
+		},
+	}
+}
+
+func integrationReadinessRuntimeSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Runtime feature flags used by integration readiness without exposing secrets or paths.",
+		"additionalProperties": true,
+		"required":             []string{"read_only", "rbac_enabled", "policies_enabled", "quota_enabled", "webhooks_enabled", "otlp_receiver_enabled", "otlp_receiver_grpc_enabled", "gateway_enabled", "pricing_mode"},
+		"properties": map[string]interface{}{
+			"read_only":                  boolSchema(),
+			"rbac_enabled":               boolSchema(),
+			"policies_enabled":           boolSchema(),
+			"quota_enabled":              boolSchema(),
+			"webhooks_enabled":           boolSchema(),
+			"otlp_receiver_enabled":      boolSchema(),
+			"otlp_receiver_grpc_enabled": boolSchema(),
+			"gateway_enabled":            boolSchema(),
+			"pricing_mode":               stringSchema(),
+		},
+	}
+}
+
+func integrationReadinessSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Stable readiness counts for local integration surfaces.",
+		"additionalProperties": true,
+		"required":             []string{"total_capabilities", "enabled", "disabled", "experimental", "disabled_by_config", "ready", "review_required", "blocked", "warnings", "failures"},
+		"properties": map[string]interface{}{
+			"total_capabilities": integerSchema(),
+			"enabled":            integerSchema(),
+			"disabled":           integerSchema(),
+			"experimental":       integerSchema(),
+			"disabled_by_config": integerSchema(),
+			"ready":              integerSchema(),
+			"review_required":    integerSchema(),
+			"blocked":            integerSchema(),
+			"warnings":           integerSchema(),
+			"failures":           integerSchema(),
+		},
+	}
+}
+
+func integrationReadinessCapabilitySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Activation state and gates for one integration capability.",
+		"additionalProperties": true,
+		"required":             []string{"id", "name", "category", "status", "maturity", "direction", "enabled", "runtime_status", "writes_local_state", "available_in_read_only", "activation_state", "risk_level", "gates", "evidence", "actions"},
+		"properties": map[string]interface{}{
+			"id":                     stringSchema(),
+			"name":                   stringSchema(),
+			"category":               stringSchema(),
+			"status":                 stringSchema(),
+			"maturity":               stringSchema(),
+			"direction":              stringSchema(),
+			"enabled":                boolSchema(),
+			"runtime_status":         stringSchema(),
+			"writes_local_state":     boolSchema(),
+			"available_in_read_only": boolSchema(),
+			"activation_state":       stringSchema(),
+			"risk_level":             stringSchema(),
+			"gates":                  refArraySchema("IntegrationReadinessGate"),
+			"evidence":               stringArraySchema(),
+			"actions":                stringArraySchema(),
+		},
+	}
+}
+
+func integrationReadinessGateSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One activation prerequisite or runtime invariant.",
+		"additionalProperties": true,
+		"required":             []string{"id", "severity", "status", "message", "remediation"},
+		"properties": map[string]interface{}{
+			"id":          stringSchema(),
+			"severity":    stringSchema(),
+			"status":      stringSchema(),
 			"message":     stringSchema(),
 			"remediation": stringSchema(),
 		},

@@ -158,6 +158,8 @@ func TestAdmissionClassifiesReadOnlyCLISubcommands(t *testing.T) {
 		"agent-ledger signals",
 		"agent-ledger signals coverage",
 		"agent-ledger signal-coverage",
+		"agent-ledger integrations readiness",
+		"agent-ledger integration-readiness",
 		"agent-ledger agent recommend --profile codex-cli --provider openai-official --surface provider-stream",
 		"agent-ledger export --privacy",
 		"agent-ledger audit --privacy",

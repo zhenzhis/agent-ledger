@@ -102,6 +102,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.signal_coverage") {
 		t.Fatalf("expected signal coverage tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.integration_readiness") {
+		t.Fatalf("expected integration readiness tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -181,6 +184,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	signalCoverageMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.signal_coverage"))
 	if signalCoverageMeta["write_mode"] != "none" || signalCoverageMeta["writes_local_state"] != false || signalCoverageMeta["available_in_read_only"] != true {
 		t.Fatalf("signal coverage tool metadata wrong: %#v", signalCoverageMeta)
+	}
+	integrationReadinessMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_readiness"))
+	if integrationReadinessMeta["write_mode"] != "none" || integrationReadinessMeta["writes_local_state"] != false || integrationReadinessMeta["available_in_read_only"] != true {
+		t.Fatalf("integration readiness tool metadata wrong: %#v", integrationReadinessMeta)
 	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
@@ -270,6 +277,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/signal-coverage") {
 		t.Fatalf("expected signal coverage resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://integrations/readiness") {
+		t.Fatalf("expected integration readiness resource, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
@@ -488,6 +498,44 @@ func TestMCPSignalCoverageToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("signal coverage resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPIntegrationReadinessToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.Integrations.OTLPReceiver.GRPCEnabled = true
+	srv := New(db, cfg)
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.integration_readiness","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/readiness"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.integration-readiness" ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false {
+		t.Fatalf("unexpected integration readiness tool payload: %#v", toolPayload)
+	}
+	summary := toolPayload["summary"].(map[string]interface{})
+	if summary["failures"] == float64(0) {
+		t.Fatalf("expected inconsistent OTLP gRPC config to be visible: %#v", summary)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("integration readiness tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.integration-readiness"`) ||
+		!strings.Contains(resourceText, "otlp.grpc_requires_receiver") {
+		t.Fatalf("unexpected integration readiness resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("integration readiness resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

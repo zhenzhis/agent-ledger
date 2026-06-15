@@ -26,45 +26,47 @@ type DiscoveryProtocol struct {
 
 // DiscoveryManifest is the privacy-safe well-known contract for local agents and wrappers.
 type DiscoveryManifest struct {
-	Product               string               `json:"product"`
-	Slug                  string               `json:"slug"`
-	Contract              string               `json:"contract"`
-	Version               string               `json:"version"`
-	PrivacyDefault        string               `json:"privacy_default"`
-	LocalFirst            bool                 `json:"local_first"`
-	PromptContentStored   bool                 `json:"prompt_content_stored"`
-	UsageDataUploaded     bool                 `json:"usage_data_uploaded"`
-	APIBasePath           string               `json:"api_base_path"`
-	WellKnownURI          string               `json:"well_known_uri"`
-	CapabilityCatalogURI  string               `json:"capability_catalog_uri"`
-	CapabilityCatalogHash string               `json:"capability_catalog_hash"`
-	ProviderProfilesURI   string               `json:"provider_profiles_uri"`
-	ProviderProfilesHash  string               `json:"provider_profiles_hash"`
-	AgentProfilesURI      string               `json:"agent_profiles_uri"`
-	AgentProfilesHash     string               `json:"agent_profiles_hash"`
-	SignalTaxonomyURI     string               `json:"signal_taxonomy_uri"`
-	SignalTaxonomyHash    string               `json:"signal_taxonomy_hash"`
-	SignalCoverageURI     string               `json:"signal_coverage_uri"`
-	SignalCoverageHash    string               `json:"signal_coverage_hash"`
-	RecommendationURI     string               `json:"integration_recommendation_uri"`
-	RecommendationHash    string               `json:"integration_recommendation_hash"`
-	ContractBundleURI     string               `json:"contract_bundle_uri"`
-	OpenAPIURI            string               `json:"openapi_uri"`
-	RuntimeStatusURI      string               `json:"runtime_status_uri"`
-	CanonicalSchemaURI    string               `json:"canonical_schema_uri"`
-	CanonicalSchemaHash   string               `json:"canonical_schema_hash"`
-	EventExamplesURI      string               `json:"event_examples_uri"`
-	AdapterSpecURI        string               `json:"adapter_spec_uri"`
-	AdapterSpecHash       string               `json:"adapter_spec_hash"`
-	AdapterConformanceURI string               `json:"adapter_conformance_uri"`
-	ConformanceMatrixURI  string               `json:"conformance_matrix_uri"`
-	ConformanceMatrixHash string               `json:"conformance_matrix_hash"`
-	MCPCommand            string               `json:"mcp_command"`
-	Auth                  string               `json:"auth"`
-	ReadOnly              bool                 `json:"read_only"`
-	Summary               Summary              `json:"summary"`
-	Protocols             []DiscoveryProtocol  `json:"protocols"`
-	A2A                   A2ADiscoveryMetadata `json:"a2a"`
+	Product                  string               `json:"product"`
+	Slug                     string               `json:"slug"`
+	Contract                 string               `json:"contract"`
+	Version                  string               `json:"version"`
+	PrivacyDefault           string               `json:"privacy_default"`
+	LocalFirst               bool                 `json:"local_first"`
+	PromptContentStored      bool                 `json:"prompt_content_stored"`
+	UsageDataUploaded        bool                 `json:"usage_data_uploaded"`
+	APIBasePath              string               `json:"api_base_path"`
+	WellKnownURI             string               `json:"well_known_uri"`
+	CapabilityCatalogURI     string               `json:"capability_catalog_uri"`
+	CapabilityCatalogHash    string               `json:"capability_catalog_hash"`
+	ProviderProfilesURI      string               `json:"provider_profiles_uri"`
+	ProviderProfilesHash     string               `json:"provider_profiles_hash"`
+	AgentProfilesURI         string               `json:"agent_profiles_uri"`
+	AgentProfilesHash        string               `json:"agent_profiles_hash"`
+	SignalTaxonomyURI        string               `json:"signal_taxonomy_uri"`
+	SignalTaxonomyHash       string               `json:"signal_taxonomy_hash"`
+	SignalCoverageURI        string               `json:"signal_coverage_uri"`
+	SignalCoverageHash       string               `json:"signal_coverage_hash"`
+	IntegrationReadinessURI  string               `json:"integration_readiness_uri"`
+	IntegrationReadinessHash string               `json:"integration_readiness_hash"`
+	RecommendationURI        string               `json:"integration_recommendation_uri"`
+	RecommendationHash       string               `json:"integration_recommendation_hash"`
+	ContractBundleURI        string               `json:"contract_bundle_uri"`
+	OpenAPIURI               string               `json:"openapi_uri"`
+	RuntimeStatusURI         string               `json:"runtime_status_uri"`
+	CanonicalSchemaURI       string               `json:"canonical_schema_uri"`
+	CanonicalSchemaHash      string               `json:"canonical_schema_hash"`
+	EventExamplesURI         string               `json:"event_examples_uri"`
+	AdapterSpecURI           string               `json:"adapter_spec_uri"`
+	AdapterSpecHash          string               `json:"adapter_spec_hash"`
+	AdapterConformanceURI    string               `json:"adapter_conformance_uri"`
+	ConformanceMatrixURI     string               `json:"conformance_matrix_uri"`
+	ConformanceMatrixHash    string               `json:"conformance_matrix_hash"`
+	MCPCommand               string               `json:"mcp_command"`
+	Auth                     string               `json:"auth"`
+	ReadOnly                 bool                 `json:"read_only"`
+	Summary                  Summary              `json:"summary"`
+	Protocols                []DiscoveryProtocol  `json:"protocols"`
+	A2A                      A2ADiscoveryMetadata `json:"a2a"`
 }
 
 // A2ADiscoveryMetadata describes the local A2A telemetry surface without
@@ -125,45 +127,47 @@ func Discovery(opts Options) DiscoveryManifest {
 		})
 	}
 	return DiscoveryManifest{
-		Product:               catalog.Product,
-		Slug:                  "agent-ledger",
-		Contract:              "agent-ledger.discovery",
-		Version:               "v1",
-		PrivacyDefault:        catalog.PrivacyDefault,
-		LocalFirst:            true,
-		PromptContentStored:   false,
-		UsageDataUploaded:     false,
-		APIBasePath:           "/api",
-		WellKnownURI:          "/.well-known/agent-ledger.json",
-		CapabilityCatalogURI:  "/api/integrations",
-		CapabilityCatalogHash: CatalogFingerprintFrom(catalog),
-		ProviderProfilesURI:   "/api/provider-profiles",
-		ProviderProfilesHash:  ProviderProfilesFingerprint(),
-		AgentProfilesURI:      "/api/agent-profiles",
-		AgentProfilesHash:     AgentFrameworkProfilesFingerprint(),
-		SignalTaxonomyURI:     "/api/signal-taxonomy",
-		SignalTaxonomyHash:    SignalTaxonomyFingerprint(),
-		SignalCoverageURI:     "/api/integrations/signal-coverage",
-		SignalCoverageHash:    SignalCoverageFingerprint(),
-		RecommendationURI:     "/api/integrations/recommendation",
-		RecommendationHash:    IntegrationRecommendationContractFingerprint(),
-		ContractBundleURI:     "/api/contracts",
-		OpenAPIURI:            "/api/openapi.json",
-		RuntimeStatusURI:      "/api/runtime/status",
-		CanonicalSchemaURI:    "/api/event-schema",
-		CanonicalSchemaHash:   storage.CanonicalEventSchemaFingerprint(),
-		EventExamplesURI:      "/api/event-examples",
-		AdapterSpecURI:        "/api/integrations/adapter-spec",
-		AdapterSpecHash:       AdapterContractFingerprint(),
-		AdapterConformanceURI: "/api/integrations/conformance",
-		ConformanceMatrixURI:  "/api/integrations/conformance-matrix",
-		ConformanceMatrixHash: AdapterConformanceMatrixFingerprint(),
-		MCPCommand:            "agent-ledger mcp",
-		Auth:                  discoveryAuth(opts),
-		ReadOnly:              opts.ReadOnly,
-		Summary:               catalog.Summary,
-		Protocols:             protocols,
-		A2A:                   A2ADiscovery(),
+		Product:                  catalog.Product,
+		Slug:                     "agent-ledger",
+		Contract:                 "agent-ledger.discovery",
+		Version:                  "v1",
+		PrivacyDefault:           catalog.PrivacyDefault,
+		LocalFirst:               true,
+		PromptContentStored:      false,
+		UsageDataUploaded:        false,
+		APIBasePath:              "/api",
+		WellKnownURI:             "/.well-known/agent-ledger.json",
+		CapabilityCatalogURI:     "/api/integrations",
+		CapabilityCatalogHash:    CatalogFingerprintFrom(catalog),
+		ProviderProfilesURI:      "/api/provider-profiles",
+		ProviderProfilesHash:     ProviderProfilesFingerprint(),
+		AgentProfilesURI:         "/api/agent-profiles",
+		AgentProfilesHash:        AgentFrameworkProfilesFingerprint(),
+		SignalTaxonomyURI:        "/api/signal-taxonomy",
+		SignalTaxonomyHash:       SignalTaxonomyFingerprint(),
+		SignalCoverageURI:        "/api/integrations/signal-coverage",
+		SignalCoverageHash:       SignalCoverageFingerprint(),
+		IntegrationReadinessURI:  "/api/integrations/readiness",
+		IntegrationReadinessHash: IntegrationReadinessFingerprint(opts),
+		RecommendationURI:        "/api/integrations/recommendation",
+		RecommendationHash:       IntegrationRecommendationContractFingerprint(),
+		ContractBundleURI:        "/api/contracts",
+		OpenAPIURI:               "/api/openapi.json",
+		RuntimeStatusURI:         "/api/runtime/status",
+		CanonicalSchemaURI:       "/api/event-schema",
+		CanonicalSchemaHash:      storage.CanonicalEventSchemaFingerprint(),
+		EventExamplesURI:         "/api/event-examples",
+		AdapterSpecURI:           "/api/integrations/adapter-spec",
+		AdapterSpecHash:          AdapterContractFingerprint(),
+		AdapterConformanceURI:    "/api/integrations/conformance",
+		ConformanceMatrixURI:     "/api/integrations/conformance-matrix",
+		ConformanceMatrixHash:    AdapterConformanceMatrixFingerprint(),
+		MCPCommand:               "agent-ledger mcp",
+		Auth:                     discoveryAuth(opts),
+		ReadOnly:                 opts.ReadOnly,
+		Summary:                  catalog.Summary,
+		Protocols:                protocols,
+		A2A:                      A2ADiscovery(),
 	}
 }
 

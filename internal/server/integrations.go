@@ -47,6 +47,14 @@ func (s *Server) handleSignalCoverage(w http.ResponseWriter, r *http.Request) {
 	writeJSONWithETag(w, r, integrations.SignalCoverage(), integrations.SignalCoverageFingerprint())
 }
 
+func (s *Server) handleIntegrationReadiness(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	opts := s.integrationOptions()
+	writeJSONWithETag(w, r, integrations.IntegrationReadiness(opts), integrations.IntegrationReadinessFingerprint(opts))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return
@@ -213,15 +221,16 @@ func (s *Server) integrationOptions() integrations.Options {
 		})
 	}
 	return integrations.Options{
-		Sources:             sources,
-		PricingMode:         s.options.Pricing.Mode,
-		PoliciesEnabled:     s.options.Policies.Enabled,
-		RBACEnabled:         s.options.RBAC.Enabled,
-		ReadOnly:            s.options.RBAC.ReadOnly,
-		QuotaEnabled:        s.options.Quota.Enabled,
-		WebhooksEnabled:     s.options.Webhooks.Enabled,
-		OTLPReceiverEnabled: s.options.Integrations.OTLPReceiver.Enabled,
-		GatewayEnabled:      s.options.Gateway.Enabled,
+		Sources:                 sources,
+		PricingMode:             s.options.Pricing.Mode,
+		PoliciesEnabled:         s.options.Policies.Enabled,
+		RBACEnabled:             s.options.RBAC.Enabled,
+		ReadOnly:                s.options.RBAC.ReadOnly,
+		QuotaEnabled:            s.options.Quota.Enabled,
+		WebhooksEnabled:         s.options.Webhooks.Enabled,
+		OTLPReceiverEnabled:     s.options.Integrations.OTLPReceiver.Enabled,
+		OTLPReceiverGRPCEnabled: s.options.Integrations.OTLPReceiver.GRPCEnabled,
+		GatewayEnabled:          s.options.Gateway.Enabled,
 	}
 }
 
