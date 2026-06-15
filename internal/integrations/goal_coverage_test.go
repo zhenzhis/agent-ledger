@@ -40,12 +40,14 @@ func TestGoalCoverageReportHasEvidenceAndNoActionableGaps(t *testing.T) {
 		report.CompletionAudit.ReadyToMarkGoalComplete ||
 		report.CompletionAudit.Summary.Review == 0 ||
 		report.CompletionAudit.Summary.ExternalDependencies == 0 ||
-		report.CompletionAudit.Summary.ExperimentalSections == 0 {
+		report.CompletionAudit.Summary.ExperimentalSections == 0 ||
+		report.CompletionAudit.Summary.SectionsWithRemaining != 0 {
 		t.Fatalf("completion audit should conservatively require review: %#v", report.CompletionAudit)
 	}
 	if !goalCompletionHasCheck(report.CompletionAudit, "coverage_gaps") ||
 		!goalCompletionHasCheck(report.CompletionAudit, "experimental_surfaces") ||
-		!goalCompletionHasCheck(report.CompletionAudit, "external_dependencies") {
+		!goalCompletionHasCheck(report.CompletionAudit, "external_dependencies") ||
+		!goalCompletionHasCheck(report.CompletionAudit, "remaining_items") {
 		t.Fatalf("completion audit missing required checks: %#v", report.CompletionAudit.Checks)
 	}
 	assertGoalSection(t, report, "canonical_event_workload_ledger")

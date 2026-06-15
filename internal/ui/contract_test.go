@@ -17,8 +17,17 @@ func TestCheckCurrentStaticDashboard(t *testing.T) {
 	assertCheckpoint(t, report, "charts.accessible")
 	assertCheckpoint(t, report, "palette.monochrome")
 	assertCheckpoint(t, report, "responsive.breakpoints")
+	assertCheckpoint(t, report, "responsive.viewport_matrix")
 	assertCheckpoint(t, report, "privacy.entrypoints")
 	assertCheckpoint(t, report, "integration_readiness.panel")
+	if len(report.Viewports) != 4 {
+		t.Fatalf("expected four viewport checks, got %d: %+v", len(report.Viewports), report.Viewports)
+	}
+	for _, viewport := range report.Viewports {
+		if viewport.Status != "pass" {
+			t.Fatalf("viewport %d/%s did not pass: %+v", viewport.Width, viewport.Label, report.Viewports)
+		}
+	}
 	if report.ContractHash == "" || report.Checked == 0 {
 		t.Fatalf("missing contract hash/check count: %+v", report)
 	}
@@ -54,6 +63,12 @@ func TestCheckRejectsColoredUnlabelledFixture(t *testing.T) {
 		if checkpointStatus(report, name) != "fail" {
 			t.Fatalf("expected %s to fail: %+v", name, report.Checkpoints)
 		}
+	}
+	if checkpointStatus(report, "responsive.viewport_matrix") != "fail" {
+		t.Fatalf("expected responsive viewport matrix to fail: %+v", report)
+	}
+	if len(report.Viewports) != 4 {
+		t.Fatalf("expected four viewport checks for fixture, got %d: %+v", len(report.Viewports), report.Viewports)
 	}
 }
 

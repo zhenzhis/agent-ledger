@@ -384,12 +384,9 @@ func goalCoverageSections(capabilities map[string]Capability) []GoalCoverageSect
 				Endpoints: []string{"/"},
 				Docs:      []string{"internal/server/static/index.html", "internal/server/static/app.js", "internal/server/static/styles.css"},
 				Commands:  []string{"agent-ledger ui check"},
-				Tests:     []string{"internal/ui/contract_test.go", "node --check internal/server/static/app.js", "browser smoke at 375/768/1024/1440px after layout changes"},
+				Tests:     []string{"internal/ui/contract_test.go", "node --check internal/server/static/app.js", "agent-ledger ui check viewport matrix at 375/768/1024/1440px"},
 			},
 			Privacy: "UI privacy mode hides sensitive identifiers in screenshots and shareable views.",
-			Remaining: []string{
-				"Continue visual browser regression checks when dashboard layout changes; static UI contract is enforced by agent-ledger ui check.",
-			},
 		},
 	}
 	for i := range sections {

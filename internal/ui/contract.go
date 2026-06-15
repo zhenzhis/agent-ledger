@@ -33,6 +33,7 @@ type ContractReport struct {
 	ContractHash   string          `json:"contract_hash"`
 	Files          []string        `json:"files"`
 	DesignIntent   string          `json:"design_intent"`
+	Viewports      []ViewportCheck `json:"viewports"`
 	Checkpoints    []ContractCheck `json:"checkpoints"`
 	Verification   []string        `json:"verification"`
 	Privacy        string          `json:"privacy"`
@@ -45,6 +46,13 @@ type ContractCheck struct {
 	Severity string `json:"severity"`
 	Evidence string `json:"evidence"`
 	Action   string `json:"action,omitempty"`
+}
+
+type ViewportCheck struct {
+	Width    int      `json:"width"`
+	Label    string   `json:"label"`
+	Status   string   `json:"status"`
+	Evidence []string `json:"evidence"`
 }
 
 type authoredFile struct {
@@ -110,6 +118,8 @@ func Check(root string) (ContractReport, error) {
 	report.add("loading.skeleton_reduced_motion", strings.Contains(styles, "ledger-skeleton") && strings.Contains(styles, "prefers-reduced-motion"), "high", "loading skeleton respects reduced motion", "add skeleton loading and prefers-reduced-motion fallback")
 	report.add("tables.contained_overflow", strings.Contains(styles, ".table-wrap") && strings.Contains(styles, "overflow-x: auto") && bodyOverflowHidden(styles), "high", "wide ledgers scroll inside their table wrapper", "contain table overflow instead of allowing page-level horizontal scroll")
 	report.add("no_emoji_icons", !containsEmoji(all), "medium", "authored UI files do not use emoji as structural icons", "replace emoji icons with SVG or text labels")
+	report.Viewports = viewportSmokeMatrix(styles)
+	report.add("responsive.viewport_matrix", viewportsPass(report.Viewports), "critical", viewportMatrixEvidence(report.Viewports), "add explicit viewport smoke CSS for 375/768/1024/1440px with contained overflow, stable charts, touch targets, and wrapped controls")
 
 	report.Checked = len(report.Checkpoints)
 	for _, check := range report.Checkpoints {
@@ -144,6 +154,17 @@ func FormatMarkdown(report ContractReport) string {
 	fmt.Fprintf(&b, "- failed: `%d`\n", report.Failed)
 	fmt.Fprintf(&b, "- hash: `%s`\n", report.ContractHash)
 	fmt.Fprintf(&b, "- intent: %s\n\n", report.DesignIntent)
+	if len(report.Viewports) > 0 {
+		fmt.Fprintln(&b, "## Viewport Matrix")
+		fmt.Fprintln(&b)
+		fmt.Fprintln(&b, "| width | label | status | evidence |")
+		fmt.Fprintln(&b, "|---:|---|---|---|")
+		for _, viewport := range report.Viewports {
+			evidence := strings.ReplaceAll(strings.Join(viewport.Evidence, "; "), "|", "/")
+			fmt.Fprintf(&b, "| `%d` | `%s` | `%s` | %s |\n", viewport.Width, viewport.Label, viewport.Status, evidence)
+		}
+		fmt.Fprintln(&b)
+	}
 	fmt.Fprintln(&b, "| check | status | severity | evidence |")
 	fmt.Fprintln(&b, "|---|---|---|---|")
 	for _, check := range report.Checkpoints {
@@ -317,6 +338,76 @@ func responsiveBreakpoints(styles string) bool {
 		}
 	}
 	return mobile && tablet && desktop && wide
+}
+
+func viewportSmokeMatrix(styles string) []ViewportCheck {
+	return []ViewportCheck{
+		viewportCheck(375, "small-phone", viewportHasBreakpoint(styles, "max", 520) && bodyOverflowHidden(styles) && hasMobileControls(styles) && hasContainedOverflow(styles) && hasMobileChartSizing(styles),
+			[]string{"max-width <=520px", "body overflow-x hidden", "44px touch targets", "table-wrap overflow-x auto", "mobile chart sizing"}),
+		viewportCheck(768, "tablet", viewportHasBreakpoint(styles, "max", 760) && viewportHasBreakpoint(styles, "max", 900) && hasChartGridCollapse(styles) && hasContainedOverflow(styles),
+			[]string{"max-width 760px", "max-width 900px", "chart-grid collapses", "tables remain locally scrollable"}),
+		viewportCheck(1024, "compact-desktop", (viewportHasBreakpoint(styles, "max", 1180) || viewportHasBreakpoint(styles, "max", 1280)) && hasStableChartPanels(styles) && hasGridTemplateColumns(styles),
+			[]string{"max-width 1180/1280px", "stable chart panels", "grid-template-columns responsive tracks"}),
+		viewportCheck(1440, "wide-desktop", (viewportHasBreakpoint(styles, "max", 1440) || viewportHasBreakpoint(styles, "min", 1441) || viewportHasBreakpoint(styles, "min", 1600)) && hasStableChartPanels(styles) && hasGridTemplateColumns(styles),
+			[]string{"1440px/wide breakpoint", "stable chart panels", "grid-template-columns responsive tracks"}),
+	}
+}
+
+func viewportCheck(width int, label string, ok bool, evidence []string) ViewportCheck {
+	status := "pass"
+	if !ok {
+		status = "fail"
+	}
+	return ViewportCheck{Width: width, Label: label, Status: status, Evidence: evidence}
+}
+
+func viewportsPass(viewports []ViewportCheck) bool {
+	if len(viewports) == 0 {
+		return false
+	}
+	for _, viewport := range viewports {
+		if viewport.Status != "pass" {
+			return false
+		}
+	}
+	return true
+}
+
+func viewportMatrixEvidence(viewports []ViewportCheck) string {
+	parts := make([]string, 0, len(viewports))
+	for _, viewport := range viewports {
+		parts = append(parts, strconv.Itoa(viewport.Width)+"="+viewport.Status)
+	}
+	return strings.Join(parts, ",")
+}
+
+func viewportHasBreakpoint(styles, kind string, width int) bool {
+	re := regexp.MustCompile(`@media\s*\(\s*` + regexp.QuoteMeta(kind) + `-width\s*:\s*` + strconv.Itoa(width) + `px\s*\)`)
+	return re.MatchString(styles)
+}
+
+func hasMobileControls(styles string) bool {
+	return strings.Contains(styles, "min-height: 44px") && strings.Contains(styles, "overflow-wrap: anywhere")
+}
+
+func hasContainedOverflow(styles string) bool {
+	return strings.Contains(styles, ".table-wrap") && strings.Contains(styles, "overflow-x: auto")
+}
+
+func hasMobileChartSizing(styles string) bool {
+	return strings.Contains(styles, ".chart") && strings.Contains(styles, ".chart-compact") && (strings.Contains(styles, "min-height: 220px") || strings.Contains(styles, "height: 220px") || strings.Contains(styles, "height: 240px"))
+}
+
+func hasChartGridCollapse(styles string) bool {
+	return strings.Contains(styles, ".chart-grid") && (strings.Contains(styles, "grid-column: span 1") || strings.Contains(styles, "grid-column: 1 / -1"))
+}
+
+func hasStableChartPanels(styles string) bool {
+	return strings.Contains(styles, ".chart") && strings.Contains(styles, "min-height") && strings.Contains(styles, "overflow: hidden")
+}
+
+func hasGridTemplateColumns(styles string) bool {
+	return strings.Contains(styles, "grid-template-columns") && strings.Contains(styles, "minmax(")
 }
 
 func bodyOverflowHidden(styles string) bool {

@@ -575,7 +575,7 @@ go run . ui check
 docker compose up -d --build
 ```
 
-`agent-ledger ui check` is a read-only static UI/UX contract for the embedded dashboard. It verifies local-only assets, viewport and skip-link accessibility, labelled controls, chart ARIA summaries, privacy-mode entrypoints, monochrome palette constraints, absence of decorative gradients, responsive breakpoint coverage for 375/768/1024/1440px smoke, mobile touch targets, skeleton reduced-motion support, and contained table overflow.
+`agent-ledger ui check` is a read-only static UI/UX contract for the embedded dashboard. It verifies local-only assets, viewport and skip-link accessibility, labelled controls, chart ARIA summaries, privacy-mode entrypoints, monochrome palette constraints, absence of decorative gradients, a structured 375/768/1024/1440px viewport matrix, mobile touch targets, skeleton reduced-motion support, stable chart panels, and contained table overflow.
 
 On hosts without Go installed:
 
