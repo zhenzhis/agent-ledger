@@ -454,6 +454,8 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		return json.NewEncoder(os.Stdout).Encode(integrations.OpenAPISpecFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
 	case "integrations":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
+	case "signals", "signal-taxonomy":
+		return json.NewEncoder(os.Stdout).Encode(integrations.SignalTaxonomy())
 	case "goal":
 		return runGoalCLI(args[1:], cfg)
 	case "ui":

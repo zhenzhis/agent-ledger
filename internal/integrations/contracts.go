@@ -198,6 +198,22 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				WritesLocalState: false,
 			},
 			{
+				ID:               "signal-taxonomy",
+				Name:             "Signal Taxonomy Catalog",
+				Contract:         "agent-ledger.signal-taxonomy",
+				Version:          "v1",
+				Hash:             SignalTaxonomyFingerprint(),
+				PrimaryURI:       "/api/signal-taxonomy",
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger signals"},
+				MCPTools:         []string{"ledger.signal_taxonomy"},
+				MCPResources:     []string{"agent-ledger://integrations/signal-taxonomy"},
+				Revalidation:     "ETag + If-None-Match",
+				Privacy:          "static signal ids, canonical event families, field names, precision labels, privacy classes, and quality gates only",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
+			{
 				ID:               "integration-recommendation",
 				Name:             "Integration Recommendation Advisor",
 				Contract:         "agent-ledger.integration-recommendation",
@@ -350,6 +366,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.catalog_hash", discovery.CapabilityCatalogHash == catalogHash, "critical", "discovery catalog hash matches generated catalog", catalogHash, discovery.CapabilityCatalogHash)
 	addCheck("discovery.provider_profiles", discovery.ProviderProfilesURI == "/api/provider-profiles" && discovery.ProviderProfilesHash == ProviderProfilesFingerprint(), "critical", "discovery points to provider profile catalog", "/api/provider-profiles "+ProviderProfilesFingerprint(), discovery.ProviderProfilesURI+" "+discovery.ProviderProfilesHash)
 	addCheck("discovery.agent_profiles", discovery.AgentProfilesURI == "/api/agent-profiles" && discovery.AgentProfilesHash == AgentFrameworkProfilesFingerprint(), "critical", "discovery points to agent framework profile catalog", "/api/agent-profiles "+AgentFrameworkProfilesFingerprint(), discovery.AgentProfilesURI+" "+discovery.AgentProfilesHash)
+	addCheck("discovery.signal_taxonomy", discovery.SignalTaxonomyURI == "/api/signal-taxonomy" && discovery.SignalTaxonomyHash == SignalTaxonomyFingerprint(), "critical", "discovery points to signal taxonomy catalog", "/api/signal-taxonomy "+SignalTaxonomyFingerprint(), discovery.SignalTaxonomyURI+" "+discovery.SignalTaxonomyHash)
 	addCheck("discovery.integration_recommendation", discovery.RecommendationURI == "/api/integrations/recommendation" && discovery.RecommendationHash == IntegrationRecommendationContractFingerprint(), "critical", "discovery points to integration recommendation advisor", "/api/integrations/recommendation "+IntegrationRecommendationContractFingerprint(), discovery.RecommendationURI+" "+discovery.RecommendationHash)
 	addCheck("discovery.conformance_matrix", discovery.ConformanceMatrixURI == "/api/integrations/conformance-matrix" && discovery.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint(), "critical", "discovery points to adapter conformance matrix", "/api/integrations/conformance-matrix "+AdapterConformanceMatrixFingerprint(), discovery.ConformanceMatrixURI+" "+discovery.ConformanceMatrixHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
@@ -381,6 +398,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		}),
 		"openapi":           openAPI,
 		"provider_profiles": ProviderProfiles(),
+		"signal_taxonomy":   SignalTaxonomy(),
 	})
 	addCheck("privacy.public_metadata_language", privacyLanguageOK, "critical", "public metadata uses content-safe privacy language", "no unsafe content-capture phrases in public metadata documents", privacyLanguageActual)
 	addCheck("bundle.hash", bundle.BundleHash == ContractBundleFingerprint(bundle), "critical", "contract bundle hash matches deterministic fingerprint", ContractBundleFingerprint(bundle), bundle.BundleHash)
@@ -396,6 +414,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "capability-catalog", hash: catalogHash},
 		{id: "provider-profiles", hash: ProviderProfilesFingerprint()},
 		{id: "agent-profiles", hash: AgentFrameworkProfilesFingerprint()},
+		{id: "signal-taxonomy", hash: SignalTaxonomyFingerprint()},
 		{id: "integration-recommendation", hash: IntegrationRecommendationContractFingerprint()},
 		{id: "adapter-conformance-matrix", hash: AdapterConformanceMatrixFingerprint()},
 		{id: "runtime-status", hash: hashJSONPayload(runtime)},
@@ -422,6 +441,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.catalog_hash", contractStringValue(meta["capability_catalog_hash"]) == catalogHash, "critical", "OpenAPI catalog hash matches generated catalog", catalogHash, contractStringValue(meta["capability_catalog_hash"]))
 	addCheck("openapi.provider_profiles_hash", contractStringValue(meta["provider_profiles_hash"]) == ProviderProfilesFingerprint(), "critical", "OpenAPI provider profile hash matches generated catalog", ProviderProfilesFingerprint(), contractStringValue(meta["provider_profiles_hash"]))
 	addCheck("openapi.agent_profiles_hash", contractStringValue(meta["agent_profiles_hash"]) == AgentFrameworkProfilesFingerprint(), "critical", "OpenAPI agent framework profile hash matches generated catalog", AgentFrameworkProfilesFingerprint(), contractStringValue(meta["agent_profiles_hash"]))
+	addCheck("openapi.signal_taxonomy_hash", contractStringValue(meta["signal_taxonomy_hash"]) == SignalTaxonomyFingerprint(), "critical", "OpenAPI signal taxonomy hash matches generated catalog", SignalTaxonomyFingerprint(), contractStringValue(meta["signal_taxonomy_hash"]))
 	addCheck("openapi.integration_recommendation_hash", contractStringValue(meta["integration_recommendation_hash"]) == IntegrationRecommendationContractFingerprint(), "critical", "OpenAPI integration recommendation hash matches generated contract", IntegrationRecommendationContractFingerprint(), contractStringValue(meta["integration_recommendation_hash"]))
 	addCheck("openapi.conformance_matrix_hash", contractStringValue(meta["conformance_matrix_hash"]) == AdapterConformanceMatrixFingerprint(), "critical", "OpenAPI conformance matrix hash matches generated matrix", AdapterConformanceMatrixFingerprint(), contractStringValue(meta["conformance_matrix_hash"]))
 	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))

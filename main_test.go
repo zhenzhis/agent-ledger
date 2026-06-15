@@ -92,6 +92,7 @@ func TestCLIReadOnlyGateMatchesAdmission(t *testing.T) {
 		{"reconcile", "status"},
 		{"reconcile", "import", "--file", "provider.csv"},
 		{"provider", "profiles"},
+		{"signals"},
 		{"adapter", "matrix"},
 		{"provider", "convert", "--file", "provider.json"},
 		{"provider", "ingest", "--file", "provider.json"},
@@ -224,6 +225,9 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	if paths["/api/agent-profiles"] == nil {
 		t.Fatalf("openapi output missing agent profile path: %+v", paths)
 	}
+	if paths["/api/signal-taxonomy"] == nil {
+		t.Fatalf("openapi output missing signal taxonomy path: %+v", paths)
+	}
 }
 
 func TestUICLICheckOutputsContractReport(t *testing.T) {
@@ -299,6 +303,34 @@ func TestAgentProfilesCLIOutputsReadOnlyCatalog(t *testing.T) {
 	}
 	if !strings.Contains(out, "codex-cli") || !strings.Contains(out, "mcp-wrapper") || !strings.Contains(out, "a2a-task-runtime") {
 		t.Fatalf("agent profile catalog missing agent ecosystem coverage: %s", out)
+	}
+}
+
+func TestSignalTaxonomyCLIOutputsReadOnlyCatalog(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"signals"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI signals: %v", err)
+	}
+	var catalog integrations.SignalTaxonomyCatalog
+	if err := json.Unmarshal([]byte(out), &catalog); err != nil {
+		t.Fatalf("decode signal taxonomy output: %v\n%s", err, out)
+	}
+	if catalog.Contract != "agent-ledger.signal-taxonomy" || !catalog.ReadOnlySafe || catalog.WritesLocalState || catalog.Summary.Signals < 11 {
+		t.Fatalf("unexpected signal taxonomy catalog: %+v", catalog)
+	}
+	if !strings.Contains(out, "usage.tokens") || !strings.Contains(out, "workload.identity") || !strings.Contains(out, "pricing.provenance") {
+		t.Fatalf("signal taxonomy missing core signal coverage: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("signal taxonomy leaked %q: %s", forbidden, out)
+		}
 	}
 }
 

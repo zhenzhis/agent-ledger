@@ -59,6 +59,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"capability_catalog_hash":         CatalogFingerprintFrom(catalog),
 			"provider_profiles_hash":          ProviderProfilesFingerprint(),
 			"agent_profiles_hash":             AgentFrameworkProfilesFingerprint(),
+			"signal_taxonomy_hash":            SignalTaxonomyFingerprint(),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -74,6 +75,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations":                    getOperation("contracts", "Get integration catalog", "Privacy-safe integration capability catalog.", "CapabilityCatalog"),
 			"/api/provider-profiles":               getOperation("contracts", "Get provider profiles", "Static privacy-safe provider/runtime profile catalog for wrappers, routers, relays, local runtimes, edge models, and adapter CI.", "ProviderProfileCatalog"),
 			"/api/agent-profiles":                  getOperation("contracts", "Get agent framework profiles", "Static privacy-safe agent CLI, framework, wrapper, router, protocol, and observability profile catalog.", "AgentFrameworkProfileCatalog"),
+			"/api/signal-taxonomy":                 getOperation("contracts", "Get signal taxonomy", "Static privacy-safe signal dictionary for mapping adapter, router, provider, and observability metadata to canonical event families.", "SignalTaxonomyCatalog"),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -181,7 +183,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -200,6 +202,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"provider_profiles_hash":          refSchema("Hash"),
 						"agent_profiles_uri":              stringSchema(),
 						"agent_profiles_hash":             refSchema("Hash"),
+						"signal_taxonomy_uri":             stringSchema(),
+						"signal_taxonomy_hash":            refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -320,6 +324,9 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"AgentFrameworkProfileCatalog":        agentFrameworkProfileCatalogSchema(),
 				"AgentFrameworkSummary":               agentFrameworkSummarySchema(),
 				"AgentFrameworkProfile":               agentFrameworkProfileSchema(),
+				"SignalTaxonomyCatalog":               signalTaxonomyCatalogSchema(),
+				"SignalTaxonomySummary":               signalTaxonomySummarySchema(),
+				"SignalTaxonomySignal":                signalTaxonomySignalSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -1005,6 +1012,7 @@ func OpenAPIContractPaths() []string {
 		"/api/integrations",
 		"/api/provider-profiles",
 		"/api/agent-profiles",
+		"/api/signal-taxonomy",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -2243,6 +2251,70 @@ func agentFrameworkProfileSchema() map[string]interface{} {
 			"privacy_notes":         stringArraySchema(),
 			"quality_gates":         stringArraySchema(),
 			"limitations":           stringArraySchema(),
+		},
+	}
+}
+
+func signalTaxonomyCatalogSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe signal dictionary for wrappers, routers, provider adapters, observability bridges, and adapter CI.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "summary", "signals", "quality_gates", "routing_guidance"},
+		"properties": map[string]interface{}{
+			"product":            stringSchema(),
+			"contract":           constSchema("agent-ledger.signal-taxonomy"),
+			"version":            stringSchema(),
+			"generated_from":     stringSchema(),
+			"local_first":        boolSchema(),
+			"read_only_safe":     boolSchema(),
+			"writes_local_state": boolSchema(),
+			"privacy_policy":     stringSchema(),
+			"summary":            refSchema("SignalTaxonomySummary"),
+			"signals":            refArraySchema("SignalTaxonomySignal"),
+			"quality_gates":      stringArraySchema(),
+			"routing_guidance":   stringArraySchema(),
+		},
+	}
+}
+
+func signalTaxonomySummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Signal taxonomy coverage counts by category and precision class.",
+		"additionalProperties": true,
+		"required":             []string{"signals", "event_signals", "usage_signals", "workload_signals", "policy_signals", "exact_preferred", "estimated_allowed"},
+		"properties": map[string]interface{}{
+			"signals":           integerSchema(),
+			"event_signals":     integerSchema(),
+			"usage_signals":     integerSchema(),
+			"workload_signals":  integerSchema(),
+			"policy_signals":    integerSchema(),
+			"exact_preferred":   integerSchema(),
+			"estimated_allowed": integerSchema(),
+		},
+	}
+}
+
+func signalTaxonomySignalSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One metadata-only signal definition mapping source fields to canonical event families and privacy classes.",
+		"additionalProperties": true,
+		"required":             []string{"id", "label", "category", "description", "canonical_event_types", "recommended_fields", "precision", "privacy_class", "content_safe", "quality_gates"},
+		"properties": map[string]interface{}{
+			"id":                    stringSchema(),
+			"label":                 stringSchema(),
+			"category":              stringSchema(),
+			"description":           stringSchema(),
+			"canonical_event_types": stringArraySchema(),
+			"recommended_fields":    stringArraySchema(),
+			"accepted_aliases":      stringArraySchema(),
+			"precision":             stringSchema(),
+			"required_for":          stringArraySchema(),
+			"privacy_class":         stringSchema(),
+			"content_safe":          boolSchema(),
+			"quality_gates":         stringArraySchema(),
 		},
 	}
 }

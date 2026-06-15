@@ -23,6 +23,7 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 		"openapi":           OpenAPISpecFor(Options{}, nil),
 		"provider_profiles": ProviderProfiles(),
 		"registry":          Registry(Options{}),
+		"signal_taxonomy":   SignalTaxonomy(),
 	}
 	ok, actual := contractPublicPrivacyLanguageStatus(docs)
 	if !ok {
