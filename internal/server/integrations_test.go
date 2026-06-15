@@ -494,6 +494,11 @@ func TestGoalCoverageEndpoint(t *testing.T) {
 	if len(report.Sections) == 0 || report.Summary.TotalSections != len(report.Sections) || len(report.ExternalDependencies) == 0 {
 		t.Fatalf("coverage missing sections or external dependency disclosure: %+v", report)
 	}
+	if report.CompletionAudit.Contract != "agent-ledger.goal-completion-audit" ||
+		report.CompletionAudit.Status != "review-required" ||
+		report.CompletionAudit.ReadyToMarkGoalComplete {
+		t.Fatalf("goal coverage completion audit should require review: %+v", report.CompletionAudit)
+	}
 	if strings.Contains(rr.Body.String(), "C:/Users/") || strings.Contains(rr.Body.String(), "secret-viewer-token") {
 		t.Fatalf("goal coverage leaked local-sensitive content: %s", rr.Body.String())
 	}

@@ -437,6 +437,9 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"GoalCoverageSection":                 goalCoverageSectionSchema(),
 				"GoalCoverageEvidence":                goalCoverageEvidenceSchema(),
 				"GoalCoverageExternal":                goalCoverageExternalSchema(),
+				"GoalCompletionAudit":                 goalCompletionAuditSchema(),
+				"GoalCompletionAuditSummary":          goalCompletionAuditSummarySchema(),
+				"GoalCompletionAuditCheck":            goalCompletionAuditCheckSchema(),
 				"RuntimeStatus":                       runtimeStatusSchema(),
 				"ConfigStatusReport":                  configStatusReportSchema(),
 				"ConfigBindStatus":                    configBindStatusSchema(),
@@ -3853,7 +3856,7 @@ func goalCoverageReportSchema() map[string]interface{} {
 		"type":                 "object",
 		"description":          "Privacy-safe requirement-level coverage report for the Agent Ledger product goal.",
 		"additionalProperties": true,
-		"required":             []string{"product", "slug", "contract", "version", "status", "local_first", "prompt_content_stored", "usage_data_uploaded", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "coverage_hash", "summary", "sections", "verification", "privacy"},
+		"required":             []string{"product", "slug", "contract", "version", "status", "local_first", "prompt_content_stored", "usage_data_uploaded", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "coverage_hash", "summary", "completion_audit", "sections", "verification", "privacy"},
 		"properties": map[string]interface{}{
 			"product":                 stringSchema(),
 			"slug":                    stringSchema(),
@@ -3874,6 +3877,7 @@ func goalCoverageReportSchema() map[string]interface{} {
 			"adapter_spec_hash":       refSchema("Hash"),
 			"coverage_hash":           refSchema("Hash"),
 			"summary":                 refSchema("GoalCoverageSummary"),
+			"completion_audit":        refSchema("GoalCompletionAudit"),
 			"sections":                refArraySchema("GoalCoverageSection"),
 			"external_dependencies":   refArraySchema("GoalCoverageExternal"),
 			"verification":            stringArraySchema(),
@@ -3952,6 +3956,66 @@ func goalCoverageExternalSchema() map[string]interface{} {
 			"reason":       stringSchema(),
 			"local_status": stringSchema(),
 			"evidence":     stringArraySchema(),
+		},
+	}
+}
+
+func goalCompletionAuditSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Conservative completion gate for the Agent Ledger product goal.",
+		"additionalProperties": true,
+		"required":             []string{"contract", "version", "status", "ready_to_mark_goal_complete", "recommended_ci_exit_code", "reason", "summary", "checks", "required_verification", "privacy"},
+		"properties": map[string]interface{}{
+			"contract":                    constSchema("agent-ledger.goal-completion-audit"),
+			"version":                     stringSchema(),
+			"status":                      stringSchema(),
+			"ready_to_mark_goal_complete": boolSchema(),
+			"recommended_ci_exit_code":    integerSchema(),
+			"reason":                      stringSchema(),
+			"summary":                     refSchema("GoalCompletionAuditSummary"),
+			"checks":                      refArraySchema("GoalCompletionAuditCheck"),
+			"required_verification":       stringArraySchema(),
+			"privacy":                     stringSchema(),
+		},
+	}
+}
+
+func goalCompletionAuditSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Completion audit counts by pass, review, and block status.",
+		"additionalProperties": true,
+		"required":             []string{"total_checks", "passed", "review", "blocked", "coverage_gaps", "experimental_sections", "external_dependencies", "sections_with_remaining", "verification_commands"},
+		"properties": map[string]interface{}{
+			"total_checks":            integerSchema(),
+			"passed":                  integerSchema(),
+			"review":                  integerSchema(),
+			"blocked":                 integerSchema(),
+			"coverage_gaps":           integerSchema(),
+			"experimental_sections":   integerSchema(),
+			"external_dependencies":   integerSchema(),
+			"sections_with_remaining": integerSchema(),
+			"verification_commands":   integerSchema(),
+		},
+	}
+}
+
+func goalCompletionAuditCheckSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One conservative goal completion audit check.",
+		"additionalProperties": false,
+		"required":             []string{"id", "status", "severity", "message", "evidence", "requirement", "remediation"},
+		"properties": map[string]interface{}{
+			"id":           stringSchema(),
+			"status":       stringSchema(),
+			"severity":     stringSchema(),
+			"message":      stringSchema(),
+			"evidence":     stringSchema(),
+			"requirement":  stringSchema(),
+			"remediation":  stringSchema(),
+			"verification": stringArraySchema(),
 		},
 	}
 }

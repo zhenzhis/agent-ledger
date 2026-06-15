@@ -205,6 +205,33 @@ func TestContractsCLIVerifyOutputsReport(t *testing.T) {
 	}
 }
 
+func TestGoalAuditCLIOutputsCompletionAudit(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"goal", "audit"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI goal audit: %v", err)
+	}
+	var audit integrations.GoalCompletionAudit
+	if err := json.Unmarshal([]byte(out), &audit); err != nil {
+		t.Fatalf("decode goal audit output: %v\n%s", err, out)
+	}
+	if audit.Contract != "agent-ledger.goal-completion-audit" ||
+		audit.Status != "review-required" ||
+		audit.ReadyToMarkGoalComplete ||
+		audit.Summary.Review == 0 ||
+		audit.Summary.ExternalDependencies == 0 {
+		t.Fatalf("unexpected goal audit output: %+v", audit)
+	}
+	if !strings.Contains(out, "agent-ledger integrations production-gate --strict") {
+		t.Fatalf("goal audit should include production gate verification guidance: %s", out)
+	}
+}
+
 func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()

@@ -35,6 +35,19 @@ func TestGoalCoverageReportHasEvidenceAndNoActionableGaps(t *testing.T) {
 	if len(report.ExternalDependencies) == 0 {
 		t.Fatal("expected external dependencies to be disclosed")
 	}
+	if report.CompletionAudit.Contract != "agent-ledger.goal-completion-audit" ||
+		report.CompletionAudit.Status != "review-required" ||
+		report.CompletionAudit.ReadyToMarkGoalComplete ||
+		report.CompletionAudit.Summary.Review == 0 ||
+		report.CompletionAudit.Summary.ExternalDependencies == 0 ||
+		report.CompletionAudit.Summary.ExperimentalSections == 0 {
+		t.Fatalf("completion audit should conservatively require review: %#v", report.CompletionAudit)
+	}
+	if !goalCompletionHasCheck(report.CompletionAudit, "coverage_gaps") ||
+		!goalCompletionHasCheck(report.CompletionAudit, "experimental_surfaces") ||
+		!goalCompletionHasCheck(report.CompletionAudit, "external_dependencies") {
+		t.Fatalf("completion audit missing required checks: %#v", report.CompletionAudit.Checks)
+	}
 	assertGoalSection(t, report, "canonical_event_workload_ledger")
 	assertGoalSection(t, report, "ecosystem_adapters_and_gateway")
 	assertGoalSection(t, report, "pricing_cost_accuracy")
@@ -77,4 +90,13 @@ func assertGoalSection(t *testing.T, report GoalCoverageReport, id string) {
 		return
 	}
 	t.Fatalf("section %s missing from coverage report", id)
+}
+
+func goalCompletionHasCheck(report GoalCompletionAudit, id string) bool {
+	for _, check := range report.Checks {
+		if check.ID == id {
+			return true
+		}
+	}
+	return false
 }

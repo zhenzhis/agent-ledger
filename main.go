@@ -549,10 +549,18 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 }
 
 func runGoalCLI(args []string, cfg *config.Config) error {
-	if len(args) == 0 || args[0] != "coverage" {
-		return fmt.Errorf("usage: agent-ledger goal coverage")
+	if len(args) == 0 {
+		return fmt.Errorf("usage: agent-ledger goal coverage|audit")
 	}
-	return json.NewEncoder(os.Stdout).Encode(integrations.GoalCoverageReportFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
+	report := integrations.GoalCoverageReportFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg))
+	switch args[0] {
+	case "coverage":
+		return json.NewEncoder(os.Stdout).Encode(report)
+	case "audit", "completion-audit", "completion":
+		return json.NewEncoder(os.Stdout).Encode(report.CompletionAudit)
+	default:
+		return fmt.Errorf("usage: agent-ledger goal coverage|audit")
+	}
 }
 
 func integrationCompatibilityRequestFromCLI(args []string) integrations.IntegrationCompatibilityRequest {

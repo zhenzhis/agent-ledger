@@ -73,6 +73,7 @@ CLI:
 ./agent-ledger contracts
 ./agent-ledger contracts verify
 ./agent-ledger goal coverage
+./agent-ledger goal audit
 ./agent-ledger openapi
 ./agent-ledger integrations
 ./agent-ledger integrations production-gate --strict

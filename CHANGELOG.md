@@ -4,6 +4,7 @@
 
 ### Added
 
+- Conservative goal completion audit inside goal coverage plus `agent-ledger goal audit`, separating coverage from completion by requiring review for experimental surfaces, external dependencies, and remaining verification work before the persistent product goal can be marked complete.
 - Integration production gate through `GET /api/integrations/production-gate`, `agent-ledger integrations production-gate --strict`, MCP `ledger.integration_production_gate`, and `agent-ledger://integrations/production-gate`, providing a metadata-only pass/review/block gate before production enablement of preview, gateway, OTLP, webhook, outbound, or write-ingest surfaces.
 - Integration evidence kits now include drift, lockfile, upgrade gate, and schema evolution gate evidence for adapter release audits.
 - Public metadata privacy language now consistently describes content-safe telemetry across discovery, adapter contracts, conformance matrix, provider/agent profiles, OpenAPI, and docs; `contracts verify` now includes the `privacy.public_metadata_language` invariant.

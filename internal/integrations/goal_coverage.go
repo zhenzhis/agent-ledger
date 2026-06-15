@@ -31,6 +31,7 @@ type GoalCoverageReport struct {
 	AdapterSpecHash       string                 `json:"adapter_spec_hash"`
 	CoverageHash          string                 `json:"coverage_hash"`
 	Summary               GoalCoverageSummary    `json:"summary"`
+	CompletionAudit       GoalCompletionAudit    `json:"completion_audit"`
 	Sections              []GoalCoverageSection  `json:"sections"`
 	ExternalDependencies  []GoalCoverageExternal `json:"external_dependencies,omitempty"`
 	Verification          []string               `json:"verification"`
@@ -78,6 +79,47 @@ type GoalCoverageExternal struct {
 	Reason      string   `json:"reason"`
 	LocalStatus string   `json:"local_status"`
 	Evidence    []string `json:"evidence"`
+}
+
+// GoalCompletionAudit is the conservative completion gate for the persistent
+// Agent Ledger product goal. It deliberately treats coverage as necessary but
+// not sufficient: experimental surfaces, external dependencies, remaining
+// visual smoke work, or missing verification evidence keep completion in
+// review-required or incomplete states.
+type GoalCompletionAudit struct {
+	Contract                string                     `json:"contract"`
+	Version                 string                     `json:"version"`
+	Status                  string                     `json:"status"`
+	ReadyToMarkGoalComplete bool                       `json:"ready_to_mark_goal_complete"`
+	RecommendedCIExitCode   int                        `json:"recommended_ci_exit_code"`
+	Reason                  string                     `json:"reason"`
+	Summary                 GoalCompletionAuditSummary `json:"summary"`
+	Checks                  []GoalCompletionAuditCheck `json:"checks"`
+	RequiredVerification    []string                   `json:"required_verification"`
+	Privacy                 string                     `json:"privacy"`
+}
+
+type GoalCompletionAuditSummary struct {
+	TotalChecks           int `json:"total_checks"`
+	Passed                int `json:"passed"`
+	Review                int `json:"review"`
+	Blocked               int `json:"blocked"`
+	CoverageGaps          int `json:"coverage_gaps"`
+	ExperimentalSections  int `json:"experimental_sections"`
+	ExternalDependencies  int `json:"external_dependencies"`
+	SectionsWithRemaining int `json:"sections_with_remaining"`
+	VerificationCommands  int `json:"verification_commands"`
+}
+
+type GoalCompletionAuditCheck struct {
+	ID           string   `json:"id"`
+	Status       string   `json:"status"`
+	Severity     string   `json:"severity"`
+	Message      string   `json:"message"`
+	Evidence     string   `json:"evidence"`
+	Requirement  string   `json:"requirement"`
+	Remediation  string   `json:"remediation"`
+	Verification []string `json:"verification,omitempty"`
 }
 
 // GoalCoverageReportFor returns a stable coverage contract for the current
@@ -150,9 +192,11 @@ func goalCoverageReportFor(opts Options, runtime *storage.RuntimeStatus, contrac
 			"agent-ledger contracts verify",
 			"agent-ledger integrations",
 			"agent-ledger goal coverage",
+			"agent-ledger goal audit",
 		},
 		Privacy: "Coverage uses static contracts, catalog metadata, endpoint names, table names, and documentation paths only; it does not read prompt content, responses, local paths, session ids, machine names, authors, or secrets.",
 	}
+	report.CompletionAudit = GoalCompletionAuditFor(report)
 	return report
 }
 
@@ -417,4 +461,109 @@ func goalCoverageSummary(sections []GoalCoverageSection) GoalCoverageSummary {
 
 func GoalCoverageHasGap(report GoalCoverageReport) bool {
 	return report.Summary.Gaps > 0 || strings.EqualFold(report.Status, "gaps")
+}
+
+func GoalCompletionAuditFor(report GoalCoverageReport) GoalCompletionAudit {
+	checks := []GoalCompletionAuditCheck{
+		goalCompletionCheck("local_first_privacy", passBlock(report.LocalFirst && !report.PromptContentStored && !report.UsageDataUploaded), "critical", "local-first privacy invariant is explicit", "local_first="+boolString(report.LocalFirst)+",prompt_content_stored="+boolString(report.PromptContentStored)+",usage_data_uploaded="+boolString(report.UsageDataUploaded), "Agent Ledger must remain local-first and metadata-only before goal completion can be claimed.", "repair privacy flags and rerun goal coverage", []string{"agent-ledger goal coverage"}),
+		goalCompletionCheck("coverage_gaps", passBlock(!GoalCoverageHasGap(report)), "critical", "goal coverage has no actionable gaps", "gaps="+intString(report.Summary.Gaps)+",status="+report.Status, "Every goal section must be implemented, experimental with review controls, or an explicit external dependency.", "close gap sections before marking the goal complete", []string{"agent-ledger goal coverage", "agent-ledger contracts verify"}),
+		goalCompletionCheck("verification_commands", passBlock(len(report.Verification) >= 8), "critical", "goal coverage declares a complete verification command set", "commands="+intString(len(report.Verification)), "Completion requires repeatable verification commands, not only implementation evidence.", "add missing verification commands and rerun the suite", report.Verification),
+	}
+
+	experimental := report.Summary.Experimental
+	if experimental > 0 {
+		checks = append(checks, goalCompletionCheck("experimental_surfaces", "review", "warning", "experimental or local-preview sections still require operator acceptance", "experimental_sections="+intString(experimental), "Experimental surfaces may be implemented locally but are not equivalent to fully completed production readiness.", "keep preview/outbound/write-ingest surfaces behind production-gate approval or promote them only after stronger smoke evidence", []string{"agent-ledger integrations production-gate --strict", "agent-ledger integrations readiness", "agent-ledger integrations smoke"}))
+	} else {
+		checks = append(checks, goalCompletionCheck("experimental_surfaces", "pass", "warning", "no experimental sections remain", "experimental_sections=0", "All sections are stable or externalized.", "no action required", []string{"agent-ledger goal coverage"}))
+	}
+
+	if len(report.ExternalDependencies) > 0 {
+		checks = append(checks, goalCompletionCheck("external_dependencies", "review", "warning", "external dependencies remain outside local implementation control", "external_dependencies="+intString(len(report.ExternalDependencies)), "The goal cannot claim externally controlled behavior as implemented by this repository.", "keep dependencies disclosed and avoid marking the goal complete until accepted or removed from scope", []string{"agent-ledger goal coverage"}))
+	} else {
+		checks = append(checks, goalCompletionCheck("external_dependencies", "pass", "warning", "no external dependencies remain", "external_dependencies=0", "All requirements are locally verifiable.", "no action required", []string{"agent-ledger goal coverage"}))
+	}
+
+	remainingSections := sectionsWithRemaining(report.Sections)
+	if remainingSections > 0 {
+		checks = append(checks, goalCompletionCheck("remaining_items", "review", "warning", "some sections still disclose remaining verification work", "sections_with_remaining="+intString(remainingSections), "Remaining items are allowed during active goal progress but must be resolved or explicitly accepted before completion.", "complete remaining verification or document accepted residual risk", []string{"agent-ledger goal coverage", "agent-ledger ui check"}))
+	} else {
+		checks = append(checks, goalCompletionCheck("remaining_items", "pass", "warning", "no sections disclose remaining work", "sections_with_remaining=0", "Coverage sections do not list residual work.", "no action required", []string{"agent-ledger goal coverage"}))
+	}
+
+	summary := summarizeGoalCompletionAudit(checks, report)
+	status, reason, ready, exitCode := goalCompletionDecision(summary)
+	return GoalCompletionAudit{
+		Contract:                "agent-ledger.goal-completion-audit",
+		Version:                 "v1",
+		Status:                  status,
+		ReadyToMarkGoalComplete: ready,
+		RecommendedCIExitCode:   exitCode,
+		Reason:                  reason,
+		Summary:                 summary,
+		Checks:                  checks,
+		RequiredVerification:    append([]string{}, report.Verification...),
+		Privacy:                 "Completion audit uses only goal coverage metadata, counts, section ids, command names, and external dependency labels; it does not inspect SQLite rows, prompts, responses, local paths, session ids, machine names, authors, or secrets.",
+	}
+}
+
+func summarizeGoalCompletionAudit(checks []GoalCompletionAuditCheck, report GoalCoverageReport) GoalCompletionAuditSummary {
+	summary := GoalCompletionAuditSummary{
+		TotalChecks:           len(checks),
+		CoverageGaps:          report.Summary.Gaps,
+		ExperimentalSections:  report.Summary.Experimental,
+		ExternalDependencies:  len(report.ExternalDependencies),
+		SectionsWithRemaining: sectionsWithRemaining(report.Sections),
+		VerificationCommands:  len(report.Verification),
+	}
+	for _, check := range checks {
+		switch check.Status {
+		case "block":
+			summary.Blocked++
+		case "review":
+			summary.Review++
+		default:
+			summary.Passed++
+		}
+	}
+	return summary
+}
+
+func goalCompletionDecision(summary GoalCompletionAuditSummary) (string, string, bool, int) {
+	if summary.Blocked > 0 {
+		return "incomplete", "one or more critical completion checks are blocked", false, 1
+	}
+	if summary.Review > 0 {
+		return "review-required", "coverage is implemented, but experimental surfaces, external dependencies, or remaining verification work require explicit acceptance before marking the goal complete", false, 2
+	}
+	return "complete", "all completion checks passed and no review items remain", true, 0
+}
+
+func goalCompletionCheck(id, status, severity, message, evidence, requirement, remediation string, verification []string) GoalCompletionAuditCheck {
+	return GoalCompletionAuditCheck{
+		ID:           id,
+		Status:       status,
+		Severity:     severity,
+		Message:      message,
+		Evidence:     evidence,
+		Requirement:  requirement,
+		Remediation:  remediation,
+		Verification: append([]string{}, verification...),
+	}
+}
+
+func passBlock(ok bool) string {
+	if ok {
+		return "pass"
+	}
+	return "block"
+}
+
+func sectionsWithRemaining(sections []GoalCoverageSection) int {
+	count := 0
+	for _, section := range sections {
+		if len(section.Remaining) > 0 {
+			count++
+		}
+	}
+	return count
 }

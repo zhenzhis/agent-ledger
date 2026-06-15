@@ -1514,8 +1514,9 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectFields("SchemaEvolutionCheck", "id", "status", "severity", "message", "evidence", "remediation", "privacy")
 	expectFields("SchemaEvolutionRow", "id", "kind", "expected", "current", "status", "severity", "action", "privacy")
 
-	expectFields("GoalCoverageReport", "product", "slug", "contract", "version", "status", "local_first", "read_only", "prompt_content_stored", "usage_data_uploaded", "privacy_default", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "canonical_schema_hash", "adapter_spec_hash", "coverage_hash", "summary", "sections", "external_dependencies", "verification", "privacy")
+	expectFields("GoalCoverageReport", "product", "slug", "contract", "version", "status", "local_first", "read_only", "prompt_content_stored", "usage_data_uploaded", "privacy_default", "capability_catalog_hash", "provider_profiles_hash", "agent_profiles_hash", "openapi_hash", "contract_bundle_hash", "canonical_schema_hash", "adapter_spec_hash", "coverage_hash", "summary", "completion_audit", "sections", "external_dependencies", "verification", "privacy")
 	expectRef("GoalCoverageReport", "summary", "#/components/schemas/GoalCoverageSummary")
+	expectRef("GoalCoverageReport", "completion_audit", "#/components/schemas/GoalCompletionAudit")
 	expectArrayRef("GoalCoverageReport", "sections", "#/components/schemas/GoalCoverageSection")
 	expectArrayRef("GoalCoverageReport", "external_dependencies", "#/components/schemas/GoalCoverageExternal")
 	expectFields("GoalCoverageSummary", "total_sections", "implemented", "experimental", "external_dependencies", "gaps", "completion_ratio", "next_action")
@@ -1523,6 +1524,11 @@ func TestOpenAPICoreControlPlaneSchemasExposeContractFields(t *testing.T) {
 	expectRef("GoalCoverageSection", "evidence", "#/components/schemas/GoalCoverageEvidence")
 	expectFields("GoalCoverageEvidence", "endpoints", "commands", "mcp_tools", "mcp_resources", "capabilities", "tables", "tests", "docs")
 	expectFields("GoalCoverageExternal", "id", "dependency", "reason", "local_status", "evidence")
+	expectFields("GoalCompletionAudit", "contract", "version", "status", "ready_to_mark_goal_complete", "recommended_ci_exit_code", "reason", "summary", "checks", "required_verification", "privacy")
+	expectRef("GoalCompletionAudit", "summary", "#/components/schemas/GoalCompletionAuditSummary")
+	expectArrayRef("GoalCompletionAudit", "checks", "#/components/schemas/GoalCompletionAuditCheck")
+	expectFields("GoalCompletionAuditSummary", "total_checks", "passed", "review", "blocked", "coverage_gaps", "experimental_sections", "external_dependencies", "sections_with_remaining", "verification_commands")
+	expectFields("GoalCompletionAuditCheck", "id", "status", "severity", "message", "evidence", "requirement", "remediation", "verification")
 
 	expectFields("RuntimeStatus", "contract", "version", "mode", "read_only", "write_operations", "background_tasks", "capability_catalog_hash", "canonical_schema_hash", "adapter_spec_hash", "disabled_features", "message")
 	expectFields("ConfigStatusReport", "product", "slug", "contract", "version", "local_first", "privacy_default", "prompt_content_stored", "usage_data_uploaded", "path_values_exposed", "secret_values_exposed", "bind", "auth", "storage", "collectors", "pricing", "privacy", "features", "outbound", "teams", "summary", "issues", "privacy_note")
