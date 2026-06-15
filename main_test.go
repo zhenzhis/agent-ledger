@@ -509,6 +509,47 @@ func TestIntegrationLockfileCLIOutputsReadOnlyReport(t *testing.T) {
 	}
 }
 
+func TestIntegrationUpgradeGateCLIOutputsReadOnlyReport(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+	current := integrations.IntegrationDriftCurrentHashes(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg))
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"integrations", "upgrade-gate", "--strict", "--adapter-spec-hash", current["adapter_spec_hash"], "--expected", "future_hash=sha256:future"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI integrations upgrade-gate: %v", err)
+	}
+	var report integrations.IntegrationUpgradeGateReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode integration upgrade gate output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.integration-upgrade-gate" || !report.ReadOnlySafe || report.WritesLocalState ||
+		report.Decision.Status != "block" || report.Decision.RecommendedCIExitCode != 2 ||
+		report.GateHash == "" || report.DriftSummary.UnknownExpected != 1 {
+		t.Fatalf("unexpected integration upgrade gate report: %+v", report)
+	}
+	if !strings.Contains(out, "agent-ledger integrations upgrade-gate --strict") || !strings.Contains(out, "future_hash") {
+		t.Fatalf("integration upgrade gate missing CI guidance: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("integration upgrade gate leaked %q: %s", forbidden, out)
+		}
+	}
+
+	aliasOut, err := captureStdout(t, func() error {
+		return runCLI([]string{"integration-upgrade-gate", "--strict"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI integration-upgrade-gate: %v", err)
+	}
+	if !strings.Contains(aliasOut, `"contract":"agent-ledger.integration-upgrade-gate"`) {
+		t.Fatalf("integration-upgrade-gate alias returned unexpected output: %s", aliasOut)
+	}
+}
+
 func TestAgentRecommendCLIOutputsReadOnlyAdvisor(t *testing.T) {
 	db := openTestDB(t)
 	cfg := config.DefaultConfig()

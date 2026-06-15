@@ -478,6 +478,10 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 			opts := integrations.OptionsFromConfig(cfg)
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationLockfileFor(opts, server.RuntimeStatusFromConfig(cfg)))
 		}
+		if len(args) > 1 && (args[1] == "upgrade-gate" || args[1] == "gate") {
+			opts := integrations.OptionsFromConfig(cfg)
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationUpgradeGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationUpgradeGateRequestFromCLI(args[2:])))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "integration-readiness":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
@@ -497,6 +501,9 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "integration-lockfile":
 		opts := integrations.OptionsFromConfig(cfg)
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationLockfileFor(opts, server.RuntimeStatusFromConfig(cfg)))
+	case "integration-upgrade-gate":
+		opts := integrations.OptionsFromConfig(cfg)
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationUpgradeGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationUpgradeGateRequestFromCLI(args[1:])))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
@@ -590,6 +597,14 @@ func integrationDriftRequestFromCLI(args []string) integrations.IntegrationDrift
 	return integrations.NormalizeIntegrationDriftRequest(integrations.IntegrationDriftRequest{
 		Strict:   cliBool(args, "--strict"),
 		Expected: expected,
+	})
+}
+
+func integrationUpgradeGateRequestFromCLI(args []string) integrations.IntegrationUpgradeGateRequest {
+	drift := integrationDriftRequestFromCLI(args)
+	return integrations.NormalizeIntegrationUpgradeGateRequest(integrations.IntegrationUpgradeGateRequest{
+		Strict:   drift.Strict,
+		Expected: drift.Expected,
 	})
 }
 

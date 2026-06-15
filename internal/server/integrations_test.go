@@ -42,6 +42,7 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		manifest.EvidenceKitURI != "/api/integrations/evidence-kit" ||
 		manifest.DriftURI != "/api/integrations/drift" ||
 		manifest.LockfileURI != "/api/integrations/lockfile" ||
+		manifest.UpgradeGateURI != "/api/integrations/upgrade-gate" ||
 		manifest.RecommendationURI != "/api/integrations/recommendation" ||
 		manifest.CanonicalSchemaURI != "/api/event-schema" || manifest.EventExamplesURI != "/api/event-examples" ||
 		manifest.AdapterSpecURI != "/api/integrations/adapter-spec" ||
@@ -81,6 +82,9 @@ func TestDiscoveryEndpoint(t *testing.T) {
 	if manifest.LockfileHash == "" || manifest.LockfileHash != integrations.IntegrationLockfileOpenAPIFingerprint(srv.integrationOptions(), nil) {
 		t.Fatalf("unexpected integration lockfile hash: %+v", manifest)
 	}
+	if manifest.UpgradeGateHash == "" || manifest.UpgradeGateHash != integrations.IntegrationUpgradeGateOpenAPIFingerprint(srv.integrationOptions(), nil) {
+		t.Fatalf("unexpected integration upgrade gate hash: %+v", manifest)
+	}
 	if manifest.RecommendationHash == "" || manifest.RecommendationHash != integrations.IntegrationRecommendationContractFingerprint() {
 		t.Fatalf("unexpected recommendation hash: %+v", manifest)
 	}
@@ -92,7 +96,7 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		!manifest.A2A.SupportsDelegatedLineage || !manifest.A2A.SupportsEvidenceReferences {
 		t.Fatalf("unexpected A2A discovery metadata: %+v", manifest.A2A)
 	}
-	if !discoveryHasProtocol(manifest, "protocol.runtime_status") || !discoveryHasProtocol(manifest, "protocol.config_status") || !discoveryHasProtocol(manifest, "protocol.readiness") || !discoveryHasProtocol(manifest, "protocol.admission_check") || !discoveryHasProtocol(manifest, "protocol.provider_profiles") || !discoveryHasProtocol(manifest, "protocol.agent_profiles") || !discoveryHasProtocol(manifest, "protocol.signal_taxonomy") || !discoveryHasProtocol(manifest, "protocol.signal_coverage") || !discoveryHasProtocol(manifest, "protocol.integration_readiness") || !discoveryHasProtocol(manifest, "protocol.integration_smoke") || !discoveryHasProtocol(manifest, "protocol.integration_evidence_kit") || !discoveryHasProtocol(manifest, "protocol.integration_drift") || !discoveryHasProtocol(manifest, "protocol.integration_lockfile") || !discoveryHasProtocol(manifest, "protocol.integration_recommendation") || !discoveryHasProtocol(manifest, "protocol.workload_event_feed") {
+	if !discoveryHasProtocol(manifest, "protocol.runtime_status") || !discoveryHasProtocol(manifest, "protocol.config_status") || !discoveryHasProtocol(manifest, "protocol.readiness") || !discoveryHasProtocol(manifest, "protocol.admission_check") || !discoveryHasProtocol(manifest, "protocol.provider_profiles") || !discoveryHasProtocol(manifest, "protocol.agent_profiles") || !discoveryHasProtocol(manifest, "protocol.signal_taxonomy") || !discoveryHasProtocol(manifest, "protocol.signal_coverage") || !discoveryHasProtocol(manifest, "protocol.integration_readiness") || !discoveryHasProtocol(manifest, "protocol.integration_smoke") || !discoveryHasProtocol(manifest, "protocol.integration_evidence_kit") || !discoveryHasProtocol(manifest, "protocol.integration_drift") || !discoveryHasProtocol(manifest, "protocol.integration_lockfile") || !discoveryHasProtocol(manifest, "protocol.integration_upgrade_gate") || !discoveryHasProtocol(manifest, "protocol.integration_recommendation") || !discoveryHasProtocol(manifest, "protocol.workload_event_feed") {
 		t.Fatalf("missing control-plane protocols: %+v", manifest.Protocols)
 	}
 	if manifest.PromptContentStored || manifest.UsageDataUploaded {
@@ -117,7 +121,7 @@ func TestContractsEndpoint(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle: %+v", bundle)
 	}
-	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "signal-taxonomy") || !contractBundleHasDocument(bundle, "signal-coverage") || !contractBundleHasDocument(bundle, "integration-readiness") || !contractBundleHasDocument(bundle, "integration-smoke") || !contractBundleHasDocument(bundle, "integration-evidence-kit") || !contractBundleHasDocument(bundle, "integration-drift") || !contractBundleHasDocument(bundle, "integration-lockfile") || !contractBundleHasDocument(bundle, "integration-recommendation") || !contractBundleHasDocument(bundle, "runtime-status") ||
+	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "signal-taxonomy") || !contractBundleHasDocument(bundle, "signal-coverage") || !contractBundleHasDocument(bundle, "integration-readiness") || !contractBundleHasDocument(bundle, "integration-smoke") || !contractBundleHasDocument(bundle, "integration-evidence-kit") || !contractBundleHasDocument(bundle, "integration-drift") || !contractBundleHasDocument(bundle, "integration-lockfile") || !contractBundleHasDocument(bundle, "integration-upgrade-gate") || !contractBundleHasDocument(bundle, "integration-recommendation") || !contractBundleHasDocument(bundle, "runtime-status") ||
 		!contractBundleHasDocument(bundle, "admission-check") || !contractBundleHasDocument(bundle, "canonical-event-schema") || !contractBundleHasDocument(bundle, "adapter-contract") || !contractBundleHasDocument(bundle, "adapter-conformance-matrix") {
 		t.Fatalf("contract bundle missing core documents: %+v", bundle.Documents)
 	}
@@ -346,6 +350,28 @@ func TestIntegrationLockfileEndpoint(t *testing.T) {
 	assertETagRevalidates(t, srv.handleIntegrationLockfile, req.URL.String(), rr.Header().Get("ETag"))
 }
 
+func TestIntegrationUpgradeGateEndpoint(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	current := integrations.IntegrationDriftCurrentHashes(srv.integrationOptions(), srv.runtimeStatus())
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/integrations/upgrade-gate?strict=true&adapter-spec-hash="+current["adapter_spec_hash"]+"&hash=future_hash=sha256:future", nil)
+	rr := httptest.NewRecorder()
+	srv.handleIntegrationUpgradeGate(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("upgrade gate status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var report integrations.IntegrationUpgradeGateReport
+	if err := json.Unmarshal(rr.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode upgrade gate: %v", err)
+	}
+	if report.Contract != "agent-ledger.integration-upgrade-gate" || !report.ReadOnlySafe || report.WritesLocalState ||
+		report.Decision.Status != "block" || report.DriftSummary.UnknownExpected != 1 || report.GateHash == "" ||
+		len(report.BlockingRows) == 0 {
+		t.Fatalf("unexpected upgrade gate: %+v", report)
+	}
+	assertETagRevalidates(t, srv.handleIntegrationUpgradeGate, req.URL.String(), rr.Header().Get("ETag"))
+}
+
 func TestIntegrationRecommendationEndpoint(t *testing.T) {
 	db := testServerDB(t)
 	srv := New(db, "", Options{})
@@ -482,6 +508,9 @@ func TestContractVerificationEndpoint(t *testing.T) {
 	if !contractVerificationHasCheck(report, "discovery.integration_lockfile") || !contractVerificationHasCheck(report, "openapi.integration_lockfile_hash") || !contractVerificationHasCheck(report, "bundle.document.integration-lockfile") {
 		t.Fatalf("verification report missing integration lockfile checks: %+v", report.Checks)
 	}
+	if !contractVerificationHasCheck(report, "discovery.integration_upgrade_gate") || !contractVerificationHasCheck(report, "openapi.integration_upgrade_gate_hash") || !contractVerificationHasCheck(report, "bundle.document.integration-upgrade-gate") {
+		t.Fatalf("verification report missing integration upgrade gate checks: %+v", report.Checks)
+	}
 	if !contractVerificationHasCheck(report, "discovery.conformance_matrix") || !contractVerificationHasCheck(report, "adapter.conformance_matrix") || !contractVerificationHasCheck(report, "openapi.conformance_matrix_hash") || !contractVerificationHasCheck(report, "bundle.document.adapter-conformance-matrix") {
 		t.Fatalf("verification report missing conformance matrix checks: %+v", report.Checks)
 	}
@@ -528,6 +557,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if meta["integration_lockfile_hash"] != integrations.IntegrationLockfileOpenAPIFingerprint(srv.integrationOptions(), srv.runtimeStatus()) {
 		t.Fatalf("unexpected integration lockfile hash in openapi metadata: %+v", meta)
+	}
+	if meta["integration_upgrade_gate_hash"] != integrations.IntegrationUpgradeGateOpenAPIFingerprint(srv.integrationOptions(), srv.runtimeStatus()) {
+		t.Fatalf("unexpected integration upgrade gate hash in openapi metadata: %+v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
 	for _, path := range integrations.OpenAPIContractPaths() {
@@ -848,6 +880,7 @@ func TestControlPlaneEndpointsRejectNonGET(t *testing.T) {
 		{name: "integration-readiness", url: "http://127.0.0.1/api/integrations/readiness", handler: srv.handleIntegrationReadiness},
 		{name: "integration-drift", url: "http://127.0.0.1/api/integrations/drift", handler: srv.handleIntegrationDrift},
 		{name: "integration-lockfile", url: "http://127.0.0.1/api/integrations/lockfile", handler: srv.handleIntegrationLockfile},
+		{name: "integration-upgrade-gate", url: "http://127.0.0.1/api/integrations/upgrade-gate", handler: srv.handleIntegrationUpgradeGate},
 		{name: "integration-recommendation", url: "http://127.0.0.1/api/integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream", handler: srv.handleIntegrationRecommendation},
 		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},
 		{name: "discovery", url: "http://127.0.0.1/api/discovery", handler: srv.handleDiscovery},

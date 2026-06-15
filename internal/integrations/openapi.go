@@ -68,6 +68,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"integration_evidence_kit_hash":   IntegrationEvidenceKitOpenAPIFingerprint(opts, runtime),
 			"integration_drift_hash":          IntegrationDriftOpenAPIFingerprint(opts, runtime),
 			"integration_lockfile_hash":       IntegrationLockfileOpenAPIFingerprint(opts, runtime),
+			"integration_upgrade_gate_hash":   IntegrationUpgradeGateOpenAPIFingerprint(opts, runtime),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -92,6 +93,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/evidence-kit":       integrationEvidenceKitOperation(),
 			"/api/integrations/drift":              integrationDriftOperation(),
 			"/api/integrations/lockfile":           getOperation("contracts", "Get integration lockfile", "Read-only static control-plane hash baseline for adapter, wrapper, router, and CI release pins.", "IntegrationLockfileReport"),
+			"/api/integrations/upgrade-gate":       integrationUpgradeGateOperation(),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -199,7 +201,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_lockfile_uri", "integration_lockfile_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_lockfile_uri", "integration_lockfile_hash", "integration_upgrade_gate_uri", "integration_upgrade_gate_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -236,6 +238,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"integration_drift_hash":          refSchema("Hash"),
 						"integration_lockfile_uri":        stringSchema(),
 						"integration_lockfile_hash":       refSchema("Hash"),
+						"integration_upgrade_gate_uri":    stringSchema(),
+						"integration_upgrade_gate_hash":   refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -396,6 +400,10 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IntegrationDriftSummary":             integrationDriftSummarySchema(),
 				"IntegrationDriftRow":                 integrationDriftRowSchema(),
 				"IntegrationLockfileReport":           integrationLockfileReportSchema(),
+				"IntegrationUpgradeGateReport":        integrationUpgradeGateReportSchema(),
+				"IntegrationUpgradeGateRequest":       integrationUpgradeGateRequestSchema(),
+				"IntegrationUpgradeGateDecision":      integrationUpgradeGateDecisionSchema(),
+				"IntegrationUpgradeGateCheck":         integrationUpgradeGateCheckSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -884,6 +892,7 @@ func OpenAPISmokeFingerprint(opts Options, runtime *storage.RuntimeStatus) strin
 		"integration_compatibility_hash":  IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}),
 		"integration_rollout_plan_hash":   IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
 		"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
+		"integration_upgrade_gate_hash":   IntegrationUpgradeGateOpenAPIFingerprint(opts, runtime),
 		"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 		"runtime_status_hash":             hashJSONPayload(runtime),
 		"canonical_schema_hash":           storage.CanonicalEventSchemaFingerprint(),
@@ -1122,6 +1131,7 @@ func OpenAPIContractPaths() []string {
 		"/api/integrations/evidence-kit",
 		"/api/integrations/drift",
 		"/api/integrations/lockfile",
+		"/api/integrations/upgrade-gate",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -1255,6 +1265,20 @@ func integrationDriftOperation() map[string]interface{} {
 	op := getOperation("contracts", "Get integration drift report", "Read-only current-vs-expected integration contract hash comparison for adapter lockfiles and CI upgrade gates.", "IntegrationDriftReport")
 	params := []map[string]interface{}{
 		boolQueryParam("strict", "Treat missing expected hashes as drift instead of review warnings."),
+		queryParam("hash", "Repeatable key=value expected hash pair, for example adapter_spec_hash=sha256:..."),
+		queryParam("expected", "Alias for hash; repeatable key=value expected hash pair."),
+	}
+	for _, id := range IntegrationDriftHashIDs() {
+		params = append(params, queryParam(id, "Expected pinned hash for "+id+". Hyphenated query names are also accepted."))
+	}
+	op["get"].(map[string]interface{})["parameters"] = params
+	return op
+}
+
+func integrationUpgradeGateOperation() map[string]interface{} {
+	op := getOperation("contracts", "Get integration upgrade gate", "Read-only pass/review/block release gate for pinned integration lockfiles and current Agent Ledger control-plane hashes.", "IntegrationUpgradeGateReport")
+	params := []map[string]interface{}{
+		boolQueryParam("strict", "Block missing expected hashes and unknown expected ids instead of returning review status."),
 		queryParam("hash", "Repeatable key=value expected hash pair, for example adapter_spec_hash=sha256:..."),
 		queryParam("expected", "Alias for hash; repeatable key=value expected hash pair."),
 	}
@@ -3267,6 +3291,83 @@ func integrationLockfileReportSchema() map[string]interface{} {
 			"refresh_commands":     stringArraySchema(),
 			"operational_guidance": stringArraySchema(),
 			"redaction_rules":      stringArraySchema(),
+		},
+	}
+}
+
+func integrationUpgradeGateReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe integration upgrade gate report.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "request", "gate_hash", "decision", "drift_summary", "checks", "blocking_rows", "review_rows", "ci_commands", "required_artifacts", "operational_guidance", "redaction_rules"},
+		"properties": map[string]interface{}{
+			"product":              stringSchema(),
+			"contract":             constSchema("agent-ledger.integration-upgrade-gate"),
+			"version":              stringSchema(),
+			"local_first":          boolSchema(),
+			"read_only_safe":       boolSchema(),
+			"writes_local_state":   boolSchema(),
+			"privacy_policy":       stringSchema(),
+			"request":              refSchema("IntegrationUpgradeGateRequest"),
+			"gate_hash":            refSchema("Hash"),
+			"decision":             refSchema("IntegrationUpgradeGateDecision"),
+			"drift_summary":        refSchema("IntegrationDriftSummary"),
+			"checks":               refArraySchema("IntegrationUpgradeGateCheck"),
+			"blocking_rows":        refArraySchema("IntegrationDriftRow"),
+			"review_rows":          refArraySchema("IntegrationDriftRow"),
+			"ci_commands":          stringArraySchema(),
+			"required_artifacts":   stringArraySchema(),
+			"operational_guidance": stringArraySchema(),
+			"redaction_rules":      stringArraySchema(),
+		},
+	}
+}
+
+func integrationUpgradeGateRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Expected pinned integration contract hashes for upgrade gate evaluation.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"strict":   boolSchema(),
+			"expected": stringMapSchema(),
+		},
+	}
+}
+
+func integrationUpgradeGateDecisionSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "CI-friendly gate decision.",
+		"additionalProperties": true,
+		"required":             []string{"status", "severity", "reason", "recommended_ci_exit_code", "allow_write_ingest", "requires_human_review", "requires_evidence_refresh"},
+		"properties": map[string]interface{}{
+			"status":                    stringSchema(),
+			"severity":                  stringSchema(),
+			"reason":                    stringSchema(),
+			"recommended_ci_exit_code":  integerSchema(),
+			"allow_write_ingest":        boolSchema(),
+			"requires_human_review":     boolSchema(),
+			"requires_evidence_refresh": boolSchema(),
+		},
+	}
+}
+
+func integrationUpgradeGateCheckSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One upgrade gate check.",
+		"additionalProperties": true,
+		"required":             []string{"id", "status", "severity", "message", "evidence", "remediation", "privacy"},
+		"properties": map[string]interface{}{
+			"id":          stringSchema(),
+			"status":      stringSchema(),
+			"severity":    stringSchema(),
+			"message":     stringSchema(),
+			"evidence":    stringSchema(),
+			"remediation": stringSchema(),
+			"privacy":     stringSchema(),
 		},
 	}
 }

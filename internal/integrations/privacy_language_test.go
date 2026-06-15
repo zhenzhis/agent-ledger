@@ -39,11 +39,14 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 		}),
 		"integration_drift":    IntegrationDriftReportFor(Options{}, nil, IntegrationDriftRequest{}),
 		"integration_lockfile": IntegrationLockfileFor(Options{}, nil),
-		"openapi":              OpenAPISpecFor(Options{}, nil),
-		"provider_profiles":    ProviderProfiles(),
-		"registry":             Registry(Options{}),
-		"signal_coverage":      SignalCoverage(),
-		"signal_taxonomy":      SignalTaxonomy(),
+		"integration_upgrade_gate": IntegrationUpgradeGateFor(Options{}, nil, IntegrationUpgradeGateRequest{
+			Strict: true,
+		}),
+		"openapi":           OpenAPISpecFor(Options{}, nil),
+		"provider_profiles": ProviderProfiles(),
+		"registry":          Registry(Options{}),
+		"signal_coverage":   SignalCoverage(),
+		"signal_taxonomy":   SignalTaxonomy(),
 	}
 	ok, actual := contractPublicPrivacyLanguageStatus(docs)
 	if !ok {

@@ -117,6 +117,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.integration_lockfile") {
 		t.Fatalf("expected integration lockfile tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.integration_upgrade_gate") {
+		t.Fatalf("expected integration upgrade gate tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -216,6 +219,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	integrationLockfileMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_lockfile"))
 	if integrationLockfileMeta["write_mode"] != "none" || integrationLockfileMeta["writes_local_state"] != false || integrationLockfileMeta["available_in_read_only"] != true {
 		t.Fatalf("integration lockfile tool metadata wrong: %#v", integrationLockfileMeta)
+	}
+	integrationUpgradeGateMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_upgrade_gate"))
+	if integrationUpgradeGateMeta["write_mode"] != "none" || integrationUpgradeGateMeta["writes_local_state"] != false || integrationUpgradeGateMeta["available_in_read_only"] != true {
+		t.Fatalf("integration upgrade gate tool metadata wrong: %#v", integrationUpgradeGateMeta)
 	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
@@ -317,6 +324,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/lockfile") {
 		t.Fatalf("expected integration lockfile resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://integrations/upgrade-gate") {
+		t.Fatalf("expected integration upgrade gate resource, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
@@ -682,6 +692,45 @@ func TestMCPIntegrationLockfileToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("integration lockfile resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPIntegrationUpgradeGateToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+	current := integrations.IntegrationDriftCurrentHashes(integrations.OptionsFromConfig(config.DefaultConfig()), srv.runtimeStatus())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.integration_upgrade_gate","arguments":{"strict":true,"expected":{"adapter_spec_hash":"`+current["adapter_spec_hash"]+`"},"hash":"future_hash=sha256:future"}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/upgrade-gate?strict=true&adapter_spec_hash=`+current["adapter_spec_hash"]+`&hash=future_hash=sha256:future"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.integration-upgrade-gate" ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false ||
+		toolPayload["gate_hash"] == "" {
+		t.Fatalf("unexpected integration upgrade gate tool payload: %#v", toolPayload)
+	}
+	decision := toolPayload["decision"].(map[string]interface{})
+	if decision["status"] != "block" || decision["recommended_ci_exit_code"] != float64(2) {
+		t.Fatalf("unexpected integration upgrade gate decision: %#v", decision)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("integration upgrade gate tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.integration-upgrade-gate"`) ||
+		!strings.Contains(resourceText, `"status": "block"`) ||
+		!strings.Contains(resourceText, `"agent-ledger integrations upgrade-gate --strict"`) {
+		t.Fatalf("unexpected integration upgrade gate resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("integration upgrade gate resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

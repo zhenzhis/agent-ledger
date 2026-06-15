@@ -109,6 +109,15 @@ func (s *Server) handleIntegrationLockfile(w http.ResponseWriter, r *http.Reques
 	writeJSONWithETag(w, r, report, integrations.IntegrationLockfileFingerprintFrom(report))
 }
 
+func (s *Server) handleIntegrationUpgradeGate(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	req := integrations.IntegrationUpgradeGateFromValues(r.URL.Query())
+	report := integrations.IntegrationUpgradeGateFor(s.integrationOptions(), s.runtimeStatus(), req)
+	writeJSONWithETag(w, r, report, integrations.IntegrationUpgradeGateFingerprintFrom(report))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

@@ -125,6 +125,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/integrations/evidence-kit", s.handleIntegrationEvidenceKit)
 	mux.HandleFunc("/api/integrations/drift", s.handleIntegrationDrift)
 	mux.HandleFunc("/api/integrations/lockfile", s.handleIntegrationLockfile)
+	mux.HandleFunc("/api/integrations/upgrade-gate", s.handleIntegrationUpgradeGate)
 	mux.HandleFunc("/api/integrations/recommendation", s.handleIntegrationRecommendation)
 	mux.HandleFunc("/api/integrations/conformance-matrix", s.handleConformanceMatrix)
 	mux.HandleFunc("/api/goal-coverage", s.handleGoalCoverage)

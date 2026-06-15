@@ -592,6 +592,11 @@ func tools() []map[string]interface{} {
 			"hash":     map[string]interface{}{"oneOf": []map[string]interface{}{stringSchema(), {"type": "array", "items": stringSchema()}}},
 		}),
 		tool("ledger.integration_lockfile", "Return a privacy-safe static integration contract hash lockfile baseline for adapter, wrapper, router, and CI release pins.", map[string]interface{}{}),
+		tool("ledger.integration_upgrade_gate", "Return a privacy-safe pass/review/block integration upgrade gate for pinned lockfiles and current control-plane hashes.", map[string]interface{}{
+			"strict":   booleanSchema(),
+			"expected": map[string]interface{}{"type": "object", "additionalProperties": stringSchema()},
+			"hash":     map[string]interface{}{"oneOf": []map[string]interface{}{stringSchema(), {"type": "array", "items": stringSchema()}}},
+		}),
 		tool("ledger.integration_recommendation", "Return a read-only integration recommendation for an agent/profile/provider/surface combination using static Agent Ledger catalogs.", map[string]interface{}{
 			"agent_profile_id":    stringSchema(),
 			"agent":               stringSchema(),
@@ -742,6 +747,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://integrations/evidence-kit", "Integration Evidence Kit", "Privacy-safe adapter release evidence kit with CI commands, review lanes, hashes, fixture evidence, and rollout gates; supports agent/provider/surface/min_confidence query parameters.", "application/json"),
 		resource("agent-ledger://integrations/drift", "Integration Drift Report", "Privacy-safe current-vs-expected integration contract hash drift report; supports strict=true and expected hash query parameters.", "application/json"),
 		resource("agent-ledger://integrations/lockfile", "Integration Lockfile", "Privacy-safe static integration contract hash lockfile baseline for adapter, wrapper, router, and CI release pins.", "application/json"),
+		resource("agent-ledger://integrations/upgrade-gate", "Integration Upgrade Gate", "Privacy-safe pass/review/block integration upgrade gate; supports strict=true and expected hash query parameters.", "application/json"),
 		resource("agent-ledger://integrations/recommendation", "Integration Recommendation", "Read-only advisor for choosing Agent Ledger ingest, validation, privacy, and quality gates from static integration catalogs; supports agent/provider/surface/signals query parameters.", "application/json"),
 		resource("agent-ledger://integrations/adapter-contract", "Adapter Contract", "Machine-readable contract for writing privacy-safe Agent Ledger adapters.", "application/json"),
 		resource("agent-ledger://integrations/conformance-matrix", "Adapter Conformance Matrix", "Privacy-safe matrix of supported adapter input kinds, strict CI fixtures, expected event families, and validation entrypoints.", "application/json"),
@@ -907,6 +913,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return s.toolIntegrationDrift(args)
 	case "ledger.integration_lockfile":
 		return integrations.IntegrationLockfileFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
+	case "ledger.integration_upgrade_gate":
+		return s.toolIntegrationUpgradeGate(args)
 	case "ledger.integration_recommendation":
 		return toolIntegrationRecommendation(args)
 	case "ledger.get_policy":
@@ -1073,6 +1081,8 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 		return integrations.IntegrationDriftReportFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus(), integrations.IntegrationDriftFromValues(values)), nil
 	case "agent-ledger://integrations/lockfile":
 		return integrations.IntegrationLockfileFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus()), nil
+	case "agent-ledger://integrations/upgrade-gate":
+		return integrations.IntegrationUpgradeGateFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus(), integrations.IntegrationUpgradeGateFromValues(values)), nil
 	case "agent-ledger://integrations/recommendation":
 		return integrations.IntegrationRecommendation(integrations.IntegrationRecommendationFromValues(values)), nil
 	case "agent-ledger://integrations/adapter-contract":
@@ -2332,6 +2342,31 @@ func (s *Server) toolIntegrationDrift(args json.RawMessage) (interface{}, error)
 	}
 	req := integrations.IntegrationDriftRequest{Strict: in.Strict, Expected: expected}
 	return integrations.IntegrationDriftReportFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus(), req), nil
+}
+
+func (s *Server) toolIntegrationUpgradeGate(args json.RawMessage) (interface{}, error) {
+	var in struct {
+		Strict   bool              `json:"strict"`
+		Expected map[string]string `json:"expected"`
+		Hash     interface{}       `json:"hash"`
+	}
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, err
+		}
+	}
+	expected := map[string]string{}
+	for key, value := range in.Expected {
+		expected[key] = value
+	}
+	for _, raw := range mcpStringList(in.Hash) {
+		key, value, ok := strings.Cut(raw, "=")
+		if ok {
+			expected[key] = value
+		}
+	}
+	req := integrations.IntegrationUpgradeGateRequest{Strict: in.Strict, Expected: expected}
+	return integrations.IntegrationUpgradeGateFor(integrations.OptionsFromConfig(s.cfg), s.runtimeStatus(), req), nil
 }
 
 func mcpStringList(value interface{}) []string {

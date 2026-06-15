@@ -60,6 +60,8 @@ type DiscoveryManifest struct {
 	DriftHash                string               `json:"integration_drift_hash"`
 	LockfileURI              string               `json:"integration_lockfile_uri"`
 	LockfileHash             string               `json:"integration_lockfile_hash"`
+	UpgradeGateURI           string               `json:"integration_upgrade_gate_uri"`
+	UpgradeGateHash          string               `json:"integration_upgrade_gate_hash"`
 	RecommendationURI        string               `json:"integration_recommendation_uri"`
 	RecommendationHash       string               `json:"integration_recommendation_hash"`
 	ContractBundleURI        string               `json:"contract_bundle_uri"`
@@ -173,6 +175,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		DriftHash:                IntegrationDriftOpenAPIFingerprint(opts, nil),
 		LockfileURI:              "/api/integrations/lockfile",
 		LockfileHash:             IntegrationLockfileOpenAPIFingerprint(opts, nil),
+		UpgradeGateURI:           "/api/integrations/upgrade-gate",
+		UpgradeGateHash:          IntegrationUpgradeGateOpenAPIFingerprint(opts, nil),
 		RecommendationURI:        "/api/integrations/recommendation",
 		RecommendationHash:       IntegrationRecommendationContractFingerprint(),
 		ContractBundleURI:        "/api/contracts",
