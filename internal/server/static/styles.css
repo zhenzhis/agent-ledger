@@ -3291,3 +3291,39 @@ td,
     min-width: 108px;
   }
 }
+
+/* Integration readiness surface: full-width control-plane status without decorative color. */
+.chart-grid > .readiness-panel {
+  grid-column: 1 / -1;
+}
+
+.readiness-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+}
+
+.readiness-list .ops-row {
+  min-height: 58px;
+}
+
+.sort-button {
+  min-height: 36px;
+  padding-inline: 4px;
+}
+
+.segmented button {
+  min-height: 36px;
+}
+
+@media (max-width: 900px) {
+  .readiness-list {
+    grid-template-columns: 1fr;
+  }
+
+  .search-field input,
+  .approval-voter-field input,
+  .segmented button,
+  .sort-button {
+    min-height: 44px;
+  }
+}

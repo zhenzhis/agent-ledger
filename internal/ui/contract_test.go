@@ -18,6 +18,7 @@ func TestCheckCurrentStaticDashboard(t *testing.T) {
 	assertCheckpoint(t, report, "palette.monochrome")
 	assertCheckpoint(t, report, "responsive.breakpoints")
 	assertCheckpoint(t, report, "privacy.entrypoints")
+	assertCheckpoint(t, report, "integration_readiness.panel")
 	if report.ContractHash == "" || report.Checked == 0 {
 		t.Fatalf("missing contract hash/check count: %+v", report)
 	}

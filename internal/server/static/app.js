@@ -50,6 +50,7 @@ const I18N = {
     battery: "Battery",
     pricing: "Pricing",
     quality: "Quality",
+    ecosystem: "Ecosystem",
     modelCalls: "Model Calls",
     window: "Window",
     filters: "Filters",
@@ -68,6 +69,7 @@ const I18N = {
     costIntelligence: "Cost Intelligence",
     cacheDoctor: "Cache Doctor",
     dataQuality: "Data Quality",
+    integrationReadiness: "Integration Readiness",
     approvalQueue: "Approval Queue",
     approver: "Approver",
     approverRequired: "Enter an approver name before voting",
@@ -225,6 +227,17 @@ const I18N = {
     noFleet: "No fleet runs",
     noReconciliation: "No provider statements imported",
     noChargeback: "No showback rows",
+    noReadiness: "No readiness contract",
+    readyState: "ready",
+    reviewRequired: "review",
+    disabledByConfig: "disabled",
+    blockedState: "blocked",
+    qualityGate: "Quality Gate",
+    localFirst: "local",
+    egress: "egress",
+    outboundSurfaces: "outbound",
+    catalogHash: "catalog",
+    signalHash: "signals",
     providerBill: "provider bill",
     localLedger: "local ledger",
     ledgerProjection: "Ledger Projection",
@@ -278,6 +291,7 @@ const I18N = {
     battery: "电量",
     pricing: "价格",
     quality: "质量",
+    ecosystem: "生态",
     modelCalls: "模型调用",
     window: "时间窗口",
     filters: "过滤条件",
@@ -296,6 +310,7 @@ const I18N = {
     costIntelligence: "成本解释",
     cacheDoctor: "Cache Doctor",
     dataQuality: "数据质量",
+    integrationReadiness: "集成就绪",
     approvalQueue: "审批队列",
     approver: "审批人",
     approverRequired: "投票前请输入审批人名称",
@@ -453,6 +468,17 @@ const I18N = {
     noFleet: "暂无 Fleet 归因数据",
     noReconciliation: "尚未导入 provider 账单",
     noChargeback: "暂无团队归因数据",
+    noReadiness: "暂无集成就绪契约",
+    readyState: "就绪",
+    reviewRequired: "待复核",
+    disabledByConfig: "配置关闭",
+    blockedState: "阻断",
+    qualityGate: "质量门禁",
+    localFirst: "本地",
+    egress: "外联",
+    outboundSurfaces: "外联面",
+    catalogHash: "目录",
+    signalHash: "信号",
     providerBill: "provider 账单",
     localLedger: "本地账本",
     ledgerProjection: "账本投影",
@@ -921,6 +947,79 @@ function addOpsRow(fragment, title, detail, value = "", severity = "ok") {
   val.textContent = value;
   row.append(main, val);
   fragment.appendChild(row);
+}
+
+function shortHash(value) {
+  const text = String(value || "");
+  return text.startsWith("sha256:") ? text.slice(7, 19) : text.slice(0, 12);
+}
+
+function renderIntegrationReadiness(payload) {
+  const list = $("integration-list");
+  if (!list) return;
+  const fragment = document.createDocumentFragment();
+  const summary = (payload && payload.summary) || {};
+  const runtime = (payload && payload.runtime) || {};
+  const caps = Array.isArray(payload && payload.capabilities) ? payload.capabilities : [];
+  const failures = Number(summary.failures || 0);
+  const blocked = Number(summary.blocked || 0);
+  const review = Number(summary.review_required || 0);
+  const disabled = Number(summary.disabled_by_config || summary.disabled || 0);
+  const ready = Number(summary.ready || 0);
+  const total = Number(summary.total_capabilities || caps.length || 0);
+
+  if (!payload || total === 0) {
+    fragment.appendChild(createMessage(t("noReadiness"), "ops-empty"));
+    setText("s-integration", "-");
+    setText("s-integration-sub", t("noReadiness"));
+    setText("integration-meta", "-");
+    list.replaceChildren(fragment);
+    return;
+  }
+
+  const overall = failures || blocked ? t("blockedState") : review ? t("reviewRequired") : t("readyState");
+  const severity = failures || blocked ? "critical" : review ? "warning" : "ok";
+  const runtimeMode = runtime.read_only ? t("observerMode") : t("controlPlaneMode");
+  const outbound = [runtime.gateway_enabled, runtime.webhooks_enabled, runtime.otlp_receiver_enabled, runtime.otlp_receiver_grpc_enabled].filter(Boolean).length;
+  const runtimeDetail = `${runtimeMode} · ${t("pricing")} ${runtime.pricing_mode || "-"} · ${t("outboundSurfaces")} ${outbound}`;
+  addOpsRow(fragment, t("controlPlaneMode"), runtimeDetail, payload.local_first ? t("localFirst") : t("egress"), payload.local_first ? "ok" : "warning");
+  addOpsRow(
+    fragment,
+    t("integrationReadiness"),
+    `${ready} ${t("readyState")} · ${review} ${t("reviewRequired")} · ${disabled} ${t("disabledByConfig")} · ${blocked} ${t("blockedState")}`,
+    `${ready}/${total}`,
+    severity,
+  );
+
+  const ranked = caps.slice().sort((a, b) => {
+    const rank = { blocked: 0, "review-required": 1, "read-only-limited": 2, "disabled-by-config": 3, ready: 4 };
+    const ar = rank[a.activation_state] ?? 5;
+    const br = rank[b.activation_state] ?? 5;
+    if (ar !== br) return ar - br;
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  });
+  ranked.slice(0, 6).forEach((cap) => {
+    const stateText = cap.activation_state === "blocked"
+      ? t("blockedState")
+      : cap.activation_state === "review-required" || cap.activation_state === "read-only-limited"
+        ? t("reviewRequired")
+        : cap.activation_state === "disabled-by-config"
+          ? t("disabledByConfig")
+          : t("readyState");
+    const capSeverity = cap.activation_state === "blocked" ? "critical" : cap.activation_state === "review-required" || cap.activation_state === "read-only-limited" ? "warning" : "ok";
+    const action = Array.isArray(cap.actions) && cap.actions.length ? cap.actions[0] : "";
+    addOpsRow(fragment, cap.name || cap.id, `${cap.category || "-"} · ${cap.maturity || "-"}${action ? ` · ${action}` : ""}`, stateText, capSeverity);
+  });
+
+  const gate = Array.isArray(payload.quality_gates) && payload.quality_gates.length ? payload.quality_gates[0] : "";
+  if (gate) addOpsRow(fragment, t("qualityGate"), gate, `${Number(summary.warnings || 0)} ${t("warnings")}`, Number(summary.warnings || 0) ? "warning" : "ok");
+
+  const catalog = shortHash(payload.catalog_hash);
+  const signals = shortHash(payload.signal_coverage_hash);
+  setText("s-integration", overall.toUpperCase());
+  setText("s-integration-sub", `${ready}/${total} · ${review} ${t("reviewRequired")}`);
+  setText("integration-meta", `${t("catalogHash")} ${catalog} · ${t("signalHash")} ${signals}`);
+  list.replaceChildren(fragment);
 }
 
 function renderQuota(payload) {
@@ -1639,6 +1738,7 @@ async function refresh(options = {}) {
       quota: api("quota/status"),
       pricing: api("pricing/status"),
       quality: api("data-quality"),
+      integrationReadiness: api("integrations/readiness", { skipModel: true }),
       policyAudit: api("policy/audit", { extra: { limit: 20 } }),
       approvals: api("policy/approvals", { skipModel: true, extra: { status: "pending", limit: 20 } }),
       modelCalls: api("model-calls", { skipModel: true }),
@@ -1692,6 +1792,7 @@ async function refresh(options = {}) {
     if (data.quota) renderQuota(data.quota);
     if (data.pricing) renderPricing(data.pricing);
     if (data.quality || data.policyAudit || (data.dashboard && data.dashboard.consistency)) renderQuality(data.quality, data.policyAudit, data.dashboard && data.dashboard.consistency);
+    if (data.integrationReadiness) renderIntegrationReadiness(data.integrationReadiness);
     if (data.approvals) renderApprovalQueue(data.approvals);
     if (data.modelCalls) renderModelCalls(data.modelCalls);
     if (data.costIntel) renderCostIntelligence(data.costIntel);
