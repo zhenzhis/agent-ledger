@@ -60,6 +60,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"provider_profiles_hash":          ProviderProfilesFingerprint(),
 			"agent_profiles_hash":             AgentFrameworkProfilesFingerprint(),
 			"signal_taxonomy_hash":            SignalTaxonomyFingerprint(),
+			"signal_coverage_hash":            SignalCoverageFingerprint(),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -76,6 +77,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/provider-profiles":               getOperation("contracts", "Get provider profiles", "Static privacy-safe provider/runtime profile catalog for wrappers, routers, relays, local runtimes, edge models, and adapter CI.", "ProviderProfileCatalog"),
 			"/api/agent-profiles":                  getOperation("contracts", "Get agent framework profiles", "Static privacy-safe agent CLI, framework, wrapper, router, protocol, and observability profile catalog.", "AgentFrameworkProfileCatalog"),
 			"/api/signal-taxonomy":                 getOperation("contracts", "Get signal taxonomy", "Static privacy-safe signal dictionary for mapping adapter, router, provider, and observability metadata to canonical event families.", "SignalTaxonomyCatalog"),
+			"/api/integrations/signal-coverage":    getOperation("contracts", "Get signal coverage", "Static privacy-safe coverage report linking taxonomy signal ids to adapter, provider, and agent profile contracts.", "SignalCoverageReport"),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -183,7 +185,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -204,6 +206,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"agent_profiles_hash":             refSchema("Hash"),
 						"signal_taxonomy_uri":             stringSchema(),
 						"signal_taxonomy_hash":            refSchema("Hash"),
+						"signal_coverage_uri":             stringSchema(),
+						"signal_coverage_hash":            refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -327,6 +331,11 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"SignalTaxonomyCatalog":               signalTaxonomyCatalogSchema(),
 				"SignalTaxonomySummary":               signalTaxonomySummarySchema(),
 				"SignalTaxonomySignal":                signalTaxonomySignalSchema(),
+				"SignalCoverageReport":                signalCoverageReportSchema(),
+				"SignalCoverageSummary":               signalCoverageSummarySchema(),
+				"SignalCoverageSignal":                signalCoverageSignalSchema(),
+				"SignalCoverageAdapter":               signalCoverageAdapterSchema(),
+				"SignalCoverageGap":                   signalCoverageGapSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -1013,6 +1022,7 @@ func OpenAPIContractPaths() []string {
 		"/api/provider-profiles",
 		"/api/agent-profiles",
 		"/api/signal-taxonomy",
+		"/api/integrations/signal-coverage",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -2315,6 +2325,109 @@ func signalTaxonomySignalSchema() map[string]interface{} {
 			"privacy_class":         stringSchema(),
 			"content_safe":          boolSchema(),
 			"quality_gates":         stringArraySchema(),
+		},
+	}
+}
+
+func signalCoverageReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe report linking taxonomy signals to adapter, provider, and agent profile coverage.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "taxonomy_hash", "adapter_spec_hash", "conformance_matrix_hash", "provider_profiles_hash", "agent_profiles_hash", "privacy_policy", "summary", "signals", "adapter_kinds", "gaps", "quality_gates", "routing_guidance"},
+		"properties": map[string]interface{}{
+			"product":                 stringSchema(),
+			"contract":                constSchema("agent-ledger.signal-coverage"),
+			"version":                 stringSchema(),
+			"generated_from":          stringSchema(),
+			"local_first":             boolSchema(),
+			"read_only_safe":          boolSchema(),
+			"writes_local_state":      boolSchema(),
+			"taxonomy_hash":           refSchema("Hash"),
+			"adapter_spec_hash":       refSchema("Hash"),
+			"conformance_matrix_hash": refSchema("Hash"),
+			"provider_profiles_hash":  refSchema("Hash"),
+			"agent_profiles_hash":     refSchema("Hash"),
+			"privacy_policy":          stringSchema(),
+			"summary":                 refSchema("SignalCoverageSummary"),
+			"signals":                 refArraySchema("SignalCoverageSignal"),
+			"adapter_kinds":           refArraySchema("SignalCoverageAdapter"),
+			"gaps":                    refArraySchema("SignalCoverageGap"),
+			"quality_gates":           stringArraySchema(),
+			"routing_guidance":        stringArraySchema(),
+		},
+	}
+}
+
+func signalCoverageSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Stable signal coverage counts for adapter and profile CI.",
+		"additionalProperties": true,
+		"required":             []string{"taxonomy_signals", "adapter_kinds", "provider_profiles", "agent_profiles", "covered_signals", "required_signal_references", "unknown_signal_references", "signals_without_adapter_coverage", "gaps"},
+		"properties": map[string]interface{}{
+			"taxonomy_signals":                 integerSchema(),
+			"adapter_kinds":                    integerSchema(),
+			"provider_profiles":                integerSchema(),
+			"agent_profiles":                   integerSchema(),
+			"covered_signals":                  integerSchema(),
+			"required_signal_references":       integerSchema(),
+			"unknown_signal_references":        integerSchema(),
+			"signals_without_adapter_coverage": integerSchema(),
+			"gaps":                             integerSchema(),
+		},
+	}
+}
+
+func signalCoverageSignalSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One taxonomy signal with adapter, provider, and agent profile coverage references.",
+		"additionalProperties": true,
+		"required":             []string{"id", "label", "category", "canonical_event_types", "status"},
+		"properties": map[string]interface{}{
+			"id":                        stringSchema(),
+			"label":                     stringSchema(),
+			"category":                  stringSchema(),
+			"canonical_event_types":     stringArraySchema(),
+			"required_by_adapter_kinds": stringArraySchema(),
+			"provider_profile_ids":      stringArraySchema(),
+			"agent_profile_ids":         stringArraySchema(),
+			"status":                    stringSchema(),
+		},
+	}
+}
+
+func signalCoverageAdapterSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One adapter conformance kind and its required taxonomy signal ids.",
+		"additionalProperties": true,
+		"required":             []string{"kind", "conformance_kind", "required_signals", "expected_event_types", "fixtures", "status"},
+		"properties": map[string]interface{}{
+			"kind":                 stringSchema(),
+			"conformance_kind":     stringSchema(),
+			"required_signals":     stringArraySchema(),
+			"unknown_signals":      stringArraySchema(),
+			"expected_event_types": stringArraySchema(),
+			"fixtures":             integerSchema(),
+			"status":               stringSchema(),
+		},
+	}
+}
+
+func signalCoverageGapSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One privacy-safe coverage gap for adapter authors and profile maintainers.",
+		"additionalProperties": true,
+		"required":             []string{"severity", "surface", "reference", "message", "remediation"},
+		"properties": map[string]interface{}{
+			"severity":    stringSchema(),
+			"surface":     stringSchema(),
+			"reference":   stringSchema(),
+			"message":     stringSchema(),
+			"remediation": stringSchema(),
 		},
 	}
 }

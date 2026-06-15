@@ -40,6 +40,13 @@ func (s *Server) handleSignalTaxonomy(w http.ResponseWriter, r *http.Request) {
 	writeJSONWithETag(w, r, integrations.SignalTaxonomy(), integrations.SignalTaxonomyFingerprint())
 }
 
+func (s *Server) handleSignalCoverage(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	writeJSONWithETag(w, r, integrations.SignalCoverage(), integrations.SignalCoverageFingerprint())
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

@@ -455,7 +455,12 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "integrations":
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "signals", "signal-taxonomy":
+		if len(args) > 1 && args[1] == "coverage" {
+			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.SignalTaxonomy())
+	case "signal-coverage":
+		return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
 	case "goal":
 		return runGoalCLI(args[1:], cfg)
 	case "ui":

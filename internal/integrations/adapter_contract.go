@@ -78,7 +78,7 @@ func AdapterContractSpec() AdapterContract {
 				ConvertCommand:  "agent-ledger event validate --file event.json",
 				IngestCommand:   "agent-ledger event ingest --file event.json",
 				Endpoint:        "POST /api/events/validate or POST /api/events",
-				RequiredSignals: []string{"source", "event_type", "payload", "timestamp or generated UTC time"},
+				RequiredSignals: []string{"workload.identity", "agent.run.lifecycle", "model.identity", "usage.tokens", "tool.call.metadata", "context.reference", "artifact.reference", "evaluation.signal", "policy.decision", "project.attribution", "pricing.provenance"},
 				PrivacyNotes:    []string{"payload must be a JSON object", "prompt/content/message-like keys are rejected"},
 			},
 			{
@@ -88,7 +88,7 @@ func AdapterContractSpec() AdapterContract {
 				ConvertCommand:  "agent-ledger provider convert --file response.json",
 				IngestCommand:   "agent-ledger provider ingest --file response.json",
 				Endpoint:        "POST /api/provider/calls",
-				RequiredSignals: []string{"provider or source", "model", "usage tokens", "timestamp or source event time", "optional request/response metadata ids", "optional hashed reconciliation reference"},
+				RequiredSignals: []string{"model.identity", "usage.tokens", "pricing.provenance", "context.reference", "project.attribution"},
 				PrivacyNotes:    []string{"request/response message bodies are ignored", "headers and secrets are not persisted", "provider bill refs are hashed before persistence", "prefer provider request ids or hashes as raw_ref"},
 			},
 			{
@@ -97,7 +97,7 @@ func AdapterContractSpec() AdapterContract {
 				ConformanceKind: "provider-stream",
 				ConvertCommand:  "agent-ledger adapter conformance --kind provider-stream --file stream.sse",
 				Endpoint:        "POST /api/integrations/conformance?kind=provider-stream",
-				RequiredSignals: []string{"SSE data events", "provider response id when available", "model", "usage tokens"},
+				RequiredSignals: []string{"model.identity", "usage.tokens", "pricing.provenance"},
 				PrivacyNotes:    []string{"stream deltas are ignored", "fixtures should include usage events only", "do not store request, generation, or transcript content"},
 			},
 			{
@@ -107,7 +107,7 @@ func AdapterContractSpec() AdapterContract {
 				ConvertCommand:  "agent-ledger otel convert --file spans.json",
 				IngestCommand:   "agent-ledger otel ingest --file spans.json",
 				Endpoint:        "POST /api/otel/genai or POST /api/otlp/v1/traces",
-				RequiredSignals: []string{"trace/span id", "provider/model attributes", "usage token attributes", "start/end time"},
+				RequiredSignals: []string{"model.identity", "usage.tokens", "context.reference", "tool.call.metadata"},
 				PrivacyNotes:    []string{"message and prompt attributes are intentionally ignored", "span ids are acceptable raw_ref values", "OTLP protobuf is decoded into the same metadata-only span model as OTLP JSON"},
 			},
 			{
@@ -117,7 +117,7 @@ func AdapterContractSpec() AdapterContract {
 				ConvertCommand:  "agent-ledger a2a convert --file task.json",
 				IngestCommand:   "agent-ledger a2a ingest --file task.json",
 				Endpoint:        "POST /api/a2a/tasks",
-				RequiredSignals: []string{"task id", "state/status", "goal or project metadata", "agent/run metadata when available"},
+				RequiredSignals: []string{"workload.identity", "agent.run.lifecycle", "context.reference", "artifact.reference", "evaluation.signal", "policy.decision", "project.attribution"},
 				PrivacyNotes:    []string{"store task metadata and artifact hashes only", "do not store task messages or transcripts"},
 			},
 		},

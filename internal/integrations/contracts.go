@@ -214,6 +214,22 @@ func ContractBundleFor(opts Options, runtime *storage.RuntimeStatus) ContractBun
 				WritesLocalState: false,
 			},
 			{
+				ID:               "signal-coverage",
+				Name:             "Signal Coverage Report",
+				Contract:         "agent-ledger.signal-coverage",
+				Version:          "v1",
+				Hash:             SignalCoverageFingerprint(),
+				PrimaryURI:       "/api/integrations/signal-coverage",
+				HTTPMethods:      []string{"GET"},
+				CLICommands:      []string{"agent-ledger signal-coverage", "agent-ledger signals coverage"},
+				MCPTools:         []string{"ledger.signal_coverage"},
+				MCPResources:     []string{"agent-ledger://integrations/signal-coverage"},
+				Revalidation:     "ETag + If-None-Match",
+				Privacy:          "static taxonomy, adapter, provider, and agent profile coverage metadata only",
+				ReadOnlySafe:     true,
+				WritesLocalState: false,
+			},
+			{
 				ID:               "integration-recommendation",
 				Name:             "Integration Recommendation Advisor",
 				Contract:         "agent-ledger.integration-recommendation",
@@ -346,6 +362,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	catalogHash := CatalogFingerprintFrom(catalog)
 	discovery := Discovery(opts)
 	adapter := AdapterContractSpec()
+	coverage := SignalCoverage()
 	openAPI := OpenAPISpecFor(opts, runtime)
 	openAPIHash := OpenAPIFingerprint(opts, runtime)
 	bundle := ContractBundleFor(opts, runtime)
@@ -367,6 +384,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("discovery.provider_profiles", discovery.ProviderProfilesURI == "/api/provider-profiles" && discovery.ProviderProfilesHash == ProviderProfilesFingerprint(), "critical", "discovery points to provider profile catalog", "/api/provider-profiles "+ProviderProfilesFingerprint(), discovery.ProviderProfilesURI+" "+discovery.ProviderProfilesHash)
 	addCheck("discovery.agent_profiles", discovery.AgentProfilesURI == "/api/agent-profiles" && discovery.AgentProfilesHash == AgentFrameworkProfilesFingerprint(), "critical", "discovery points to agent framework profile catalog", "/api/agent-profiles "+AgentFrameworkProfilesFingerprint(), discovery.AgentProfilesURI+" "+discovery.AgentProfilesHash)
 	addCheck("discovery.signal_taxonomy", discovery.SignalTaxonomyURI == "/api/signal-taxonomy" && discovery.SignalTaxonomyHash == SignalTaxonomyFingerprint(), "critical", "discovery points to signal taxonomy catalog", "/api/signal-taxonomy "+SignalTaxonomyFingerprint(), discovery.SignalTaxonomyURI+" "+discovery.SignalTaxonomyHash)
+	addCheck("discovery.signal_coverage", discovery.SignalCoverageURI == "/api/integrations/signal-coverage" && discovery.SignalCoverageHash == SignalCoverageFingerprint(), "critical", "discovery points to signal coverage report", "/api/integrations/signal-coverage "+SignalCoverageFingerprint(), discovery.SignalCoverageURI+" "+discovery.SignalCoverageHash)
 	addCheck("discovery.integration_recommendation", discovery.RecommendationURI == "/api/integrations/recommendation" && discovery.RecommendationHash == IntegrationRecommendationContractFingerprint(), "critical", "discovery points to integration recommendation advisor", "/api/integrations/recommendation "+IntegrationRecommendationContractFingerprint(), discovery.RecommendationURI+" "+discovery.RecommendationHash)
 	addCheck("discovery.conformance_matrix", discovery.ConformanceMatrixURI == "/api/integrations/conformance-matrix" && discovery.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint(), "critical", "discovery points to adapter conformance matrix", "/api/integrations/conformance-matrix "+AdapterConformanceMatrixFingerprint(), discovery.ConformanceMatrixURI+" "+discovery.ConformanceMatrixHash)
 	addCheck("discovery.schema_hash", discovery.CanonicalSchemaHash == storage.CanonicalEventSchemaFingerprint(), "critical", "discovery canonical schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), discovery.CanonicalSchemaHash)
@@ -381,6 +399,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("adapter.provider_profiles", adapter.ProviderProfilesURI == "/api/provider-profiles" && adapter.ProviderProfilesHash == ProviderProfilesFingerprint(), "critical", "adapter contract links provider profile catalog", "/api/provider-profiles "+ProviderProfilesFingerprint(), adapter.ProviderProfilesURI+" "+adapter.ProviderProfilesHash)
 	matrix := AdapterConformanceMatrixSpec()
 	addCheck("adapter.conformance_matrix", matrix.AdapterSpecHash == AdapterContractFingerprint() && matrix.ProviderProfilesHash == ProviderProfilesFingerprint() && len(matrix.Kinds) == len(SupportedAdapterConformanceKinds()), "critical", "adapter conformance matrix links schema, provider profiles, and every decoder kind", AdapterContractFingerprint()+" "+ProviderProfilesFingerprint()+" kinds="+strconv.Itoa(len(SupportedAdapterConformanceKinds())), matrix.AdapterSpecHash+" "+matrix.ProviderProfilesHash+" kinds="+strconv.Itoa(len(matrix.Kinds)))
+	addCheck("adapter.signal_coverage", coverage.TaxonomyHash == SignalTaxonomyFingerprint() && coverage.AdapterSpecHash == AdapterContractFingerprint() && coverage.ConformanceMatrixHash == AdapterConformanceMatrixFingerprint() && coverage.Summary.UnknownSignalReferences == 0 && coverage.Summary.SignalsWithoutAdapterCoverage == 0, "critical", "adapter required signals are taxonomy-backed and covered by conformance", "unknown=0,without_adapter=0", signalCoverageCheckSummary(coverage))
 	privacyLanguageOK, privacyLanguageActual := contractPublicPrivacyLanguageStatus(map[string]interface{}{
 		"adapter_contract":           adapter,
 		"adapter_conformance_matrix": matrix,
@@ -398,6 +417,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		}),
 		"openapi":           openAPI,
 		"provider_profiles": ProviderProfiles(),
+		"signal_coverage":   coverage,
 		"signal_taxonomy":   SignalTaxonomy(),
 	})
 	addCheck("privacy.public_metadata_language", privacyLanguageOK, "critical", "public metadata uses content-safe privacy language", "no unsafe content-capture phrases in public metadata documents", privacyLanguageActual)
@@ -415,6 +435,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 		{id: "provider-profiles", hash: ProviderProfilesFingerprint()},
 		{id: "agent-profiles", hash: AgentFrameworkProfilesFingerprint()},
 		{id: "signal-taxonomy", hash: SignalTaxonomyFingerprint()},
+		{id: "signal-coverage", hash: SignalCoverageFingerprint()},
 		{id: "integration-recommendation", hash: IntegrationRecommendationContractFingerprint()},
 		{id: "adapter-conformance-matrix", hash: AdapterConformanceMatrixFingerprint()},
 		{id: "runtime-status", hash: hashJSONPayload(runtime)},
@@ -442,6 +463,7 @@ func ContractVerificationReportFor(opts Options, runtime *storage.RuntimeStatus)
 	addCheck("openapi.provider_profiles_hash", contractStringValue(meta["provider_profiles_hash"]) == ProviderProfilesFingerprint(), "critical", "OpenAPI provider profile hash matches generated catalog", ProviderProfilesFingerprint(), contractStringValue(meta["provider_profiles_hash"]))
 	addCheck("openapi.agent_profiles_hash", contractStringValue(meta["agent_profiles_hash"]) == AgentFrameworkProfilesFingerprint(), "critical", "OpenAPI agent framework profile hash matches generated catalog", AgentFrameworkProfilesFingerprint(), contractStringValue(meta["agent_profiles_hash"]))
 	addCheck("openapi.signal_taxonomy_hash", contractStringValue(meta["signal_taxonomy_hash"]) == SignalTaxonomyFingerprint(), "critical", "OpenAPI signal taxonomy hash matches generated catalog", SignalTaxonomyFingerprint(), contractStringValue(meta["signal_taxonomy_hash"]))
+	addCheck("openapi.signal_coverage_hash", contractStringValue(meta["signal_coverage_hash"]) == SignalCoverageFingerprint(), "critical", "OpenAPI signal coverage hash matches generated report", SignalCoverageFingerprint(), contractStringValue(meta["signal_coverage_hash"]))
 	addCheck("openapi.integration_recommendation_hash", contractStringValue(meta["integration_recommendation_hash"]) == IntegrationRecommendationContractFingerprint(), "critical", "OpenAPI integration recommendation hash matches generated contract", IntegrationRecommendationContractFingerprint(), contractStringValue(meta["integration_recommendation_hash"]))
 	addCheck("openapi.conformance_matrix_hash", contractStringValue(meta["conformance_matrix_hash"]) == AdapterConformanceMatrixFingerprint(), "critical", "OpenAPI conformance matrix hash matches generated matrix", AdapterConformanceMatrixFingerprint(), contractStringValue(meta["conformance_matrix_hash"]))
 	addCheck("openapi.schema_hash", contractStringValue(meta["canonical_schema_hash"]) == storage.CanonicalEventSchemaFingerprint(), "critical", "OpenAPI schema hash matches generated schema", storage.CanonicalEventSchemaFingerprint(), contractStringValue(meta["canonical_schema_hash"]))
@@ -516,6 +538,12 @@ func a2aDiscoveryCheckSummary(meta A2ADiscoveryMetadata) string {
 		",full_server=" + boolString(meta.FullServer) +
 		",prompt_content_stored=" + boolString(meta.PromptContentStored) +
 		",message_content_stored=" + boolString(meta.MessageContentStored)
+}
+
+func signalCoverageCheckSummary(report SignalCoverageReport) string {
+	return "unknown=" + strconv.Itoa(report.Summary.UnknownSignalReferences) +
+		",without_adapter=" + strconv.Itoa(report.Summary.SignalsWithoutAdapterCoverage) +
+		",gaps=" + strconv.Itoa(report.Summary.Gaps)
 }
 
 func admissionCheckContractHash() string {

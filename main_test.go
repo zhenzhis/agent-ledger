@@ -228,6 +228,9 @@ func TestOpenAPICLIOutputsControlPlaneSpec(t *testing.T) {
 	if paths["/api/signal-taxonomy"] == nil {
 		t.Fatalf("openapi output missing signal taxonomy path: %+v", paths)
 	}
+	if paths["/api/integrations/signal-coverage"] == nil {
+		t.Fatalf("openapi output missing signal coverage path: %+v", paths)
+	}
 }
 
 func TestUICLICheckOutputsContractReport(t *testing.T) {
@@ -327,9 +330,38 @@ func TestSignalTaxonomyCLIOutputsReadOnlyCatalog(t *testing.T) {
 	if !strings.Contains(out, "usage.tokens") || !strings.Contains(out, "workload.identity") || !strings.Contains(out, "pricing.provenance") {
 		t.Fatalf("signal taxonomy missing core signal coverage: %s", out)
 	}
-	for _, forbidden := range []string{"api_key", "sk-", "C:/Users", "session_id", "prompt text", "response text"} {
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
 			t.Fatalf("signal taxonomy leaked %q: %s", forbidden, out)
+		}
+	}
+}
+
+func TestSignalCoverageCLIOutputsReadOnlyReport(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"signals", "coverage"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI signals coverage: %v", err)
+	}
+	var report integrations.SignalCoverageReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode signal coverage output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.signal-coverage" || !report.ReadOnlySafe || report.WritesLocalState ||
+		report.Summary.UnknownSignalReferences != 0 || report.Summary.SignalsWithoutAdapterCoverage != 0 {
+		t.Fatalf("unexpected signal coverage report: %+v", report)
+	}
+	if !strings.Contains(out, "provider-stream") || !strings.Contains(out, "usage.tokens") || !strings.Contains(out, "agent.run.lifecycle") {
+		t.Fatalf("signal coverage missing core adapter/signal mapping: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("signal coverage leaked %q: %s", forbidden, out)
 		}
 	}
 }

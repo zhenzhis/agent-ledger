@@ -340,6 +340,7 @@ collectors / CLI wrapper / MCP tools -> canonical events -> workload ledger
 | `GET /api/provider-profiles` | 静态 provider/runtime profile 目录，覆盖 OpenAI-compatible、Anthropic、relay、Gemini-style usageMetadata、Ollama、vLLM、LM Studio、本地模型与边缘端 runtime |
 | `GET /api/agent-profiles` | 静态 Agent CLI/framework/wrapper/router profile 目录，覆盖 Codex、Claude Code、OpenCode、Kiro、OpenClaw、Pi、MCP wrapper、A2A、OpenTelemetry、CI router、gateway 和通用多智能体框架 |
 | `GET /api/signal-taxonomy` | 静态隐私安全 signal 字典，把 adapter、router、provider 与 observability metadata 映射到 canonical event families |
+| `GET /api/integrations/signal-coverage` | 静态隐私安全 signal coverage 报告，把 taxonomy ids 关联到 adapter kind、provider profile 与 agent profile |
 | `GET /api/integrations/recommendation` | 只读接入推荐器：把 agent/provider profile、目标 surface 与可用 signals 映射为 ingest、校验、隐私和质量门槛 |
 | `GET /api/integrations/adapter-spec` | 面向未来 Agent CLI、框架、gateway、OTel、A2A 与 provider 集成的机器可读 adapter 契约 |
 | `GET /api/integrations/conformance-matrix` | 静态隐私安全 adapter conformance matrix，列出支持的输入类型、严格 fixture 路径、CI 命令、预期事件族和 provider profile 关联 |
@@ -405,6 +406,8 @@ MCP `tools/list` 会返回标准风格的 `annotations.readOnlyHint`，以及 `_
 
 `GET /api/integrations`、`GET /.well-known/agent-ledger.json`、`agent-ledger integrations`、MCP `ledger.discovery`、MCP `ledger.integrations` 和 `agent-ledger://discovery/manifest` 会暴露运行时能力字段：`writes_local_state`、`available_in_read_only`、`runtime_status`。Discovery manifest 还会以一等字段暴露 `contract_bundle_uri`、`openapi_uri`、`capability_catalog_hash`、`provider_profiles_uri`、`provider_profiles_hash`、`agent_profiles_uri`、`agent_profiles_hash`、`signal_taxonomy_uri`、`signal_taxonomy_hash`、`integration_recommendation_uri`、`integration_recommendation_hash`、`conformance_matrix_uri`、`conformance_matrix_hash`、`runtime_status_uri`、`canonical_schema_uri`、`canonical_schema_hash`、`event_examples_uri`、`adapter_spec_uri`、`adapter_spec_hash`、`adapter_conformance_uri`，便于轻量 wrapper 自动接入。`GET /api/provider-profiles`、`agent-ledger provider profiles`、MCP `ledger.provider_profiles` 与 `agent-ledger://integrations/provider-profiles` 会暴露静态、隐私安全的 provider/runtime profile 目录，覆盖 OpenAI-compatible provider、Anthropic、OpenRouter-style relay、LiteLLM proxy、Gemini-style `usageMetadata`、Ollama、vLLM、LM Studio、本地模型与边缘端 runtime。`GET /api/agent-profiles`、`agent-ledger agent profiles`、MCP `ledger.agent_profiles` 与 `agent-ledger://integrations/agent-profiles` 会暴露静态、隐私安全的 agent framework profile 目录，覆盖本地 CLI、wrapper、router、协议适配器、观测桥接和通用多智能体框架。`GET /api/signal-taxonomy`、`agent-ledger signals`、MCP `ledger.signal_taxonomy` 与 `agent-ledger://integrations/signal-taxonomy` 会暴露静态 signal 字典，把 adapter、router、provider 与 observability metadata 映射到 canonical event families、recommended fields、precision labels、privacy classes 与 quality gates。`GET /api/integrations/recommendation`、`agent-ledger agent recommend`、MCP `ledger.integration_recommendation` 与 `agent-ledger://integrations/recommendation` 会返回只读接入推荐报告，把 agent profile、provider profile、目标 surface 和可用 signals 映射为推荐 ingest path、fallback path、strict CI 命令、隐私检查清单、质量门槛、预期事件类型、缺失信号和相关 contract hash。`GET /api/integrations/conformance-matrix`、`agent-ledger adapter matrix`、MCP `ledger.conformance_matrix` 与 `agent-ledger://integrations/conformance-matrix` 会暴露静态 adapter conformance matrix，供 wrapper 和 CI 选择 decoder kind、fixture family、strict command 与预期 metadata event family。`GET /api/contracts`、`agent-ledger contracts`、MCP `ledger.contracts` 和 `agent-ledger://contracts/bundle` 会暴露单次握手的 contract bundle，包含文档 URI、hash、缓存语义、CLI 命令与 MCP 入口。`GET /api/contracts/verify`、`agent-ledger contracts verify`、MCP `ledger.contracts_verify` 和 `agent-ledger://contracts/verification` 会暴露机器可读自检报告，用于校验 discovery、bundle、OpenAPI、schema、adapter、runtime、只读语义与隐私不变量。`GET /api/openapi.json`、`agent-ledger openapi`、MCP `ledger.openapi` 和 `agent-ledger://contracts/openapi` 会暴露 metadata-only OpenAPI 3.1 文档，用于稳定 REST 控制面接口。`GET /api/integrations/adapter-spec`、`agent-ledger adapter spec`、MCP `ledger.adapter_contract` 和 `agent-ledger://integrations/adapter-contract` 会暴露同一份机器可读 adapter 契约。`GET /api/runtime/status` 与 `agent-ledger runtime` 提供同一个进程级 observer/control-plane 状态，适合探针使用。`GET /api/config/status`、`agent-ledger config status`、MCP `ledger.config_status` 与 `agent-ledger://config/status` 提供隐私安全的部署配置状态报告，适合 wrapper、CI 和运维检查。`GET /api/readiness`、`agent-ledger readiness`、MCP `ledger.readiness` 与 `agent-ledger://readiness` 提供隐私安全的就绪报告，汇总数据库、配置、运行模式、契约、采集和价格证据，但不泄露本地数据。`GET /api/admission/check`、`agent-ledger admission check`、MCP `ledger.admission_check` 与 `agent-ledger://admission/check` 可让 wrapper 和 router 在真正调用前，按当前 role/read-only 规则 dry-run HTTP、CLI 与 MCP 操作。REST discovery、contract bundle、contract verification、OpenAPI、catalog、provider profiles、agent profiles、signal taxonomy、integration recommendation、conformance matrix、runtime status、config status、readiness、admission、adapter spec 和 event schema 端点会返回强 `ETag`，并支持 `If-None-Match` 返回 `304 Not Modified`，让 wrapper 不必重复解析未变化的契约 JSON。Agent router 和 wrapper 应读取这些字段，而不是硬编码 endpoint 假设，尤其是在启用 `rbac.read_only` 时。
 
+Signal coverage 也会通过 discovery 中的 `signal_coverage_uri` 与 `signal_coverage_hash`、REST `GET /api/integrations/signal-coverage`、CLI `agent-ledger signal-coverage` 或 `agent-ledger signals coverage`、MCP `ledger.signal_coverage`、资源 `agent-ledger://integrations/signal-coverage` 暴露。它会校验 adapter `required_signals` 是否全部来自 canonical taxonomy ids，并在启用新 adapter 前显式报告 coverage gap。
+
 当前工具：
 
 - `ledger.current_budget`
@@ -446,6 +449,7 @@ MCP `tools/list` 会返回标准风格的 `annotations.readOnlyHint`，以及 `_
 - `ledger.provider_profiles`
 - `ledger.agent_profiles`
 - `ledger.signal_taxonomy`
+- `ledger.signal_coverage`
 - `ledger.integration_recommendation`
 - `ledger.get_policy`
 - `ledger.policy_audit`
@@ -468,6 +472,7 @@ MCP `tools/list` 会返回标准风格的 `annotations.readOnlyHint`，以及 `_
 - `agent-ledger://integrations/provider-profiles`
 - `agent-ledger://integrations/agent-profiles`
 - `agent-ledger://integrations/signal-taxonomy`
+- `agent-ledger://integrations/signal-coverage`
 - `agent-ledger://integrations/recommendation`
 - `agent-ledger://integrations/adapter-contract`
 - `agent-ledger://integrations/conformance-matrix`

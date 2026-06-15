@@ -99,6 +99,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.signal_taxonomy") {
 		t.Fatalf("expected signal taxonomy tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.signal_coverage") {
+		t.Fatalf("expected signal coverage tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -174,6 +177,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	signalTaxonomyMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.signal_taxonomy"))
 	if signalTaxonomyMeta["write_mode"] != "none" || signalTaxonomyMeta["writes_local_state"] != false || signalTaxonomyMeta["available_in_read_only"] != true {
 		t.Fatalf("signal taxonomy tool metadata wrong: %#v", signalTaxonomyMeta)
+	}
+	signalCoverageMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.signal_coverage"))
+	if signalCoverageMeta["write_mode"] != "none" || signalCoverageMeta["writes_local_state"] != false || signalCoverageMeta["available_in_read_only"] != true {
+		t.Fatalf("signal coverage tool metadata wrong: %#v", signalCoverageMeta)
 	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
@@ -260,6 +267,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/signal-taxonomy") {
 		t.Fatalf("expected signal taxonomy resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://integrations/signal-coverage") {
+		t.Fatalf("expected signal coverage resource, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
@@ -441,6 +451,43 @@ func TestMCPSignalTaxonomyToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("signal taxonomy resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPSignalCoverageToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.signal_coverage","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/signal-coverage"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.signal-coverage" || toolPayload["local_first"] != true ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false {
+		t.Fatalf("unexpected signal coverage tool payload: %#v", toolPayload)
+	}
+	summary := toolPayload["summary"].(map[string]interface{})
+	if summary["unknown_signal_references"].(float64) != 0 || summary["signals_without_adapter_coverage"].(float64) != 0 {
+		t.Fatalf("unexpected signal coverage summary: %#v", summary)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("signal coverage tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.signal-coverage"`) ||
+		!strings.Contains(resourceText, `"conformance_kind": "provider-stream"`) ||
+		!strings.Contains(resourceText, `"id": "usage.tokens"`) {
+		t.Fatalf("unexpected signal coverage resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("signal coverage resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

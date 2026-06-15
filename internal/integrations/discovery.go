@@ -44,6 +44,8 @@ type DiscoveryManifest struct {
 	AgentProfilesHash     string               `json:"agent_profiles_hash"`
 	SignalTaxonomyURI     string               `json:"signal_taxonomy_uri"`
 	SignalTaxonomyHash    string               `json:"signal_taxonomy_hash"`
+	SignalCoverageURI     string               `json:"signal_coverage_uri"`
+	SignalCoverageHash    string               `json:"signal_coverage_hash"`
 	RecommendationURI     string               `json:"integration_recommendation_uri"`
 	RecommendationHash    string               `json:"integration_recommendation_hash"`
 	ContractBundleURI     string               `json:"contract_bundle_uri"`
@@ -141,6 +143,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		AgentProfilesHash:     AgentFrameworkProfilesFingerprint(),
 		SignalTaxonomyURI:     "/api/signal-taxonomy",
 		SignalTaxonomyHash:    SignalTaxonomyFingerprint(),
+		SignalCoverageURI:     "/api/integrations/signal-coverage",
+		SignalCoverageHash:    SignalCoverageFingerprint(),
 		RecommendationURI:     "/api/integrations/recommendation",
 		RecommendationHash:    IntegrationRecommendationContractFingerprint(),
 		ContractBundleURI:     "/api/contracts",

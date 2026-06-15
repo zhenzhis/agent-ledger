@@ -550,6 +550,7 @@ func tools() []map[string]interface{} {
 		tool("ledger.provider_profiles", "Return the privacy-safe provider and runtime profile catalog for adapters, routers, relays, local runtimes, and edge models.", map[string]interface{}{}),
 		tool("ledger.agent_profiles", "Return the privacy-safe agent framework profile catalog for CLIs, wrappers, routers, protocol adapters, and observability bridges.", map[string]interface{}{}),
 		tool("ledger.signal_taxonomy", "Return the static privacy-safe signal taxonomy for wrappers, routers, provider adapters, and observability bridges.", map[string]interface{}{}),
+		tool("ledger.signal_coverage", "Return the static privacy-safe signal coverage report linking taxonomy signals to adapters, providers, and agent profiles.", map[string]interface{}{}),
 		tool("ledger.integration_recommendation", "Return a read-only integration recommendation for an agent/profile/provider/surface combination using static Agent Ledger catalogs.", map[string]interface{}{
 			"agent_profile_id":    stringSchema(),
 			"agent":               stringSchema(),
@@ -692,6 +693,7 @@ func resources() []map[string]interface{} {
 		resource("agent-ledger://integrations/provider-profiles", "Provider Profile Catalog", "Privacy-safe provider/runtime profile catalog for adapters, routers, relays, local runtimes, and edge models.", "application/json"),
 		resource("agent-ledger://integrations/agent-profiles", "Agent Framework Profile Catalog", "Privacy-safe agent CLI, framework, wrapper, router, protocol, and observability profile catalog.", "application/json"),
 		resource("agent-ledger://integrations/signal-taxonomy", "Signal Taxonomy Catalog", "Static privacy-safe signal dictionary for mapping adapter and router metadata to canonical event families.", "application/json"),
+		resource("agent-ledger://integrations/signal-coverage", "Signal Coverage Report", "Static privacy-safe coverage report linking taxonomy signal ids to adapter, provider, and agent profile contracts.", "application/json"),
 		resource("agent-ledger://integrations/recommendation", "Integration Recommendation", "Read-only advisor for choosing Agent Ledger ingest, validation, privacy, and quality gates from static integration catalogs; supports agent/provider/surface/signals query parameters.", "application/json"),
 		resource("agent-ledger://integrations/adapter-contract", "Adapter Contract", "Machine-readable contract for writing privacy-safe Agent Ledger adapters.", "application/json"),
 		resource("agent-ledger://integrations/conformance-matrix", "Adapter Conformance Matrix", "Privacy-safe matrix of supported adapter input kinds, strict CI fixtures, expected event families, and validation entrypoints.", "application/json"),
@@ -840,6 +842,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (interface{}, error
 		return integrations.AgentFrameworkProfiles(), nil
 	case "ledger.signal_taxonomy":
 		return integrations.SignalTaxonomy(), nil
+	case "ledger.signal_coverage":
+		return integrations.SignalCoverage(), nil
 	case "ledger.integration_recommendation":
 		return toolIntegrationRecommendation(args)
 	case "ledger.get_policy":
@@ -989,6 +993,8 @@ func (s *Server) resourcePayload(uri string) (interface{}, error) {
 		return integrations.AgentFrameworkProfiles(), nil
 	case "agent-ledger://integrations/signal-taxonomy":
 		return integrations.SignalTaxonomy(), nil
+	case "agent-ledger://integrations/signal-coverage":
+		return integrations.SignalCoverage(), nil
 	case "agent-ledger://integrations/recommendation":
 		return integrations.IntegrationRecommendation(integrations.IntegrationRecommendationFromValues(values)), nil
 	case "agent-ledger://integrations/adapter-contract":
