@@ -120,6 +120,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.integration_upgrade_gate") {
 		t.Fatalf("expected integration upgrade gate tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.integration_production_gate") {
+		t.Fatalf("expected integration production gate tool, got %#v", tools)
+	}
 	if !hasTool(tools, "ledger.schema_evolution_gate") {
 		t.Fatalf("expected schema evolution gate tool, got %#v", tools)
 	}
@@ -226,6 +229,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	integrationUpgradeGateMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_upgrade_gate"))
 	if integrationUpgradeGateMeta["write_mode"] != "none" || integrationUpgradeGateMeta["writes_local_state"] != false || integrationUpgradeGateMeta["available_in_read_only"] != true {
 		t.Fatalf("integration upgrade gate tool metadata wrong: %#v", integrationUpgradeGateMeta)
+	}
+	integrationProductionGateMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_production_gate"))
+	if integrationProductionGateMeta["write_mode"] != "none" || integrationProductionGateMeta["writes_local_state"] != false || integrationProductionGateMeta["available_in_read_only"] != true {
+		t.Fatalf("integration production gate tool metadata wrong: %#v", integrationProductionGateMeta)
 	}
 	schemaEvolutionGateMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.schema_evolution_gate"))
 	if schemaEvolutionGateMeta["write_mode"] != "none" || schemaEvolutionGateMeta["writes_local_state"] != false || schemaEvolutionGateMeta["available_in_read_only"] != true {
@@ -334,6 +341,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/upgrade-gate") {
 		t.Fatalf("expected integration upgrade gate resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://integrations/production-gate") {
+		t.Fatalf("expected integration production gate resource, got %#v", resources)
 	}
 	if !hasResource(resources, "agent-ledger://schema/evolution-gate") {
 		t.Fatalf("expected schema evolution gate resource, got %#v", resources)
@@ -741,6 +751,44 @@ func TestMCPIntegrationUpgradeGateToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("integration upgrade gate resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPIntegrationProductionGateToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.integration_production_gate","arguments":{"strict":true}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/production-gate?strict=true"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.integration-production-gate" ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false ||
+		toolPayload["gate_hash"] == "" {
+		t.Fatalf("unexpected integration production gate tool payload: %#v", toolPayload)
+	}
+	decision := toolPayload["decision"].(map[string]interface{})
+	if decision["status"] != "blocked" || decision["recommended_ci_exit_code"] != float64(1) {
+		t.Fatalf("unexpected integration production gate decision: %#v", decision)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("integration production gate tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.integration-production-gate"`) ||
+		!strings.Contains(resourceText, `"status": "blocked"`) ||
+		!strings.Contains(resourceText, `"agent-ledger integrations production-gate --strict"`) {
+		t.Fatalf("unexpected integration production gate resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("integration production gate resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }

@@ -75,6 +75,7 @@ CLI：
 ./agent-ledger goal coverage
 ./agent-ledger openapi
 ./agent-ledger integrations
+./agent-ledger integrations production-gate --strict
 ./agent-ledger signals
 ./agent-ledger runtime
 ./agent-ledger ui check

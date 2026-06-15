@@ -38,6 +38,7 @@ func TestIntegrationEvidenceKitForCodexOpenAI(t *testing.T) {
 		report.Hashes.IntegrationDriftHash != IntegrationDriftOpenAPIFingerprint(Options{}, runtime) ||
 		report.Hashes.IntegrationLockfileHash != IntegrationLockfileOpenAPIFingerprint(Options{}, runtime) ||
 		report.Hashes.IntegrationUpgradeGateHash != IntegrationUpgradeGateOpenAPIFingerprint(Options{}, runtime) ||
+		report.Hashes.IntegrationProductionGateHash != IntegrationProductionGateOpenAPIFingerprint(Options{}, runtime) ||
 		report.Hashes.SchemaEvolutionGateHash != SchemaEvolutionGateOpenAPIFingerprint() {
 		t.Fatalf("unexpected evidence hashes: %+v", report.Hashes)
 	}
@@ -47,6 +48,7 @@ func TestIntegrationEvidenceKitForCodexOpenAI(t *testing.T) {
 		"agent-ledger integrations drift --strict",
 		"agent-ledger integrations lockfile",
 		"agent-ledger integrations upgrade-gate --strict",
+		"agent-ledger integrations production-gate --strict",
 		"agent-ledger schema-gate",
 		"agent-ledger integrations rollout-plan --agent codex-cli --provider openai-official --surface provider-stream --min-confidence 0.8",
 		"agent-ledger adapter conformance --kind provider-stream --strict --file examples/adapter-fixtures/provider-openai-chat-stream.sse",
@@ -59,6 +61,7 @@ func TestIntegrationEvidenceKitForCodexOpenAI(t *testing.T) {
 		"integration-drift",
 		"integration-lockfile",
 		"integration-upgrade-gate",
+		"integration-production-gate",
 		"schema-evolution-gate",
 		"projection-quality",
 		"projection-repair",

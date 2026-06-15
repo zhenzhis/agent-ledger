@@ -43,6 +43,7 @@ func TestDiscoveryEndpoint(t *testing.T) {
 		manifest.DriftURI != "/api/integrations/drift" ||
 		manifest.LockfileURI != "/api/integrations/lockfile" ||
 		manifest.UpgradeGateURI != "/api/integrations/upgrade-gate" ||
+		manifest.ProductionGateURI != "/api/integrations/production-gate" ||
 		manifest.SchemaEvolutionGateURI != "/api/schema/evolution-gate" ||
 		manifest.RecommendationURI != "/api/integrations/recommendation" ||
 		manifest.CanonicalSchemaURI != "/api/event-schema" || manifest.EventExamplesURI != "/api/event-examples" ||
@@ -86,6 +87,9 @@ func TestDiscoveryEndpoint(t *testing.T) {
 	if manifest.UpgradeGateHash == "" || manifest.UpgradeGateHash != integrations.IntegrationUpgradeGateOpenAPIFingerprint(srv.integrationOptions(), nil) {
 		t.Fatalf("unexpected integration upgrade gate hash: %+v", manifest)
 	}
+	if manifest.ProductionGateHash == "" || manifest.ProductionGateHash != integrations.IntegrationProductionGateOpenAPIFingerprint(srv.integrationOptions(), nil) {
+		t.Fatalf("unexpected integration production gate hash: %+v", manifest)
+	}
 	if manifest.SchemaEvolutionGateHash == "" || manifest.SchemaEvolutionGateHash != integrations.SchemaEvolutionGateOpenAPIFingerprint() {
 		t.Fatalf("unexpected schema evolution gate hash: %+v", manifest)
 	}
@@ -125,7 +129,7 @@ func TestContractsEndpoint(t *testing.T) {
 	if bundle.Contract != "agent-ledger.contract-bundle" || bundle.BundleHash == "" || !strings.HasPrefix(bundle.BundleHash, "sha256:") {
 		t.Fatalf("unexpected contract bundle: %+v", bundle)
 	}
-	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "signal-taxonomy") || !contractBundleHasDocument(bundle, "signal-coverage") || !contractBundleHasDocument(bundle, "integration-readiness") || !contractBundleHasDocument(bundle, "integration-smoke") || !contractBundleHasDocument(bundle, "integration-evidence-kit") || !contractBundleHasDocument(bundle, "integration-drift") || !contractBundleHasDocument(bundle, "integration-lockfile") || !contractBundleHasDocument(bundle, "integration-upgrade-gate") || !contractBundleHasDocument(bundle, "schema-evolution-gate") || !contractBundleHasDocument(bundle, "integration-recommendation") || !contractBundleHasDocument(bundle, "runtime-status") ||
+	if !contractBundleHasDocument(bundle, "discovery") || !contractBundleHasDocument(bundle, "goal-coverage") || !contractBundleHasDocument(bundle, "openapi") || !contractBundleHasDocument(bundle, "provider-profiles") || !contractBundleHasDocument(bundle, "agent-profiles") || !contractBundleHasDocument(bundle, "signal-taxonomy") || !contractBundleHasDocument(bundle, "signal-coverage") || !contractBundleHasDocument(bundle, "integration-readiness") || !contractBundleHasDocument(bundle, "integration-smoke") || !contractBundleHasDocument(bundle, "integration-evidence-kit") || !contractBundleHasDocument(bundle, "integration-drift") || !contractBundleHasDocument(bundle, "integration-lockfile") || !contractBundleHasDocument(bundle, "integration-upgrade-gate") || !contractBundleHasDocument(bundle, "integration-production-gate") || !contractBundleHasDocument(bundle, "schema-evolution-gate") || !contractBundleHasDocument(bundle, "integration-recommendation") || !contractBundleHasDocument(bundle, "runtime-status") ||
 		!contractBundleHasDocument(bundle, "admission-check") || !contractBundleHasDocument(bundle, "canonical-event-schema") || !contractBundleHasDocument(bundle, "adapter-contract") || !contractBundleHasDocument(bundle, "adapter-conformance-matrix") {
 		t.Fatalf("contract bundle missing core documents: %+v", bundle.Documents)
 	}
@@ -376,6 +380,27 @@ func TestIntegrationUpgradeGateEndpoint(t *testing.T) {
 	assertETagRevalidates(t, srv.handleIntegrationUpgradeGate, req.URL.String(), rr.Header().Get("ETag"))
 }
 
+func TestIntegrationProductionGateEndpoint(t *testing.T) {
+	db := testServerDB(t)
+	srv := New(db, "", Options{})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/integrations/production-gate?strict=true", nil)
+	rr := httptest.NewRecorder()
+	srv.handleIntegrationProductionGate(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("production gate status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var report integrations.IntegrationProductionGateReport
+	if err := json.Unmarshal(rr.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode production gate: %v", err)
+	}
+	if report.Contract != "agent-ledger.integration-production-gate" || !report.ReadOnlySafe ||
+		report.WritesLocalState || report.Decision.Status != "blocked" || report.GateHash == "" ||
+		report.Summary.Blocked == 0 {
+		t.Fatalf("unexpected production gate: %+v", report)
+	}
+	assertETagRevalidates(t, srv.handleIntegrationProductionGate, req.URL.String(), rr.Header().Get("ETag"))
+}
+
 func TestSchemaEvolutionGateEndpoint(t *testing.T) {
 	db := testServerDB(t)
 	srv := New(db, "", Options{})
@@ -536,6 +561,9 @@ func TestContractVerificationEndpoint(t *testing.T) {
 	if !contractVerificationHasCheck(report, "discovery.integration_upgrade_gate") || !contractVerificationHasCheck(report, "openapi.integration_upgrade_gate_hash") || !contractVerificationHasCheck(report, "bundle.document.integration-upgrade-gate") {
 		t.Fatalf("verification report missing integration upgrade gate checks: %+v", report.Checks)
 	}
+	if !contractVerificationHasCheck(report, "discovery.integration_production_gate") || !contractVerificationHasCheck(report, "openapi.integration_production_gate_hash") || !contractVerificationHasCheck(report, "bundle.document.integration-production-gate") {
+		t.Fatalf("verification report missing integration production gate checks: %+v", report.Checks)
+	}
 	if !contractVerificationHasCheck(report, "discovery.schema_evolution_gate") || !contractVerificationHasCheck(report, "openapi.schema_evolution_gate_hash") || !contractVerificationHasCheck(report, "bundle.document.schema-evolution-gate") {
 		t.Fatalf("verification report missing schema evolution gate checks: %+v", report.Checks)
 	}
@@ -588,6 +616,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if meta["integration_upgrade_gate_hash"] != integrations.IntegrationUpgradeGateOpenAPIFingerprint(srv.integrationOptions(), srv.runtimeStatus()) {
 		t.Fatalf("unexpected integration upgrade gate hash in openapi metadata: %+v", meta)
+	}
+	if meta["integration_production_gate_hash"] != integrations.IntegrationProductionGateOpenAPIFingerprint(srv.integrationOptions(), srv.runtimeStatus()) {
+		t.Fatalf("unexpected integration production gate hash in openapi metadata: %+v", meta)
 	}
 	paths := spec["paths"].(map[string]interface{})
 	for _, path := range integrations.OpenAPIContractPaths() {
@@ -817,6 +848,7 @@ func TestControlPlaneEndpointETags(t *testing.T) {
 		{name: "signal-coverage", url: "http://127.0.0.1/api/integrations/signal-coverage", handler: srv.handleSignalCoverage},
 		{name: "integration-readiness", url: "http://127.0.0.1/api/integrations/readiness", handler: srv.handleIntegrationReadiness},
 		{name: "integration-smoke", url: "http://127.0.0.1/api/integrations/smoke", handler: srv.handleIntegrationSmoke},
+		{name: "integration-production-gate", url: "http://127.0.0.1/api/integrations/production-gate", handler: srv.handleIntegrationProductionGate},
 		{name: "integration-recommendation", url: "http://127.0.0.1/api/integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream", handler: srv.handleIntegrationRecommendation},
 		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},
 		{name: "goal-coverage", url: "http://127.0.0.1/api/goal-coverage", handler: srv.handleGoalCoverage},
@@ -909,6 +941,7 @@ func TestControlPlaneEndpointsRejectNonGET(t *testing.T) {
 		{name: "integration-drift", url: "http://127.0.0.1/api/integrations/drift", handler: srv.handleIntegrationDrift},
 		{name: "integration-lockfile", url: "http://127.0.0.1/api/integrations/lockfile", handler: srv.handleIntegrationLockfile},
 		{name: "integration-upgrade-gate", url: "http://127.0.0.1/api/integrations/upgrade-gate", handler: srv.handleIntegrationUpgradeGate},
+		{name: "integration-production-gate", url: "http://127.0.0.1/api/integrations/production-gate", handler: srv.handleIntegrationProductionGate},
 		{name: "schema-evolution-gate", url: "http://127.0.0.1/api/schema/evolution-gate", handler: srv.handleSchemaEvolutionGate},
 		{name: "integration-recommendation", url: "http://127.0.0.1/api/integrations/recommendation?agent=codex-cli&provider=openai-official&surface=provider-stream", handler: srv.handleIntegrationRecommendation},
 		{name: "conformance-matrix", url: "http://127.0.0.1/api/integrations/conformance-matrix", handler: srv.handleConformanceMatrix},

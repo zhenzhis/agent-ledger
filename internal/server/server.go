@@ -126,6 +126,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/integrations/drift", s.handleIntegrationDrift)
 	mux.HandleFunc("/api/integrations/lockfile", s.handleIntegrationLockfile)
 	mux.HandleFunc("/api/integrations/upgrade-gate", s.handleIntegrationUpgradeGate)
+	mux.HandleFunc("/api/integrations/production-gate", s.handleIntegrationProductionGate)
 	mux.HandleFunc("/api/schema/evolution-gate", s.handleSchemaEvolutionGate)
 	mux.HandleFunc("/api/integrations/recommendation", s.handleIntegrationRecommendation)
 	mux.HandleFunc("/api/integrations/conformance-matrix", s.handleConformanceMatrix)

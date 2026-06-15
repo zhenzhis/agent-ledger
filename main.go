@@ -477,6 +477,10 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 			opts := integrations.OptionsFromConfig(cfg)
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationUpgradeGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationUpgradeGateRequestFromCLI(args[2:])))
 		}
+		if len(args) > 1 && (args[1] == "production-gate" || args[1] == "production") {
+			opts := integrations.OptionsFromConfig(cfg)
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationProductionGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationProductionGateRequestFromCLI(args[2:])))
+		}
 		if len(args) > 1 && (args[1] == "schema-gate" || args[1] == "schema") {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SchemaEvolutionGateFor(schemaEvolutionGateRequestFromCLI(args[2:])))
 		}
@@ -502,6 +506,9 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "integration-upgrade-gate":
 		opts := integrations.OptionsFromConfig(cfg)
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationUpgradeGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationUpgradeGateRequestFromCLI(args[1:])))
+	case "integration-production-gate":
+		opts := integrations.OptionsFromConfig(cfg)
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationProductionGateFor(opts, server.RuntimeStatusFromConfig(cfg), integrationProductionGateRequestFromCLI(args[1:])))
 	case "schema-gate", "schema-evolution-gate":
 		return json.NewEncoder(os.Stdout).Encode(integrations.SchemaEvolutionGateFor(schemaEvolutionGateRequestFromCLI(args[1:])))
 	case "signals", "signal-taxonomy":
@@ -605,6 +612,14 @@ func integrationUpgradeGateRequestFromCLI(args []string) integrations.Integratio
 	return integrations.NormalizeIntegrationUpgradeGateRequest(integrations.IntegrationUpgradeGateRequest{
 		Strict:   drift.Strict,
 		Expected: drift.Expected,
+	})
+}
+
+func integrationProductionGateRequestFromCLI(args []string) integrations.IntegrationProductionGateRequest {
+	return integrations.NormalizeIntegrationProductionGateRequest(integrations.IntegrationProductionGateRequest{
+		Strict:        cliBool(args, "--strict"),
+		AllowPreview:  firstCLIBool(args, "--allow-preview", "--allow_preview", "--preview-ok", "--preview_ok"),
+		AllowOutbound: firstCLIBool(args, "--allow-outbound", "--allow_outbound", "--outbound-ok", "--outbound_ok"),
 	})
 }
 
@@ -2336,6 +2351,15 @@ func cliBool(args []string, key string) bool {
 		if strings.HasPrefix(args[i], key+"=") {
 			value := strings.ToLower(strings.TrimPrefix(args[i], key+"="))
 			return value == "1" || value == "true" || value == "yes"
+		}
+	}
+	return false
+}
+
+func firstCLIBool(args []string, keys ...string) bool {
+	for _, key := range keys {
+		if cliBool(args, key) {
+			return true
 		}
 	}
 	return false

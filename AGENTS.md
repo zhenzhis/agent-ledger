@@ -35,6 +35,7 @@ go build -o agent-ledger .                 # build binary
 ./agent-ledger signals                     # print privacy-safe signal taxonomy catalog
 ./agent-ledger signal-coverage             # print taxonomy-to-adapter/provider/agent coverage report
 ./agent-ledger integrations readiness      # print integration activation readiness gates
+./agent-ledger integrations production-gate --strict # block/review/pass production enablement gate
 ./agent-ledger runtime                     # print runtime mode and read-only/write status
 ./agent-ledger ui check                    # verify embedded dashboard UI/UX static contract
 ./agent-ledger config status --format markdown # print privacy-safe deployment config report
