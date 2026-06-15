@@ -12,6 +12,7 @@ import (
 	"github.com/zhenzhis/agent-ledger/internal/config"
 	"github.com/zhenzhis/agent-ledger/internal/controlplane"
 	"github.com/zhenzhis/agent-ledger/internal/integrations"
+	"github.com/zhenzhis/agent-ledger/internal/quota"
 	"github.com/zhenzhis/agent-ledger/internal/server"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
 	"github.com/zhenzhis/agent-ledger/internal/ui"
@@ -586,6 +587,42 @@ func TestSchemaEvolutionGateCLIOutputsReadOnlyReport(t *testing.T) {
 	}
 	if !strings.Contains(aliasOut, `"contract":"agent-ledger.schema-evolution-gate"`) {
 		t.Fatalf("event schema-gate alias returned unexpected output: %s", aliasOut)
+	}
+}
+
+func TestBatteryCLIOutputsStructuredQuotaStatus(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.Quota.Enabled = true
+	cfg.Quota.Plan = "team"
+	cfg.Quota.MonthlyBudget = 300
+	cfg.Quota.TokenBudget = 3_000_000
+	cfg.Quota.PromptBudget = 900
+	cfg.Quota.Window5H = true
+	ts := time.Now().Add(-time.Hour).UTC()
+	if err := db.InsertUsageBatch([]*storage.UsageRecord{
+		{Source: "codex", SessionID: "codex-session", Model: "gpt-5", InputTokens: 100, OutputTokens: 25, CostUSD: 1, Timestamp: ts, Project: "alpha"},
+		{Source: "opencode", SessionID: "other-session", Model: "gpt-5", InputTokens: 900, OutputTokens: 50, CostUSD: 9, Timestamp: ts, Project: "beta"},
+	}); err != nil {
+		t.Fatalf("InsertUsageBatch: %v", err)
+	}
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"battery", "--format", "json", "--window", "5h", "--source", "codex", "--project", "alpha"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI battery: %v", err)
+	}
+	var status quota.Status
+	if err := json.Unmarshal([]byte(out), &status); err != nil {
+		t.Fatalf("decode battery output: %v\n%s", err, out)
+	}
+	if !status.Enabled || status.Plan != "team" || status.Method != quota.MethodLocalEstimate || len(status.Windows) != 1 {
+		t.Fatalf("unexpected battery status: %+v", status)
+	}
+	row := status.Windows[0]
+	if row.Name != "5h" || row.CostUSD != 1 || row.Tokens != 125 || row.Calls != 1 || row.PromptLimit != 6 {
+		t.Fatalf("battery filters/window not applied: %+v output=%s", row, out)
 	}
 }
 

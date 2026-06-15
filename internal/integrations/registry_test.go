@@ -825,7 +825,7 @@ func TestOpenAPIDiagnosticsSchemasExposeControlPlaneFields(t *testing.T) {
 
 	expectFields("QuotaStatus", "enabled", "plan", "reset_day", "windows", "method")
 	expectArrayPropertyRef("QuotaStatus", "windows", "#/components/schemas/QuotaWindow")
-	expectFields("QuotaWindow", "name", "from", "to", "cost_usd", "tokens", "prompts", "cost_limit", "token_limit", "remaining_cost", "remaining_tokens", "burn_rate_per_hour", "projected_cost_usd", "projected_tokens", "reset_at", "time_to_limit_hours")
+	expectFields("QuotaWindow", "name", "from", "to", "cost_usd", "tokens", "prompts", "calls", "cost_limit", "token_limit", "prompt_limit", "remaining_cost", "remaining_tokens", "remaining_prompts", "burn_rate_per_hour", "token_burn_rate_per_hour", "prompt_burn_rate_per_hour", "projected_cost_usd", "projected_tokens", "projected_prompts", "reset_at", "time_to_limit_hours")
 	expectType("QuotaWindow", "burn_rate_per_hour", "number")
 
 	expectFields("DoctorReport", "generated_at", "from", "to", "stats", "ingestion", "quality", "projection", "pricing_sources", "checks", "summary", "runtime")

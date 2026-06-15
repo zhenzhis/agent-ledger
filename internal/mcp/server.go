@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/zhenzhis/agent-ledger/internal/controlplane"
 	"github.com/zhenzhis/agent-ledger/internal/integrations"
 	ledgerpolicy "github.com/zhenzhis/agent-ledger/internal/policy"
+	"github.com/zhenzhis/agent-ledger/internal/quota"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
 
@@ -1594,48 +1594,65 @@ func (s *Server) toolCurrentBudget(args json.RawMessage) (interface{}, error) {
 		Project string `json:"project"`
 	}
 	_ = json.Unmarshal(args, &in)
-	now := s.now()
-	windows := []string{"5h", "day", "week", "month"}
-	if in.Window != "" && in.Window != "all" {
-		windows = []string{in.Window}
-	}
 	type budgetWindowResult struct {
-		Name             string  `json:"name"`
-		From             string  `json:"from"`
-		To               string  `json:"to"`
-		CostUSD          float64 `json:"cost_usd"`
-		Tokens           int64   `json:"tokens"`
-		Prompts          int     `json:"prompts"`
-		Calls            int     `json:"calls"`
-		CostLimit        float64 `json:"cost_limit"`
-		TokenLimit       int64   `json:"token_limit"`
-		RemainingCostUSD float64 `json:"remaining_cost_usd"`
-		RemainingTokens  int64   `json:"remaining_tokens"`
-		BurnRatePerHour  float64 `json:"burn_rate_per_hour"`
+		Name                  string  `json:"name"`
+		From                  string  `json:"from"`
+		To                    string  `json:"to"`
+		CostUSD               float64 `json:"cost_usd"`
+		Tokens                int64   `json:"tokens"`
+		Prompts               int     `json:"prompts"`
+		Calls                 int     `json:"calls"`
+		CostLimit             float64 `json:"cost_limit"`
+		TokenLimit            int64   `json:"token_limit"`
+		PromptLimit           int64   `json:"prompt_limit,omitempty"`
+		RemainingCostUSD      float64 `json:"remaining_cost_usd"`
+		RemainingCost         float64 `json:"remaining_cost"`
+		RemainingTokens       int64   `json:"remaining_tokens"`
+		RemainingPrompts      int64   `json:"remaining_prompts,omitempty"`
+		BurnRatePerHour       float64 `json:"burn_rate_per_hour"`
+		TokenBurnRatePerHour  float64 `json:"token_burn_rate_per_hour,omitempty"`
+		PromptBurnRatePerHour float64 `json:"prompt_burn_rate_per_hour,omitempty"`
+		ProjectedCostUSD      float64 `json:"projected_cost_usd"`
+		ProjectedTokens       int64   `json:"projected_tokens"`
+		ProjectedPrompts      int64   `json:"projected_prompts,omitempty"`
+		ResetAt               string  `json:"reset_at"`
+		TimeToLimitHours      float64 `json:"time_to_limit_hours"`
+	}
+	status, err := quota.BuildStatus(s.now(), s.cfg.Quota, quota.Filter{
+		Window:  in.Window,
+		Source:  in.Source,
+		Model:   in.Model,
+		Project: in.Project,
+	}, s.db.GetDashboardStatsFiltered)
+	if err != nil {
+		return nil, err
 	}
 	out := []budgetWindowResult{}
-	for _, name := range windows {
-		from, to := quotaWindow(now, name)
-		stats, err := s.db.GetDashboardStatsFiltered(from, to, in.Source, in.Model, in.Project)
-		if err != nil {
-			return nil, err
-		}
-		costLimit, tokenLimit := s.quotaLimits(name)
-		hours := math.Max(1, now.Sub(from).Hours())
+	for _, wnd := range status.Windows {
 		out = append(out, budgetWindowResult{
-			Name: name, From: from.Format(time.RFC3339), To: to.Format(time.RFC3339),
-			CostUSD: stats.TotalCost, Tokens: stats.TotalTokens, Prompts: stats.TotalPrompts, Calls: stats.TotalCalls,
-			CostLimit: costLimit, TokenLimit: tokenLimit,
-			RemainingCostUSD: costLimit - stats.TotalCost,
-			RemainingTokens:  tokenLimit - stats.TotalTokens,
-			BurnRatePerHour:  stats.TotalCost / hours,
+			Name: wnd.Name, From: wnd.From, To: wnd.To,
+			CostUSD: wnd.CostUSD, Tokens: wnd.Tokens, Prompts: wnd.Prompts, Calls: wnd.Calls,
+			CostLimit: wnd.CostLimit, TokenLimit: wnd.TokenLimit, PromptLimit: wnd.PromptLimit,
+			RemainingCostUSD:      wnd.RemainingCost,
+			RemainingCost:         wnd.RemainingCost,
+			RemainingTokens:       wnd.RemainingTokens,
+			RemainingPrompts:      wnd.RemainingPrompts,
+			BurnRatePerHour:       wnd.BurnRatePerHour,
+			TokenBurnRatePerHour:  wnd.TokenBurnRatePerHour,
+			PromptBurnRatePerHour: wnd.PromptBurnRatePerHour,
+			ProjectedCostUSD:      wnd.ProjectedCostUSD,
+			ProjectedTokens:       wnd.ProjectedTokens,
+			ProjectedPrompts:      wnd.ProjectedPrompts,
+			ResetAt:               wnd.ResetAt,
+			TimeToLimitHours:      wnd.TimeToLimitHours,
 		})
 	}
 	return map[string]interface{}{
-		"enabled": s.cfg.Quota.Enabled,
-		"plan":    s.cfg.Quota.Plan,
-		"method":  "local-estimate",
-		"windows": out,
+		"enabled":   status.Enabled,
+		"plan":      status.Plan,
+		"reset_day": status.ResetDay,
+		"method":    status.Method,
+		"windows":   out,
 	}, nil
 }
 
@@ -2695,40 +2712,6 @@ func (s *Server) toolFindSimilarWorkloads(args json.RawMessage) (interface{}, er
 		return nil, err
 	}
 	return page, nil
-}
-
-func (s *Server) quotaLimits(name string) (float64, int64) {
-	cost := s.cfg.Quota.MonthlyBudget
-	tokens := s.cfg.Quota.TokenBudget
-	switch name {
-	case "5h":
-		return cost / 30 / 24 * 5, tokens / 30 / 24 * 5
-	case "day":
-		return cost / 30, tokens / 30
-	case "week":
-		return cost / 4.35, tokens / 4
-	default:
-		return cost, tokens
-	}
-}
-
-func quotaWindow(now time.Time, name string) (time.Time, time.Time) {
-	y, m, d := now.Date()
-	loc := now.Location()
-	switch name {
-	case "5h":
-		return now.Add(-5 * time.Hour), now
-	case "week":
-		start := time.Date(y, m, d, 0, 0, 0, 0, loc)
-		start = start.AddDate(0, 0, -int((start.Weekday()+6)%7))
-		return start, start.AddDate(0, 0, 7)
-	case "month":
-		start := time.Date(y, m, 1, 0, 0, 0, 0, loc)
-		return start, start.AddDate(0, 1, 0)
-	default:
-		start := time.Date(y, m, d, 0, 0, 0, 0, loc)
-		return start, start.AddDate(0, 0, 1)
-	}
 }
 
 func parseDateRange(fromRaw, toRaw string, now time.Time) (time.Time, time.Time, error) {

@@ -48,6 +48,7 @@ CLI:
 ./agent-ledger top
 ./agent-ledger doctor
 ./agent-ledger battery
+./agent-ledger battery --format json --window day --source codex --project quant
 ./agent-ledger workload list
 ./agent-ledger workload create --goal "review strategy engine" --source codex --project quant --idempotency-key router-task-001
 ./agent-ledger workload start-run --workload-id wl_... --source codex --agent-name codex --idempotency-key router-run-001

@@ -19,6 +19,7 @@
 - Pricing governance with local override, official OpenAI/Anthropic seed rows, LiteLLM fallback, pricing source health, snapshots, audit events, and per-record pricing confidence.
 - Pricing sync now still applies official seed rows and local overrides when LiteLLM fallback fetch fails, and pricing status exposes effective rule counts by source and confidence.
 - Cost Intelligence, Cache Doctor, Data Quality Center, Model Call Analytics, Quota Status, Watchdog events, evidence bundles, reconciliation imports, audit log, policy status, and expanded export types.
+- Shared Agent Battery quota engine for REST, CLI, and MCP, including scoped source/model/project filters, `reset_day`, prompt/call fields, and configured custom windows.
 - Scoped Watchdog detection for runaway token/call density, calls per prompt, low output ratio, cache-miss risk, cost spikes, and non-working-hour usage, with stable insight-event upsert keys to avoid duplicate rows during dashboard refresh.
 - Canonical Workload Ledger foundation with `canonical_events`, `workloads`, `agent_runs`, `model_calls`, `tool_calls`, `context_refs`, `artifacts`, `evaluations`, and `policy_decisions`.
 - Workload dependency and lineage edges with `workload_links`, canonical `workload.linked` events, `POST /api/workloads/link`, `agent-ledger workload link`, and graph/timeline/detail projection for async goal DAGs.

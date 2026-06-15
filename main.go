@@ -22,6 +22,7 @@ import (
 	"github.com/zhenzhis/agent-ledger/internal/notifications"
 	ledgerpolicy "github.com/zhenzhis/agent-ledger/internal/policy"
 	"github.com/zhenzhis/agent-ledger/internal/pricing"
+	"github.com/zhenzhis/agent-ledger/internal/quota"
 	"github.com/zhenzhis/agent-ledger/internal/reconciliation"
 	"github.com/zhenzhis/agent-ledger/internal/server"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
@@ -389,13 +390,7 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(report)
 	case "battery":
-		stats, err := db.GetDashboardStatsFiltered(dayFrom, dayTo, "", "", "")
-		if err != nil {
-			return err
-		}
-		remaining := cfg.Quota.MonthlyBudget/30 - stats.TotalCost
-		fmt.Printf("Agent Ledger battery: plan=%s today=$%.4f remaining_estimate=$%.4f tokens=%d method=local-estimate\n",
-			cfg.Quota.Plan, stats.TotalCost, remaining, stats.TotalTokens)
+		return runBatteryCLI(args[1:], cfg, db)
 	case "export":
 		page, err := db.GetSessionsPage(dayFrom.AddDate(0, 0, -30), dayTo, "", "", "", 500, 0)
 		if err != nil {
@@ -924,6 +919,31 @@ func runAgentWrappedCLI(args []string, db *storage.DB) error {
 	}
 	_, err = os.Stdout.Write([]byte(storage.FormatWrappedMarkdown(report)))
 	return err
+}
+
+func runBatteryCLI(args []string, cfg *config.Config, db *storage.DB) error {
+	if db == nil {
+		return fmt.Errorf("battery requires a database")
+	}
+	status, err := quota.BuildStatus(time.Now(), cfg.Quota, quota.Filter{
+		Window:  cliValue(args, "--window"),
+		Source:  cliValue(args, "--source"),
+		Model:   cliValue(args, "--model"),
+		Project: cliValue(args, "--project"),
+	}, db.GetDashboardStatsFiltered)
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(cliValue(args, "--format")) {
+	case "json":
+		return json.NewEncoder(os.Stdout).Encode(status)
+	case "markdown", "md":
+		_, err := os.Stdout.Write([]byte(quota.FormatMarkdown(status)))
+		return err
+	default:
+		_, err := os.Stdout.Write([]byte(quota.FormatText(status)))
+		return err
+	}
 }
 
 func wrappedCLIWindow(args []string, now time.Time) (string, time.Time, time.Time, error) {

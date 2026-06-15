@@ -65,3 +65,51 @@ func TestWatchdogEventsAPIUsesFiltersAndPrivacy(t *testing.T) {
 		}
 	}
 }
+
+func TestQuotaStatusAPIUsesFiltersAndWindow(t *testing.T) {
+	db := testServerDB(t)
+	ts := time.Now().Add(-time.Hour).UTC()
+	if err := db.InsertUsageBatch([]*storage.UsageRecord{
+		{Source: "codex", SessionID: "codex-session", Model: "gpt-5", InputTokens: 100, OutputTokens: 25, CostUSD: 1, Timestamp: ts, Project: "alpha"},
+		{Source: "opencode", SessionID: "other-session", Model: "gpt-5", InputTokens: 900, OutputTokens: 50, CostUSD: 9, Timestamp: ts, Project: "beta"},
+	}); err != nil {
+		t.Fatalf("InsertUsageBatch: %v", err)
+	}
+	srv := New(db, "", Options{
+		Quota: config.QuotaConfig{
+			Enabled:       true,
+			Plan:          "team",
+			MonthlyBudget: 300,
+			TokenBudget:   3_000_000,
+			PromptBudget:  900,
+			ResetDay:      10,
+			Window5H:      true,
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/quota/status?window=5h&source=codex&project=alpha", nil)
+	rr := httptest.NewRecorder()
+	srv.handleQuotaStatus(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("quota status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var payload struct {
+		Enabled bool `json:"enabled"`
+		Windows []struct {
+			Name        string  `json:"name"`
+			CostUSD     float64 `json:"cost_usd"`
+			Tokens      int64   `json:"tokens"`
+			Calls       int     `json:"calls"`
+			PromptLimit int64   `json:"prompt_limit"`
+		} `json:"windows"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode quota: %v\n%s", err, rr.Body.String())
+	}
+	if !payload.Enabled || len(payload.Windows) != 1 {
+		t.Fatalf("unexpected quota payload: %+v", payload)
+	}
+	row := payload.Windows[0]
+	if row.Name != "5h" || row.CostUSD != 1 || row.Tokens != 125 || row.Calls != 1 || row.PromptLimit != 6 {
+		t.Fatalf("quota filters/window not applied: %+v body=%s", row, rr.Body.String())
+	}
+}

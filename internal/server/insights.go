@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zhenzhis/agent-ledger/internal/quota"
 	"github.com/zhenzhis/agent-ledger/internal/reconciliation"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
 )
@@ -230,90 +232,21 @@ func (s *Server) handleQuotaStatus(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return
 	}
-	now := time.Now()
-	dayFrom, dayTo, _ := budgetWindow(now, "day")
-	weekFrom, weekTo, _ := budgetWindow(now, "week")
-	monthFrom, monthTo, _ := budgetWindow(now, "month")
-	type window struct {
-		Name             string  `json:"name"`
-		From             string  `json:"from"`
-		To               string  `json:"to"`
-		CostUSD          float64 `json:"cost_usd"`
-		Tokens           int64   `json:"tokens"`
-		Prompts          int     `json:"prompts"`
-		CostLimit        float64 `json:"cost_limit"`
-		TokenLimit       int64   `json:"token_limit"`
-		RemainingCost    float64 `json:"remaining_cost"`
-		RemainingTokens  int64   `json:"remaining_tokens"`
-		BurnRatePerHour  float64 `json:"burn_rate_per_hour"`
-		ProjectedCostUSD float64 `json:"projected_cost_usd"`
-		ProjectedTokens  int64   `json:"projected_tokens"`
-		ResetAt          string  `json:"reset_at"`
-		TimeToLimitHours float64 `json:"time_to_limit_hours"`
-	}
-	makeWindow := func(name string, from, to time.Time) (window, error) {
-		stats, err := s.db.GetDashboardStatsFiltered(from, to, "", "", "")
-		if err != nil {
-			return window{}, err
-		}
-		costLimit := s.options.Quota.MonthlyBudget
-		tokenLimit := s.options.Quota.TokenBudget
-		if name == "5h" {
-			costLimit = s.options.Quota.MonthlyBudget / 30 / 24 * 5
-			tokenLimit = s.options.Quota.TokenBudget / 30 / 24 * 5
-		} else if name == "day" {
-			costLimit = s.options.Quota.MonthlyBudget / 30
-			tokenLimit = s.options.Quota.TokenBudget / 30
-		} else if name == "week" {
-			costLimit = s.options.Quota.MonthlyBudget / 4.35
-			tokenLimit = s.options.Quota.TokenBudget / 4
-		}
-		elapsedHours := mathMax(1, time.Since(from).Hours())
-		windowHours := mathMax(1, to.Sub(from).Hours())
-		burnRate := stats.TotalCost / elapsedHours
-		tokenBurnRate := float64(stats.TotalTokens) / elapsedHours
-		timeToLimit := -1.0
-		if costLimit > 0 && burnRate > 0 {
-			timeToLimit = (costLimit - stats.TotalCost) / burnRate
-		} else if tokenLimit > 0 && tokenBurnRate > 0 {
-			timeToLimit = float64(tokenLimit-stats.TotalTokens) / tokenBurnRate
-		}
-		resetAt := ""
-		if name != "5h" {
-			resetAt = to.Format(time.RFC3339)
-		}
-		return window{
-			Name: name, From: from.Format(time.RFC3339), To: to.Format(time.RFC3339),
-			CostUSD: stats.TotalCost, Tokens: stats.TotalTokens, Prompts: stats.TotalPrompts,
-			CostLimit: costLimit, TokenLimit: tokenLimit,
-			RemainingCost: costLimit - stats.TotalCost, RemainingTokens: tokenLimit - stats.TotalTokens,
-			BurnRatePerHour:  burnRate,
-			ProjectedCostUSD: burnRate * windowHours,
-			ProjectedTokens:  int64(tokenBurnRate * windowHours),
-			ResetAt:          resetAt,
-			TimeToLimitHours: timeToLimit,
-		}, nil
-	}
-	var windows []window
-	for _, spec := range []struct {
-		name string
-		from time.Time
-		to   time.Time
-	}{{"5h", now.Add(-5 * time.Hour), now}, {"day", dayFrom, dayTo}, {"week", weekFrom, weekTo}, {"month", monthFrom, monthTo}} {
-		wnd, err := makeWindow(spec.name, spec.from, spec.to)
-		if err != nil {
-			serverError(w, err)
+	status, err := quota.BuildStatus(time.Now(), s.options.Quota, quota.Filter{
+		Window:  r.URL.Query().Get("window"),
+		Source:  r.URL.Query().Get("source"),
+		Model:   r.URL.Query().Get("model"),
+		Project: r.URL.Query().Get("project"),
+	}, s.db.GetDashboardStatsFiltered)
+	if err != nil {
+		if errors.Is(err, quota.ErrInvalidRequest) {
+			badRequest(w, err)
 			return
 		}
-		windows = append(windows, wnd)
+		serverError(w, err)
+		return
 	}
-	writeJSON(w, map[string]interface{}{
-		"enabled":   s.options.Quota.Enabled,
-		"plan":      s.options.Quota.Plan,
-		"reset_day": s.options.Quota.ResetDay,
-		"windows":   windows,
-		"method":    "local-estimate",
-	})
+	writeJSON(w, status)
 }
 
 func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
@@ -804,11 +737,4 @@ func parseLimit(r *http.Request, fallback int) int {
 		return 5000
 	}
 	return limit
-}
-
-func mathMax(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
