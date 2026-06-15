@@ -18,7 +18,7 @@ func TestIntegrationReadinessDefaultIsPrivacySafeAndNonFailing(t *testing.T) {
 		t.Fatalf("unexpected readiness hash chain: %+v", report)
 	}
 	if report.Summary.TotalCapabilities == 0 || report.Summary.Failures != 0 ||
-		report.Summary.Experimental == 0 || report.Summary.ReviewRequired == 0 ||
+		report.Summary.Experimental != 0 || report.Summary.ReviewRequired == 0 ||
 		report.Summary.DisabledByConfig == 0 {
 		t.Fatalf("unexpected readiness summary: %+v", report.Summary)
 	}
@@ -64,6 +64,9 @@ func TestIntegrationReadinessFlagsEnabledPreviewSurfaces(t *testing.T) {
 		if capability.ActivationState != "review-required" {
 			t.Fatalf("%s should require review when enabled: %+v", id, capability)
 		}
+	}
+	if report.Summary.Experimental != 0 || report.Summary.ReviewRequired == 0 {
+		t.Fatalf("enabled guarded surfaces should require review without experimental status: %+v", report.Summary)
 	}
 }
 

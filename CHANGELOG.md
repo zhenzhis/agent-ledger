@@ -4,7 +4,7 @@
 
 ### Added
 
-- Conservative goal completion audit inside goal coverage plus `agent-ledger goal audit`, separating coverage from completion by requiring review for experimental surfaces, external dependencies, and remaining verification work before the persistent product goal can be marked complete.
+- Conservative goal completion audit inside goal coverage plus `agent-ledger goal audit`, separating coverage from completion by requiring review for guarded surfaces, external dependencies, and remaining verification work before the persistent product goal can be marked complete.
 - Integration production gate through `GET /api/integrations/production-gate`, `agent-ledger integrations production-gate --strict`, MCP `ledger.integration_production_gate`, and `agent-ledger://integrations/production-gate`, providing a metadata-only pass/review/block gate before production enablement of preview, gateway, OTLP, webhook, outbound, or write-ingest surfaces.
 - Integration evidence kits now include drift, lockfile, upgrade gate, and schema evolution gate evidence for adapter release audits.
 - Public metadata privacy language now consistently describes content-safe telemetry across discovery, adapter contracts, conformance matrix, provider/agent profiles, OpenAPI, and docs; `contracts verify` now includes the `privacy.public_metadata_language` invariant.
@@ -73,7 +73,7 @@
 - Data Quality and Doctor provenance checks for canonical events, including schema/source/parser coverage, raw reference coverage, match-type mix, confidence, and UI panel visibility.
 - Provenance metadata is now populated by OpenTelemetry, A2A, provider usage, and gateway adapters so downstream quality checks can distinguish source-reported data from reconstructed references.
 - Privacy-safe discovery manifest through `GET /.well-known/agent-ledger.json`, `GET /api/discovery`, and `agent-ledger discovery`, exposing local protocol entrypoints without prompt content, secrets, or raw source paths.
-- Privacy-safe integration capability catalog through `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations`, covering implemented collectors/protocols plus experimental provider gateway surfaces.
+- Privacy-safe integration capability catalog through `GET /api/integrations`, `agent-ledger integrations`, and `ledger.integrations`, covering implemented collectors/protocols plus guarded default-off OTLP and provider gateway surfaces.
 - OpenTelemetry GenAI JSON span mapping through `POST /api/otel/genai` and `agent-ledger otel convert|ingest`, projecting token metadata into canonical `model.call` plus hashed `context.ref` events while excluding prompt/completion message attributes.
 - Optional local OTLP HTTP/JSON traces receiver through `POST /v1/traces` and `POST /api/otlp/v1/traces`, gated by `integrations.otlp_receiver.enabled` with body and span-count limits.
 - A2A task telemetry mapping through `POST /api/a2a/tasks` and `agent-ledger a2a convert|ingest`, projecting task snapshots/events into workload, run, context, artifact, close, and evaluation events while excluding message/history/artifact-part content.

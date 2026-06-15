@@ -18,8 +18,8 @@ type IntegrationProductionGateRequest struct {
 }
 
 // IntegrationProductionGateReport is the last local release gate before an
-// operator enables local-preview, gateway, OTLP, webhook, or write-ingest
-// surfaces in a shared or production-like deployment.
+// operator enables guarded, local-preview, gateway, OTLP, webhook, or
+// write-ingest surfaces in a shared or production-like deployment.
 type IntegrationProductionGateReport struct {
 	Product             string                            `json:"product"`
 	Contract            string                            `json:"contract"`
@@ -156,7 +156,7 @@ func IntegrationProductionGateFor(opts Options, runtime *storage.RuntimeStatus, 
 			"integration smoke report with no failed checks",
 			"readiness report showing blocked=0",
 			"integration evidence kit for each enabled adapter or provider surface",
-			"operator approval for local-preview, gateway, OTLP, webhook, or outbound behavior",
+			"operator approval for guarded, local-preview, gateway, OTLP, webhook, or outbound behavior",
 			"deployment smoke evidence for bind address, auth mode, read-only posture, and privacy preset",
 		},
 		OperationalGuidance: []string{
@@ -215,7 +215,7 @@ func productionGateSurfaceCounts(catalog Catalog) productionGateSurfaceSummary {
 		if !cap.Enabled {
 			continue
 		}
-		if cap.Status == "experimental" || strings.EqualFold(cap.Maturity, "local-preview") {
+		if cap.Status == "experimental" || strings.EqualFold(cap.Maturity, "local-preview") || strings.EqualFold(cap.Maturity, "guarded-v1") {
 			summary.PreviewEnabled++
 		}
 		if cap.Direction == "outbound" || cap.Category == "gateway" {
@@ -264,7 +264,7 @@ func integrationProductionGateChecks(req IntegrationProductionGateRequest, readi
 		if req.Strict {
 			status = "block"
 		}
-		checks = append(checks, productionGateCheck("preview.explicit_approval", status, "warning", "enabled local-preview surfaces require explicit production approval", "preview_enabled="+strconv.Itoa(surfaces.PreviewEnabled)+",allow_preview=false", "rerun with allow_preview only after deployment smoke evidence is attached", "agent-ledger integrations production-gate --allow-preview"))
+		checks = append(checks, productionGateCheck("preview.explicit_approval", status, "warning", "enabled guarded or local-preview surfaces require explicit production approval", "preview_enabled="+strconv.Itoa(surfaces.PreviewEnabled)+",allow_preview=false", "rerun with allow_preview only after deployment smoke evidence is attached", "agent-ledger integrations production-gate --allow-preview"))
 	} else {
 		checks = append(checks, productionGateCheck("preview.explicit_approval", "pass", "warning", "preview surface approval posture is explicit", "preview_enabled="+strconv.Itoa(surfaces.PreviewEnabled)+",allow_preview="+boolString(req.AllowPreview), "no action required", "agent-ledger integrations production-gate"))
 	}

@@ -140,7 +140,7 @@ func IntegrationReadiness(opts Options) IntegrationReadinessReport {
 		Summary:       summary,
 		Capabilities:  capabilities,
 		QualityGates: []string{
-			"experimental or outbound surfaces must be explicitly enabled before runtime use",
+			"guarded, experimental, or outbound surfaces must be explicitly enabled before runtime use",
 			"read-only observer mode must keep write-capable surfaces blocked or limited to dry-run/read paths",
 			"gateway and webhook surfaces must never persist prompt, response, credential, or webhook URL values",
 			"OTLP gRPC must remain loopback-only unless an authenticated transport is added",
@@ -303,6 +303,9 @@ func activationState(cap Capability, gates []IntegrationReadinessGate, opts Opti
 	if opts.ReadOnly && cap.WritesLocalState && cap.AvailableInReadOnly {
 		return "read-only-limited"
 	}
+	if hasReadinessGateStatus(gates, "warning") {
+		return "review-required"
+	}
 	if cap.Status == "experimental" || strings.EqualFold(cap.Maturity, "local-preview") || cap.Category == "gateway" || cap.Direction == "outbound" {
 		return "review-required"
 	}
@@ -319,6 +322,15 @@ func readinessRiskLevel(cap Capability) string {
 	return "low"
 }
 
+func hasReadinessGateStatus(gates []IntegrationReadinessGate, status string) bool {
+	for _, gate := range gates {
+		if gate.Status == status {
+			return true
+		}
+	}
+	return false
+}
+
 func readinessActions(cap Capability, opts Options) []string {
 	actions := []string{}
 	if !cap.Enabled {
@@ -327,7 +339,7 @@ func readinessActions(cap Capability, opts Options) []string {
 	if opts.ReadOnly && cap.WritesLocalState {
 		actions = append(actions, "disable read-only mode before expecting writes")
 	}
-	if cap.Status == "experimental" || strings.EqualFold(cap.Maturity, "local-preview") {
+	if cap.Status == "experimental" || strings.EqualFold(cap.Maturity, "local-preview") || strings.EqualFold(cap.Maturity, "guarded-v1") {
 		actions = append(actions, "run fixture, privacy, admission, and deployment smoke checks")
 	}
 	if cap.ID == "gateway.provider_live_proxy" {

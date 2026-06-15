@@ -29,8 +29,8 @@ func TestGoalCoverageReportHasEvidenceAndNoActionableGaps(t *testing.T) {
 	if report.Summary.TotalSections != len(report.Sections) || report.Summary.TotalSections < 10 {
 		t.Fatalf("unexpected section count: summary=%#v sections=%d", report.Summary, len(report.Sections))
 	}
-	if report.Summary.Experimental == 0 {
-		t.Fatalf("expected experimental surfaces to be visible, summary=%#v", report.Summary)
+	if report.Status != "implemented-with-external-dependencies" || report.Summary.Experimental != 0 {
+		t.Fatalf("expected implemented coverage with only external dependencies remaining: status=%s summary=%#v", report.Status, report.Summary)
 	}
 	if len(report.ExternalDependencies) == 0 {
 		t.Fatal("expected external dependencies to be disclosed")
@@ -40,7 +40,7 @@ func TestGoalCoverageReportHasEvidenceAndNoActionableGaps(t *testing.T) {
 		report.CompletionAudit.ReadyToMarkGoalComplete ||
 		report.CompletionAudit.Summary.Review == 0 ||
 		report.CompletionAudit.Summary.ExternalDependencies == 0 ||
-		report.CompletionAudit.Summary.ExperimentalSections == 0 ||
+		report.CompletionAudit.Summary.ExperimentalSections != 0 ||
 		report.CompletionAudit.Summary.SectionsWithRemaining != 0 {
 		t.Fatalf("completion audit should conservatively require review: %#v", report.CompletionAudit)
 	}

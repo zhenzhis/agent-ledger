@@ -83,9 +83,9 @@ type GoalCoverageExternal struct {
 
 // GoalCompletionAudit is the conservative completion gate for the persistent
 // Agent Ledger product goal. It deliberately treats coverage as necessary but
-// not sufficient: experimental surfaces, external dependencies, remaining
-// visual smoke work, or missing verification evidence keep completion in
-// review-required or incomplete states.
+// not sufficient: experimental surfaces, guarded rollout needs, external
+// dependencies, remaining verification work, or missing verification evidence
+// keep completion in review-required or incomplete states.
 type GoalCompletionAudit struct {
 	Contract                string                     `json:"contract"`
 	Version                 string                     `json:"version"`
@@ -155,11 +155,16 @@ func goalCoverageReportFor(opts Options, runtime *storage.RuntimeStatus, contrac
 		},
 	}
 	summary.ExternalDependencies = len(external)
+	if summary.Gaps == 0 && summary.Experimental == 0 && summary.ExternalDependencies > 0 {
+		summary.NextAction = "keep external dependencies disclosed until accepted or removed from completion scope"
+	}
 	status := "implemented"
 	if summary.Gaps > 0 {
 		status = "gaps"
 	} else if summary.Experimental > 0 {
 		status = "implemented-with-experimental-surfaces"
+	} else if summary.ExternalDependencies > 0 {
+		status = "implemented-with-external-dependencies"
 	}
 	report := GoalCoverageReport{
 		Product:               "Agent Ledger",
@@ -268,7 +273,7 @@ func goalCoverageSections(capabilities map[string]Capability) []GoalCoverageSect
 			ID:            "ecosystem_adapters_and_gateway",
 			Title:         "Ecosystem Adapters, Protocols And Provider Gateway",
 			Category:      "ecosystem",
-			Maturity:      "local-preview",
+			Maturity:      "guarded-v1",
 			Objective:     "Support current and future agent CLIs, provider envelopes, OpenTelemetry GenAI, OTLP, A2A, provider streams, provider/runtime profiles, and optional local gateways.",
 			CapabilityIDs: []string{"collector.claude", "collector.codex", "collector.openclaw", "collector.opencode", "collector.kiro", "collector.pi", "protocol.provider_profiles", "protocol.agent_profiles", "protocol.signal_taxonomy", "protocol.signal_coverage", "protocol.integration_readiness", "protocol.integration_smoke", "protocol.integration_compatibility", "protocol.integration_rollout_plan", "protocol.integration_evidence_kit", "protocol.integration_drift", "protocol.integration_lockfile", "protocol.integration_upgrade_gate", "protocol.integration_production_gate", "protocol.integration_recommendation", "protocol.opentelemetry_genai", "protocol.otlp_receiver", "protocol.a2a", "gateway.provider_api", "gateway.provider_live_proxy"},
 			Evidence: GoalCoverageEvidence{
@@ -280,7 +285,7 @@ func goalCoverageSections(capabilities map[string]Capability) []GoalCoverageSect
 				Docs:         []string{"examples/adapter-fixtures", "examples/otel-collector/README.md"},
 			},
 			Privacy:     "Adapters map metadata and token fields; request/response messages, headers, prompts, and secrets are excluded from persistence.",
-			Limitations: []string{"OTLP receiver and live provider gateway remain disabled by default and are marked experimental in the catalog."},
+			Limitations: []string{"OTLP receiver and live provider gateway are implemented but disabled by default and require production-gate approval before shared deployment."},
 		},
 		{
 			ID:            "pricing_cost_accuracy",
@@ -530,7 +535,20 @@ func goalCompletionDecision(summary GoalCompletionAuditSummary) (string, string,
 		return "incomplete", "one or more critical completion checks are blocked", false, 1
 	}
 	if summary.Review > 0 {
-		return "review-required", "coverage is implemented, but experimental surfaces, external dependencies, or remaining verification work require explicit acceptance before marking the goal complete", false, 2
+		reasons := []string{}
+		if summary.ExperimentalSections > 0 {
+			reasons = append(reasons, "experimental surfaces")
+		}
+		if summary.ExternalDependencies > 0 {
+			reasons = append(reasons, "external dependencies")
+		}
+		if summary.SectionsWithRemaining > 0 {
+			reasons = append(reasons, "remaining verification work")
+		}
+		if len(reasons) == 0 {
+			reasons = append(reasons, "review items")
+		}
+		return "review-required", "coverage is implemented, but " + strings.Join(reasons, ", ") + " require explicit acceptance before marking the goal complete", false, 2
 	}
 	return "complete", "all completion checks passed and no review items remain", true, 0
 }

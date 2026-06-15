@@ -31,6 +31,7 @@ func TestIntegrationSmokeDefaultIsPrivacySafeAndNonFailing(t *testing.T) {
 	}
 	if !integrationSmokeHasCheck(report, "conformance.fixture_declarations", "pass") ||
 		!integrationSmokeHasCheck(report, "signal.coverage", "pass") ||
+		!integrationSmokeHasCheck(report, "readiness.guarded_review_visible", "pass") ||
 		!integrationSmokeHasCheck(report, "recommendation.codex_provider_stream", "pass") {
 		t.Fatalf("missing core smoke checks: %+v", report.Checks)
 	}

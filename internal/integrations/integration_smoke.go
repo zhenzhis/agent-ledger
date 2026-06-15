@@ -136,7 +136,8 @@ func IntegrationSmokeReportFor(opts Options, runtime *storage.RuntimeStatus) Int
 	addCheck("conformance.fixture_privacy", "adapter-conformance", "critical", fixturePrivacyOK, "fixture declarations preserve metadata-only privacy language", fixturePrivacyEvidence, "remove local paths, credentials, request bodies, and generation bodies from fixtures", "go test ./internal/integrations -run TestAdapterConformance")
 	addCheck("signal.coverage", "signal-coverage", "critical", coverage.Summary.UnknownSignalReferences == 0 && coverage.Summary.SignalsWithoutAdapterCoverage == 0, "adapter required signals are taxonomy-backed and covered", signalCoverageCheckSummary(coverage), "add missing taxonomy or adapter coverage before release", "agent-ledger signal-coverage")
 	addCheck("readiness.no_blocked_gates", "readiness", "critical", readiness.Summary.Blocked == 0, "current runtime has no active blocked integration activation gates", "blocked="+strconv.Itoa(readiness.Summary.Blocked)+",failures="+strconv.Itoa(readiness.Summary.Failures), "resolve blocked readiness gates before production rollout", "agent-ledger integrations readiness")
-	addCheck("readiness.experimental_review_visible", "readiness", "warning", readiness.Summary.Experimental > 0 && readiness.Summary.ReviewRequired > 0, "experimental surfaces are visible as review-required instead of silently ready", "experimental="+strconv.Itoa(readiness.Summary.Experimental)+",review_required="+strconv.Itoa(readiness.Summary.ReviewRequired), "keep local-preview surfaces behind explicit smoke and operator review", "agent-ledger integrations readiness")
+	guardedOK, guardedEvidence := smokeGuardedSurfacePosture(readiness)
+	addCheck("readiness.guarded_review_visible", "readiness", "warning", guardedOK, "guarded receiver/gateway surfaces are disabled or review-required instead of silently ready", guardedEvidence, "keep guarded surfaces behind explicit smoke and operator review", "agent-ledger integrations readiness")
 	addCheck("readiness.optional_disabled_visible", "readiness", "warning", readiness.Summary.DisabledByConfig > 0, "disabled optional surfaces remain visible as disabled-by-config", "disabled_by_config="+strconv.Itoa(readiness.Summary.DisabledByConfig), "enable optional gateway, webhook, or OTLP surfaces only after local smoke review", "agent-ledger integrations readiness")
 	addCheck("recommendation.codex_provider_stream", "recommendation", "critical", recommendation.RecommendedSurface == "provider-stream" && recommendation.Confidence >= 0.75 && len(recommendation.StrictCI) > 0, "Codex/OpenAI provider-stream recommendation returns strict validation steps", "surface="+recommendation.RecommendedSurface+",confidence="+smokeFloat(recommendation.Confidence)+",strict_ci="+strconv.Itoa(len(recommendation.StrictCI)), "repair provider, agent, or conformance profiles before recommending provider-stream ingest", "agent-ledger agent recommend --profile codex-cli --provider openai-official --surface provider-stream --signals model,usage,cache")
 	addCheck("recommendation.a2a_lineage", "recommendation", "critical", a2aRecommendation.RecommendedSurface == "a2a" && len(a2aRecommendation.StrictCI) > 0 && stringSliceContains(a2aRecommendation.ExpectedEventTypes, "workload.started"), "A2A recommendation exposes lineage-capable validation", "surface="+a2aRecommendation.RecommendedSurface+",events="+strconv.Itoa(len(a2aRecommendation.ExpectedEventTypes))+",strict_ci="+strconv.Itoa(len(a2aRecommendation.StrictCI)), "repair A2A profile or conformance matrix before advertising agent-to-agent telemetry", "agent-ledger agent recommend --profile a2a-task-runtime --surface a2a")
@@ -263,6 +264,32 @@ func smokeFixturePrivacyStatus(matrix AdapterConformanceMatrix) (bool, string) {
 	}
 	ok := fixtures > 0 && missingPrivacy == 0 && unsafe == 0
 	return ok, "fixtures=" + strconv.Itoa(fixtures) + ",missing_privacy=" + strconv.Itoa(missingPrivacy) + ",unsafe_markers=" + strconv.Itoa(unsafe)
+}
+
+func smokeGuardedSurfacePosture(readiness IntegrationReadinessReport) (bool, string) {
+	guarded := 0
+	ready := 0
+	review := 0
+	disabled := 0
+	blocked := 0
+	for _, capability := range readiness.Capabilities {
+		if !strings.EqualFold(capability.Maturity, "guarded-v1") {
+			continue
+		}
+		guarded++
+		switch capability.ActivationState {
+		case "ready":
+			ready++
+		case "review-required", "read-only-limited":
+			review++
+		case "disabled-by-config":
+			disabled++
+		case "blocked":
+			blocked++
+		}
+	}
+	ok := guarded > 0 && ready == 0 && review+disabled+blocked == guarded
+	return ok, "guarded=" + strconv.Itoa(guarded) + ",ready=" + strconv.Itoa(ready) + ",review=" + strconv.Itoa(review) + ",disabled=" + strconv.Itoa(disabled) + ",blocked=" + strconv.Itoa(blocked)
 }
 
 func smokeFloat(v float64) string {
