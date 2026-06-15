@@ -460,12 +460,17 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 			opts := integrations.OptionsFromConfig(cfg)
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationSmokeReportFor(opts, server.RuntimeStatusFromConfig(cfg)))
 		}
+		if len(args) > 1 && args[1] == "compatibility" {
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationCompatibilityReportFor(integrationCompatibilityRequestFromCLI(args[2:])))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "integration-readiness":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
 	case "integration-smoke":
 		opts := integrations.OptionsFromConfig(cfg)
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationSmokeReportFor(opts, server.RuntimeStatusFromConfig(cfg)))
+	case "integration-compatibility":
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationCompatibilityReportFor(integrationCompatibilityRequestFromCLI(args[1:])))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
@@ -508,6 +513,15 @@ func runGoalCLI(args []string, cfg *config.Config) error {
 		return fmt.Errorf("usage: agent-ledger goal coverage")
 	}
 	return json.NewEncoder(os.Stdout).Encode(integrations.GoalCoverageReportFor(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg)))
+}
+
+func integrationCompatibilityRequestFromCLI(args []string) integrations.IntegrationCompatibilityRequest {
+	return integrations.NormalizeIntegrationCompatibilityRequest(integrations.IntegrationCompatibilityRequest{
+		AgentProfileID:    firstNonEmptyCLI(cliValue(args, "--agent-profile-id"), cliValue(args, "--agent"), cliValue(args, "--profile"), cliValue(args, "--framework")),
+		ProviderProfileID: firstNonEmptyCLI(cliValue(args, "--provider-profile-id"), cliValue(args, "--provider"), cliValue(args, "--runtime")),
+		Surface:           firstNonEmptyCLI(cliValue(args, "--surface"), cliValue(args, "--ingest"), cliValue(args, "--kind")),
+		MinConfidence:     firstNonEmptyCLI(cliValue(args, "--min-confidence"), cliValue(args, "--min_confidence")),
+	})
 }
 
 func runUICLI(args []string) error {

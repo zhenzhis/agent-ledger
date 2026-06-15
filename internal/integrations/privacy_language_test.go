@@ -22,11 +22,16 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 		}),
 		"integration_readiness": IntegrationReadiness(Options{}),
 		"integration_smoke":     IntegrationSmokeReportFor(Options{}, nil),
-		"openapi":               OpenAPISpecFor(Options{}, nil),
-		"provider_profiles":     ProviderProfiles(),
-		"registry":              Registry(Options{}),
-		"signal_coverage":       SignalCoverage(),
-		"signal_taxonomy":       SignalTaxonomy(),
+		"integration_compatibility": IntegrationCompatibilityReportFor(IntegrationCompatibilityRequest{
+			AgentProfileID:    "codex-cli",
+			ProviderProfileID: "openai-official",
+			Surface:           "provider-stream",
+		}),
+		"openapi":           OpenAPISpecFor(Options{}, nil),
+		"provider_profiles": ProviderProfiles(),
+		"registry":          Registry(Options{}),
+		"signal_coverage":   SignalCoverage(),
+		"signal_taxonomy":   SignalTaxonomy(),
 	}
 	ok, actual := contractPublicPrivacyLanguageStatus(docs)
 	if !ok {

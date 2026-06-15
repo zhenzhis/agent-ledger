@@ -63,6 +63,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"signal_coverage_hash":            SignalCoverageFingerprint(),
 			"integration_readiness_hash":      IntegrationReadinessFingerprint(opts),
 			"integration_smoke_hash":          IntegrationSmokeFingerprint(opts, runtime),
+			"integration_compatibility_hash":  IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -82,6 +83,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/signal-coverage":    getOperation("contracts", "Get signal coverage", "Static privacy-safe coverage report linking taxonomy signal ids to adapter, provider, and agent profile contracts.", "SignalCoverageReport"),
 			"/api/integrations/readiness":          getOperation("contracts", "Get integration readiness", "Static privacy-safe activation readiness report for local protocols, gateways, collectors, and notification surfaces.", "IntegrationReadinessReport"),
 			"/api/integrations/smoke":              getOperation("contracts", "Get integration smoke", "Static privacy-safe rollout smoke report combining contract, conformance, signal coverage, readiness, and recommendation checks.", "IntegrationSmokeReport"),
+			"/api/integrations/compatibility":      integrationCompatibilityOperation(),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -189,7 +191,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -216,6 +218,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"integration_readiness_hash":      refSchema("Hash"),
 						"integration_smoke_uri":           stringSchema(),
 						"integration_smoke_hash":          refSchema("Hash"),
+						"integration_compatibility_uri":   stringSchema(),
+						"integration_compatibility_hash":  refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -354,6 +358,10 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IntegrationSmokeSummary":             integrationSmokeSummarySchema(),
 				"IntegrationSmokeFixtureCoverage":     integrationSmokeFixtureCoverageSchema(),
 				"IntegrationSmokeCheck":               integrationSmokeCheckSchema(),
+				"IntegrationCompatibilityReport":      integrationCompatibilityReportSchema(),
+				"IntegrationCompatibilityRequest":     integrationCompatibilityRequestSchema(),
+				"IntegrationCompatibilitySummary":     integrationCompatibilitySummarySchema(),
+				"IntegrationCompatibilityRow":         integrationCompatibilityRowSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -839,6 +847,7 @@ func OpenAPISmokeFingerprint(opts Options, runtime *storage.RuntimeStatus) strin
 		"signal_taxonomy_hash":            SignalTaxonomyFingerprint(),
 		"signal_coverage_hash":            SignalCoverageFingerprint(),
 		"integration_readiness_hash":      IntegrationReadinessFingerprint(opts),
+		"integration_compatibility_hash":  IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}),
 		"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 		"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 		"runtime_status_hash":             hashJSONPayload(runtime),
@@ -1073,6 +1082,7 @@ func OpenAPIContractPaths() []string {
 		"/api/integrations/signal-coverage",
 		"/api/integrations/readiness",
 		"/api/integrations/smoke",
+		"/api/integrations/compatibility",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -1159,6 +1169,19 @@ func eventExamplesOperation() map[string]interface{} {
 	op["get"].(map[string]interface{})["parameters"] = []map[string]interface{}{
 		queryParam("type", "Filter examples by event type."),
 		queryParam("event_type", "Alias for type."),
+	}
+	return op
+}
+
+func integrationCompatibilityOperation() map[string]interface{} {
+	op := getOperation("contracts", "Get integration compatibility", "Read-only agent/provider compatibility matrix computed from static profiles, conformance metadata, and advisor rules.", "IntegrationCompatibilityReport")
+	op["get"].(map[string]interface{})["parameters"] = []map[string]interface{}{
+		queryParam("agent_profile_id", "Filter by agent framework profile id such as codex-cli. Aliases: agent, profile, framework."),
+		queryParam("agent", "Alias for agent_profile_id."),
+		queryParam("provider_profile_id", "Filter by provider/runtime profile id such as openai-official. Alias: provider."),
+		queryParam("provider", "Alias for provider_profile_id."),
+		queryParam("surface", "Force a candidate surface such as canonical-events, provider-envelope, provider-stream, opentelemetry, a2a, mcp-stdio, local-collector, or gateway."),
+		queryParam("min_confidence", "Optional minimum confidence from 0.0 to 1.0."),
 	}
 	return op
 }
@@ -2693,6 +2716,99 @@ func integrationSmokeCheckSchema() map[string]interface{} {
 			"evidence":    stringSchema(),
 			"remediation": stringSchema(),
 			"command":     stringSchema(),
+		},
+	}
+}
+
+func integrationCompatibilityReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe agent/provider compatibility matrix for ecosystem adapter rollout.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "request", "agent_profiles_hash", "provider_profiles_hash", "integration_recommendation_hash", "conformance_matrix_hash", "canonical_schema_hash", "compatibility_hash", "summary", "rows", "quality_gates", "operational_guidance"},
+		"properties": map[string]interface{}{
+			"product":                         stringSchema(),
+			"contract":                        constSchema("agent-ledger.integration-compatibility"),
+			"version":                         stringSchema(),
+			"local_first":                     boolSchema(),
+			"read_only_safe":                  boolSchema(),
+			"writes_local_state":              boolSchema(),
+			"privacy_policy":                  stringSchema(),
+			"request":                         refSchema("IntegrationCompatibilityRequest"),
+			"agent_profiles_hash":             refSchema("Hash"),
+			"provider_profiles_hash":          refSchema("Hash"),
+			"integration_recommendation_hash": refSchema("Hash"),
+			"conformance_matrix_hash":         refSchema("Hash"),
+			"canonical_schema_hash":           refSchema("Hash"),
+			"compatibility_hash":              refSchema("Hash"),
+			"summary":                         refSchema("IntegrationCompatibilitySummary"),
+			"rows":                            refArraySchema("IntegrationCompatibilityRow"),
+			"quality_gates":                   stringArraySchema(),
+			"operational_guidance":            stringArraySchema(),
+		},
+	}
+}
+
+func integrationCompatibilityRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static compatibility matrix filters.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"agent_profile_id":    stringSchema(),
+			"provider_profile_id": stringSchema(),
+			"surface":             stringSchema(),
+			"min_confidence":      stringSchema(),
+		},
+	}
+}
+
+func integrationCompatibilitySummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Compatibility matrix rollout counts.",
+		"additionalProperties": true,
+		"required":             []string{"agent_profiles", "provider_profiles", "rows", "ready", "review_required", "limited", "high_confidence", "strict_ci_available", "local_only_surfaces", "outbound_surfaces", "unpriced_risk_profiles"},
+		"properties": map[string]interface{}{
+			"agent_profiles":         integerSchema(),
+			"provider_profiles":      integerSchema(),
+			"rows":                   integerSchema(),
+			"ready":                  integerSchema(),
+			"review_required":        integerSchema(),
+			"limited":                integerSchema(),
+			"high_confidence":        integerSchema(),
+			"strict_ci_available":    integerSchema(),
+			"local_only_surfaces":    integerSchema(),
+			"outbound_surfaces":      integerSchema(),
+			"unpriced_risk_profiles": integerSchema(),
+		},
+	}
+}
+
+func integrationCompatibilityRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One agent/provider compatibility row.",
+		"additionalProperties": true,
+		"required":             []string{"agent_profile_id", "agent_label", "provider_profile_id", "provider_label", "recommended_surface", "candidate_surfaces", "status", "risk_level", "confidence", "strict_ci", "validation", "expected_event_types", "required_signals", "compatibility_reasons", "next_steps"},
+		"properties": map[string]interface{}{
+			"agent_profile_id":      stringSchema(),
+			"agent_label":           stringSchema(),
+			"provider_profile_id":   stringSchema(),
+			"provider_label":        stringSchema(),
+			"recommended_surface":   stringSchema(),
+			"candidate_surfaces":    stringArraySchema(),
+			"status":                stringSchema(),
+			"risk_level":            stringSchema(),
+			"confidence":            numberSchema(),
+			"strict_ci":             stringArraySchema(),
+			"validation":            stringArraySchema(),
+			"expected_event_types":  stringArraySchema(),
+			"required_signals":      stringArraySchema(),
+			"conformance_kinds":     stringArraySchema(),
+			"compatibility_reasons": stringArraySchema(),
+			"limitations":           stringArraySchema(),
+			"next_steps":            stringArraySchema(),
 		},
 	}
 }
