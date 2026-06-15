@@ -34,12 +34,20 @@ func TestIntegrationEvidenceKitForCodexOpenAI(t *testing.T) {
 		Surface:           "provider-stream",
 		MinConfidence:     "0.8",
 	}) || report.Hashes.AdapterSpecHash != AdapterContractFingerprint() ||
-		report.Hashes.SignalCoverageHash != SignalCoverageFingerprint() {
+		report.Hashes.SignalCoverageHash != SignalCoverageFingerprint() ||
+		report.Hashes.IntegrationDriftHash != IntegrationDriftOpenAPIFingerprint(Options{}, runtime) ||
+		report.Hashes.IntegrationLockfileHash != IntegrationLockfileOpenAPIFingerprint(Options{}, runtime) ||
+		report.Hashes.IntegrationUpgradeGateHash != IntegrationUpgradeGateOpenAPIFingerprint(Options{}, runtime) ||
+		report.Hashes.SchemaEvolutionGateHash != SchemaEvolutionGateOpenAPIFingerprint() {
 		t.Fatalf("unexpected evidence hashes: %+v", report.Hashes)
 	}
 	for _, command := range []string{
 		"agent-ledger contracts verify",
 		"agent-ledger integrations smoke",
+		"agent-ledger integrations drift --strict",
+		"agent-ledger integrations lockfile",
+		"agent-ledger integrations upgrade-gate --strict",
+		"agent-ledger schema-gate",
 		"agent-ledger integrations rollout-plan --agent codex-cli --provider openai-official --surface provider-stream --min-confidence 0.8",
 		"agent-ledger adapter conformance --kind provider-stream --strict --file examples/adapter-fixtures/provider-openai-chat-stream.sse",
 	} {
@@ -47,8 +55,17 @@ func TestIntegrationEvidenceKitForCodexOpenAI(t *testing.T) {
 			t.Fatalf("CI commands missing %q: %+v", command, report.CICommands)
 		}
 	}
-	if !integrationEvidenceHasItem(report, "projection-quality") || !integrationEvidenceHasItem(report, "projection-repair") {
-		t.Fatalf("evidence kit should include projection quality and optional repair guidance: %+v", report.EvidenceItems)
+	for _, itemID := range []string{
+		"integration-drift",
+		"integration-lockfile",
+		"integration-upgrade-gate",
+		"schema-evolution-gate",
+		"projection-quality",
+		"projection-repair",
+	} {
+		if !integrationEvidenceHasItem(report, itemID) {
+			t.Fatalf("evidence kit missing %q: %+v", itemID, report.EvidenceItems)
+		}
 	}
 	if report.KitHash != IntegrationEvidenceKitFingerprintFrom(report) {
 		t.Fatalf("unstable kit hash: %s", report.KitHash)

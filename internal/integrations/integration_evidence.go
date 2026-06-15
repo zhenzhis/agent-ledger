@@ -43,21 +43,25 @@ type IntegrationEvidenceKitReport struct {
 // IntegrationEvidenceKitHashes exposes the stable contract witnesses an
 // adapter PR or internal release ticket should pin.
 type IntegrationEvidenceKitHashes struct {
-	CapabilityCatalogHash    string `json:"capability_catalog_hash"`
-	ProviderProfilesHash     string `json:"provider_profiles_hash"`
-	AgentProfilesHash        string `json:"agent_profiles_hash"`
-	SignalTaxonomyHash       string `json:"signal_taxonomy_hash"`
-	SignalCoverageHash       string `json:"signal_coverage_hash"`
-	IntegrationReadinessHash string `json:"integration_readiness_hash"`
-	IntegrationSmokeHash     string `json:"integration_smoke_hash"`
-	CompatibilityHash        string `json:"integration_compatibility_hash"`
-	RolloutPlanHash          string `json:"integration_rollout_plan_hash"`
-	RecommendationHash       string `json:"integration_recommendation_hash"`
-	ConformanceMatrixHash    string `json:"conformance_matrix_hash"`
-	AdapterSpecHash          string `json:"adapter_spec_hash"`
-	CanonicalSchemaHash      string `json:"canonical_schema_hash"`
-	OpenAPISmokeHash         string `json:"openapi_smoke_hash"`
-	RuntimeStatusHash        string `json:"runtime_status_hash"`
+	CapabilityCatalogHash      string `json:"capability_catalog_hash"`
+	ProviderProfilesHash       string `json:"provider_profiles_hash"`
+	AgentProfilesHash          string `json:"agent_profiles_hash"`
+	SignalTaxonomyHash         string `json:"signal_taxonomy_hash"`
+	SignalCoverageHash         string `json:"signal_coverage_hash"`
+	IntegrationReadinessHash   string `json:"integration_readiness_hash"`
+	IntegrationSmokeHash       string `json:"integration_smoke_hash"`
+	IntegrationDriftHash       string `json:"integration_drift_hash"`
+	IntegrationLockfileHash    string `json:"integration_lockfile_hash"`
+	IntegrationUpgradeGateHash string `json:"integration_upgrade_gate_hash"`
+	SchemaEvolutionGateHash    string `json:"schema_evolution_gate_hash"`
+	CompatibilityHash          string `json:"integration_compatibility_hash"`
+	RolloutPlanHash            string `json:"integration_rollout_plan_hash"`
+	RecommendationHash         string `json:"integration_recommendation_hash"`
+	ConformanceMatrixHash      string `json:"conformance_matrix_hash"`
+	AdapterSpecHash            string `json:"adapter_spec_hash"`
+	CanonicalSchemaHash        string `json:"canonical_schema_hash"`
+	OpenAPISmokeHash           string `json:"openapi_smoke_hash"`
+	RuntimeStatusHash          string `json:"runtime_status_hash"`
 }
 
 // IntegrationEvidenceKitSummary captures stable counts for release gates.
@@ -138,21 +142,25 @@ func IntegrationEvidenceKitFor(opts Options, runtime *storage.RuntimeStatus, req
 	rollout := IntegrationRolloutPlanFor(rolloutReq)
 	compatibility := IntegrationCompatibilityReportFor(compatReq)
 	hashes := IntegrationEvidenceKitHashes{
-		CapabilityCatalogHash:    CatalogFingerprint(opts),
-		ProviderProfilesHash:     ProviderProfilesFingerprint(),
-		AgentProfilesHash:        AgentFrameworkProfilesFingerprint(),
-		SignalTaxonomyHash:       SignalTaxonomyFingerprint(),
-		SignalCoverageHash:       SignalCoverageFingerprint(),
-		IntegrationReadinessHash: IntegrationReadinessFingerprint(opts),
-		IntegrationSmokeHash:     IntegrationSmokeFingerprint(opts, runtime),
-		CompatibilityHash:        compatibility.CompatibilityHash,
-		RolloutPlanHash:          rollout.RolloutHash,
-		RecommendationHash:       IntegrationRecommendationContractFingerprint(),
-		ConformanceMatrixHash:    AdapterConformanceMatrixFingerprint(),
-		AdapterSpecHash:          AdapterContractFingerprint(),
-		CanonicalSchemaHash:      storage.CanonicalEventSchemaFingerprint(),
-		OpenAPISmokeHash:         OpenAPISmokeFingerprint(opts, runtime),
-		RuntimeStatusHash:        hashJSONPayload(runtime),
+		CapabilityCatalogHash:      CatalogFingerprint(opts),
+		ProviderProfilesHash:       ProviderProfilesFingerprint(),
+		AgentProfilesHash:          AgentFrameworkProfilesFingerprint(),
+		SignalTaxonomyHash:         SignalTaxonomyFingerprint(),
+		SignalCoverageHash:         SignalCoverageFingerprint(),
+		IntegrationReadinessHash:   IntegrationReadinessFingerprint(opts),
+		IntegrationSmokeHash:       IntegrationSmokeFingerprint(opts, runtime),
+		IntegrationDriftHash:       IntegrationDriftOpenAPIFingerprint(opts, runtime),
+		IntegrationLockfileHash:    IntegrationLockfileOpenAPIFingerprint(opts, runtime),
+		IntegrationUpgradeGateHash: IntegrationUpgradeGateOpenAPIFingerprint(opts, runtime),
+		SchemaEvolutionGateHash:    SchemaEvolutionGateOpenAPIFingerprint(),
+		CompatibilityHash:          compatibility.CompatibilityHash,
+		RolloutPlanHash:            rollout.RolloutHash,
+		RecommendationHash:         IntegrationRecommendationContractFingerprint(),
+		ConformanceMatrixHash:      AdapterConformanceMatrixFingerprint(),
+		AdapterSpecHash:            AdapterContractFingerprint(),
+		CanonicalSchemaHash:        storage.CanonicalEventSchemaFingerprint(),
+		OpenAPISmokeHash:           OpenAPISmokeFingerprint(opts, runtime),
+		RuntimeStatusHash:          hashJSONPayload(runtime),
 	}
 	items := integrationEvidenceItems(rollout, hashes)
 	report := IntegrationEvidenceKitReport{
@@ -222,20 +230,24 @@ func IntegrationEvidenceKitOpenAPIFingerprint(opts Options, runtime *storage.Run
 		runtime = defaultRuntimeStatus(opts)
 	}
 	return hashJSONPayload(map[string]interface{}{
-		"contract":                   "agent-ledger.integration-evidence-kit",
-		"version":                    "v1",
-		"default_uri":                "/api/integrations/evidence-kit",
-		"capability_catalog_hash":    CatalogFingerprint(opts),
-		"provider_profiles_hash":     ProviderProfilesFingerprint(),
-		"agent_profiles_hash":        AgentFrameworkProfilesFingerprint(),
-		"signal_taxonomy_hash":       SignalTaxonomyFingerprint(),
-		"signal_coverage_hash":       SignalCoverageFingerprint(),
-		"integration_readiness_hash": IntegrationReadinessFingerprint(opts),
-		"conformance_matrix_hash":    AdapterConformanceMatrixFingerprint(),
-		"adapter_spec_hash":          AdapterContractFingerprint(),
-		"canonical_schema_hash":      storage.CanonicalEventSchemaFingerprint(),
-		"runtime_status_hash":        hashJSONPayload(runtime),
-		"privacy":                    "metadata-only OpenAPI witness; full endpoint ETag is returned by /api/integrations/evidence-kit",
+		"contract":                      "agent-ledger.integration-evidence-kit",
+		"version":                       "v1",
+		"default_uri":                   "/api/integrations/evidence-kit",
+		"capability_catalog_hash":       CatalogFingerprint(opts),
+		"provider_profiles_hash":        ProviderProfilesFingerprint(),
+		"agent_profiles_hash":           AgentFrameworkProfilesFingerprint(),
+		"signal_taxonomy_hash":          SignalTaxonomyFingerprint(),
+		"signal_coverage_hash":          SignalCoverageFingerprint(),
+		"integration_readiness_hash":    IntegrationReadinessFingerprint(opts),
+		"integration_drift_hash":        IntegrationDriftOpenAPIFingerprint(opts, runtime),
+		"integration_lockfile_hash":     IntegrationLockfileOpenAPIFingerprint(opts, runtime),
+		"integration_upgrade_gate_hash": IntegrationUpgradeGateOpenAPIFingerprint(opts, runtime),
+		"schema_evolution_gate_hash":    SchemaEvolutionGateOpenAPIFingerprint(),
+		"conformance_matrix_hash":       AdapterConformanceMatrixFingerprint(),
+		"adapter_spec_hash":             AdapterContractFingerprint(),
+		"canonical_schema_hash":         storage.CanonicalEventSchemaFingerprint(),
+		"runtime_status_hash":           hashJSONPayload(runtime),
+		"privacy":                       "metadata-only OpenAPI witness; full endpoint ETag is returned by /api/integrations/evidence-kit",
 	})
 }
 
@@ -253,6 +265,10 @@ func integrationEvidenceItems(rollout IntegrationRolloutPlanReport, hashes Integ
 		integrationEvidenceItem("rollout-plan", "planning", "Rollout checklist", "checklist", rolloutPlanCommand(rollout.Request), "GET /api/integrations/rollout-plan", "ledger.integration_rollout_plan", "agent-ledger://integrations/rollout-plan", hashes.RolloutPlanHash, true, "rollout plan documents release gates and rollback steps", []string{rollout.Summary.Status, rollout.Target.RiskLevel}),
 		integrationEvidenceItem("readiness", "runtime", "Integration readiness gates", "readiness", "agent-ledger integrations readiness", "GET /api/integrations/readiness", "ledger.integration_readiness", "agent-ledger://integrations/readiness", hashes.IntegrationReadinessHash, true, "readiness exposes blocked, warning, and disabled-by-default surfaces", []string{"activation gates", "runtime flags"}),
 		integrationEvidenceItem("smoke", "runtime", "Integration smoke report", "smoke", "agent-ledger integrations smoke", "GET /api/integrations/smoke", "ledger.integration_smoke", "agent-ledger://integrations/smoke", hashes.IntegrationSmokeHash, true, "smoke report has no failed active gates", []string{"contract", "conformance", "recommendation"}),
+		integrationEvidenceItem("integration-drift", "release", "Integration drift report", "drift", "agent-ledger integrations drift --strict", "GET /api/integrations/drift", "ledger.integration_drift", "agent-ledger://integrations/drift", hashes.IntegrationDriftHash, true, "strict drift report is reviewed before release", []string{"contract hashes", "release drift"}),
+		integrationEvidenceItem("integration-lockfile", "release", "Integration lockfile", "lockfile", "agent-ledger integrations lockfile", "GET /api/integrations/lockfile", "ledger.integration_lockfile", "agent-ledger://integrations/lockfile", hashes.IntegrationLockfileHash, true, "lockfile hash baseline is committed with adapter release artifacts", []string{"drift command", "hash baseline"}),
+		integrationEvidenceItem("integration-upgrade-gate", "release", "Integration upgrade gate", "gate", "agent-ledger integrations upgrade-gate --strict", "GET /api/integrations/upgrade-gate", "ledger.integration_upgrade_gate", "agent-ledger://integrations/upgrade-gate", hashes.IntegrationUpgradeGateHash, true, "upgrade gate decision is reviewed before enabling write ingest", []string{"human review", "release decision"}),
+		integrationEvidenceItem("schema-evolution-gate", "schema", "Schema evolution gate", "gate", "agent-ledger schema-gate", "GET /api/schema/evolution-gate", "ledger.schema_evolution_gate", "agent-ledger://schema/evolution-gate", hashes.SchemaEvolutionGateHash, true, "schema evolution gate is reviewed before accepting canonical event schema changes", []string{"adapter migration", "canonical schema"}),
 		integrationEvidenceItem("signal-coverage", "adapter", "Signal taxonomy coverage", "coverage", "agent-ledger signal-coverage", "GET /api/integrations/signal-coverage", "ledger.signal_coverage", "agent-ledger://integrations/signal-coverage", hashes.SignalCoverageHash, true, "required signals map to adapter/provider coverage", rollout.Target.RequiredSignals),
 		integrationEvidenceItem("conformance-matrix", "adapter", "Adapter conformance matrix", "matrix", "agent-ledger adapter matrix", "GET /api/integrations/conformance-matrix", "ledger.conformance_matrix", "agent-ledger://integrations/conformance-matrix", hashes.ConformanceMatrixHash, true, "strict fixture families are documented", rollout.Target.ConformanceKinds),
 		integrationEvidenceItem("adapter-spec", "adapter", "Adapter contract", "schema", "agent-ledger adapter spec", "GET /api/integrations/adapter-spec", "ledger.adapter_contract", "agent-ledger://integrations/adapter-contract", hashes.AdapterSpecHash, true, "adapter contract forbids content-bearing payload fields", rollout.Target.ExpectedEventTypes),

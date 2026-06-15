@@ -4,6 +4,7 @@
 
 ### Added
 
+- Integration evidence kits now include drift, lockfile, upgrade gate, and schema evolution gate evidence for adapter release audits.
 - Public metadata privacy language now consistently describes content-safe telemetry across discovery, adapter contracts, conformance matrix, provider/agent profiles, OpenAPI, and docs; `contracts verify` now includes the `privacy.public_metadata_language` invariant.
 - Official Agent Ledger naming across module path, binary, Docker, release metadata, and documentation.
 - Read-only `agent-ledger ui check` static UI/UX contract for the embedded black/white/gray dashboard, covering local assets, accessibility, chart summaries, privacy entrypoints, monochrome palette, responsive breakpoints, touch targets, skeleton reduced-motion, and contained table overflow.
