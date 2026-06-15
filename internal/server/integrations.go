@@ -92,6 +92,15 @@ func (s *Server) handleIntegrationEvidenceKit(w http.ResponseWriter, r *http.Req
 	writeJSONWithETag(w, r, report, integrations.IntegrationEvidenceKitFingerprintFrom(report))
 }
 
+func (s *Server) handleIntegrationDrift(w http.ResponseWriter, r *http.Request) {
+	if !requireHTTPMethod(w, r, http.MethodGet) {
+		return
+	}
+	req := integrations.IntegrationDriftFromValues(r.URL.Query())
+	report := integrations.IntegrationDriftReportFor(s.integrationOptions(), s.runtimeStatus(), req)
+	writeJSONWithETag(w, r, report, integrations.IntegrationDriftFingerprintFrom(report))
+}
+
 func (s *Server) handleIntegrationRecommendation(w http.ResponseWriter, r *http.Request) {
 	if !requireHTTPMethod(w, r, http.MethodGet) {
 		return

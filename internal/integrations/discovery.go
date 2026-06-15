@@ -56,6 +56,8 @@ type DiscoveryManifest struct {
 	RolloutPlanHash          string               `json:"integration_rollout_plan_hash"`
 	EvidenceKitURI           string               `json:"integration_evidence_kit_uri"`
 	EvidenceKitHash          string               `json:"integration_evidence_kit_hash"`
+	DriftURI                 string               `json:"integration_drift_uri"`
+	DriftHash                string               `json:"integration_drift_hash"`
 	RecommendationURI        string               `json:"integration_recommendation_uri"`
 	RecommendationHash       string               `json:"integration_recommendation_hash"`
 	ContractBundleURI        string               `json:"contract_bundle_uri"`
@@ -165,6 +167,8 @@ func Discovery(opts Options) DiscoveryManifest {
 		RolloutPlanHash:          IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
 		EvidenceKitURI:           "/api/integrations/evidence-kit",
 		EvidenceKitHash:          IntegrationEvidenceKitFingerprint(opts, nil, IntegrationEvidenceKitRequest{}),
+		DriftURI:                 "/api/integrations/drift",
+		DriftHash:                IntegrationDriftOpenAPIFingerprint(opts, nil),
 		RecommendationURI:        "/api/integrations/recommendation",
 		RecommendationHash:       IntegrationRecommendationContractFingerprint(),
 		ContractBundleURI:        "/api/contracts",

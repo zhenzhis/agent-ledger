@@ -37,6 +37,7 @@ func TestPublicMetadataUsesContentSafePrivacyLanguage(t *testing.T) {
 			ProviderProfileID: "openai-official",
 			Surface:           "provider-stream",
 		}),
+		"integration_drift": IntegrationDriftReportFor(Options{}, nil, IntegrationDriftRequest{}),
 		"openapi":           OpenAPISpecFor(Options{}, nil),
 		"provider_profiles": ProviderProfiles(),
 		"registry":          Registry(Options{}),

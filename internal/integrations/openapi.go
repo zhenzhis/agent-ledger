@@ -66,6 +66,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"integration_compatibility_hash":  IntegrationCompatibilityFingerprint(IntegrationCompatibilityRequest{}),
 			"integration_rollout_plan_hash":   IntegrationRolloutFingerprint(IntegrationRolloutRequest{}),
 			"integration_evidence_kit_hash":   IntegrationEvidenceKitOpenAPIFingerprint(opts, runtime),
+			"integration_drift_hash":          IntegrationDriftOpenAPIFingerprint(opts, runtime),
 			"integration_recommendation_hash": IntegrationRecommendationContractFingerprint(),
 			"conformance_matrix_hash":         AdapterConformanceMatrixFingerprint(),
 			"runtime_status_hash":             hashJSONPayload(runtime),
@@ -88,6 +89,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 			"/api/integrations/compatibility":      integrationCompatibilityOperation(),
 			"/api/integrations/rollout-plan":       integrationRolloutPlanOperation(),
 			"/api/integrations/evidence-kit":       integrationEvidenceKitOperation(),
+			"/api/integrations/drift":              integrationDriftOperation(),
 			"/api/integrations/recommendation":     integrationRecommendationOperation(),
 			"/api/integrations/conformance-matrix": getOperation("adapter-conformance", "Get adapter conformance matrix", "Static privacy-safe adapter conformance matrix with supported input kinds, fixtures, strict CI commands, and expected metadata event families.", "AdapterConformanceMatrix"),
 			"/api/goal-coverage":                   getOperation("contracts", "Get Agent Ledger goal coverage", "Requirement-level implementation coverage with evidence, contract hashes, verification commands, and external dependencies.", "GoalCoverageReport"),
@@ -195,7 +197,7 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"DiscoveryManifest": map[string]interface{}{
 					"type":                 "object",
 					"additionalProperties": true,
-					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
+					"required":             []string{"contract", "version", "local_first", "contract_bundle_uri", "capability_catalog_hash", "provider_profiles_uri", "provider_profiles_hash", "agent_profiles_uri", "agent_profiles_hash", "signal_taxonomy_uri", "signal_taxonomy_hash", "signal_coverage_uri", "signal_coverage_hash", "integration_readiness_uri", "integration_readiness_hash", "integration_smoke_uri", "integration_smoke_hash", "integration_compatibility_uri", "integration_compatibility_hash", "integration_rollout_plan_uri", "integration_rollout_plan_hash", "integration_evidence_kit_uri", "integration_evidence_kit_hash", "integration_drift_uri", "integration_drift_hash", "integration_recommendation_uri", "integration_recommendation_hash", "conformance_matrix_uri", "conformance_matrix_hash", "canonical_schema_hash", "adapter_spec_hash", "a2a"},
 					"properties": map[string]interface{}{
 						"product":                         stringSchema(),
 						"slug":                            stringSchema(),
@@ -228,6 +230,8 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 						"integration_rollout_plan_hash":   refSchema("Hash"),
 						"integration_evidence_kit_uri":    stringSchema(),
 						"integration_evidence_kit_hash":   refSchema("Hash"),
+						"integration_drift_uri":           stringSchema(),
+						"integration_drift_hash":          refSchema("Hash"),
 						"integration_recommendation_uri":  stringSchema(),
 						"integration_recommendation_hash": refSchema("Hash"),
 						"conformance_matrix_uri":          stringSchema(),
@@ -383,6 +387,10 @@ func OpenAPISpecFor(opts Options, runtime *storage.RuntimeStatus) map[string]int
 				"IntegrationEvidenceKitSummary":       integrationEvidenceKitSummarySchema(),
 				"IntegrationEvidenceItem":             integrationEvidenceItemSchema(),
 				"IntegrationEvidenceChecklist":        integrationEvidenceChecklistSchema(),
+				"IntegrationDriftReport":              integrationDriftReportSchema(),
+				"IntegrationDriftRequest":             integrationDriftRequestSchema(),
+				"IntegrationDriftSummary":             integrationDriftSummarySchema(),
+				"IntegrationDriftRow":                 integrationDriftRowSchema(),
 				"IntegrationRecommendationReport":     integrationRecommendationReportSchema(),
 				"IntegrationRecommendationRequest":    integrationRecommendationRequestSchema(),
 				"IntegrationRecommendationProfileRef": integrationRecommendationProfileRefSchema(),
@@ -1107,6 +1115,7 @@ func OpenAPIContractPaths() []string {
 		"/api/integrations/compatibility",
 		"/api/integrations/rollout-plan",
 		"/api/integrations/evidence-kit",
+		"/api/integrations/drift",
 		"/api/integrations/recommendation",
 		"/api/integrations/conformance-matrix",
 		"/api/goal-coverage",
@@ -1233,6 +1242,20 @@ func integrationEvidenceKitOperation() map[string]interface{} {
 		queryParam("surface", "Force a candidate surface such as provider-stream, provider-envelope, opentelemetry, a2a, local-collector, canonical-events, mcp-stdio, or gateway."),
 		queryParam("min_confidence", "Optional minimum compatibility confidence from 0.0 to 1.0."),
 	}
+	return op
+}
+
+func integrationDriftOperation() map[string]interface{} {
+	op := getOperation("contracts", "Get integration drift report", "Read-only current-vs-expected integration contract hash comparison for adapter lockfiles and CI upgrade gates.", "IntegrationDriftReport")
+	params := []map[string]interface{}{
+		boolQueryParam("strict", "Treat missing expected hashes as drift instead of review warnings."),
+		queryParam("hash", "Repeatable key=value expected hash pair, for example adapter_spec_hash=sha256:..."),
+		queryParam("expected", "Alias for hash; repeatable key=value expected hash pair."),
+	}
+	for _, id := range IntegrationDriftHashIDs() {
+		params = append(params, queryParam(id, "Expected pinned hash for "+id+". Hyphenated query names are also accepted."))
+	}
+	op["get"].(map[string]interface{})["parameters"] = params
 	return op
 }
 
@@ -3134,6 +3157,83 @@ func integrationEvidenceChecklistSchema() map[string]interface{} {
 			"title":    stringSchema(),
 			"required": boolSchema(),
 			"checks":   stringArraySchema(),
+			"privacy":  stringSchema(),
+		},
+	}
+}
+
+func integrationDriftReportSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Static privacy-safe integration contract drift report.",
+		"additionalProperties": true,
+		"required":             []string{"product", "contract", "version", "local_first", "read_only_safe", "writes_local_state", "privacy_policy", "request", "drift_hash", "current", "summary", "rows", "ci_commands", "operational_guidance", "redaction_rules"},
+		"properties": map[string]interface{}{
+			"product":              stringSchema(),
+			"contract":             constSchema("agent-ledger.integration-drift"),
+			"version":              stringSchema(),
+			"local_first":          boolSchema(),
+			"read_only_safe":       boolSchema(),
+			"writes_local_state":   boolSchema(),
+			"privacy_policy":       stringSchema(),
+			"request":              refSchema("IntegrationDriftRequest"),
+			"drift_hash":           refSchema("Hash"),
+			"current":              stringMapSchema(),
+			"summary":              refSchema("IntegrationDriftSummary"),
+			"rows":                 refArraySchema("IntegrationDriftRow"),
+			"ci_commands":          stringArraySchema(),
+			"operational_guidance": stringArraySchema(),
+			"redaction_rules":      stringArraySchema(),
+		},
+	}
+}
+
+func integrationDriftRequestSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Expected pinned integration contract hashes.",
+		"additionalProperties": true,
+		"properties": map[string]interface{}{
+			"strict":   boolSchema(),
+			"expected": stringMapSchema(),
+		},
+	}
+}
+
+func integrationDriftSummarySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "Drift comparison counts.",
+		"additionalProperties": true,
+		"required":             []string{"status", "known_hashes", "expected_hashes", "checked", "matched", "drifted", "missing_expected", "unknown_expected", "warnings"},
+		"properties": map[string]interface{}{
+			"status":           stringSchema(),
+			"known_hashes":     integerSchema(),
+			"expected_hashes":  integerSchema(),
+			"checked":          integerSchema(),
+			"matched":          integerSchema(),
+			"drifted":          integerSchema(),
+			"missing_expected": integerSchema(),
+			"unknown_expected": integerSchema(),
+			"warnings":         integerSchema(),
+		},
+	}
+}
+
+func integrationDriftRowSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"description":          "One current-vs-expected contract hash comparison.",
+		"additionalProperties": true,
+		"required":             []string{"id", "title", "status", "severity", "action", "privacy"},
+		"properties": map[string]interface{}{
+			"id":       stringSchema(),
+			"title":    stringSchema(),
+			"expected": refSchema("Hash"),
+			"current":  refSchema("Hash"),
+			"status":   stringSchema(),
+			"severity": stringSchema(),
+			"action":   stringSchema(),
 			"privacy":  stringSchema(),
 		},
 	}

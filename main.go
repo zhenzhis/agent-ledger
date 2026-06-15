@@ -470,6 +470,10 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 			opts := integrations.OptionsFromConfig(cfg)
 			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationEvidenceKitFor(opts, server.RuntimeStatusFromConfig(cfg), integrationEvidenceKitRequestFromCLI(args[2:])))
 		}
+		if len(args) > 1 && args[1] == "drift" {
+			opts := integrations.OptionsFromConfig(cfg)
+			return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationDriftReportFor(opts, server.RuntimeStatusFromConfig(cfg), integrationDriftRequestFromCLI(args[2:])))
+		}
 		return json.NewEncoder(os.Stdout).Encode(integrations.Registry(integrations.OptionsFromConfig(cfg)))
 	case "integration-readiness":
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationReadiness(integrations.OptionsFromConfig(cfg)))
@@ -483,6 +487,9 @@ func runCLI(args []string, cfg *config.Config, db *storage.DB) error {
 	case "integration-evidence", "integration-evidence-kit":
 		opts := integrations.OptionsFromConfig(cfg)
 		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationEvidenceKitFor(opts, server.RuntimeStatusFromConfig(cfg), integrationEvidenceKitRequestFromCLI(args[1:])))
+	case "integration-drift":
+		opts := integrations.OptionsFromConfig(cfg)
+		return json.NewEncoder(os.Stdout).Encode(integrations.IntegrationDriftReportFor(opts, server.RuntimeStatusFromConfig(cfg), integrationDriftRequestFromCLI(args[1:])))
 	case "signals", "signal-taxonomy":
 		if len(args) > 1 && args[1] == "coverage" {
 			return json.NewEncoder(os.Stdout).Encode(integrations.SignalCoverage())
@@ -551,6 +558,31 @@ func integrationEvidenceKitRequestFromCLI(args []string) integrations.Integratio
 		ProviderProfileID: firstNonEmptyCLI(cliValue(args, "--provider-profile-id"), cliValue(args, "--provider"), cliValue(args, "--runtime")),
 		Surface:           firstNonEmptyCLI(cliValue(args, "--surface"), cliValue(args, "--ingest"), cliValue(args, "--kind")),
 		MinConfidence:     firstNonEmptyCLI(cliValue(args, "--min-confidence"), cliValue(args, "--min_confidence")),
+	})
+}
+
+func integrationDriftRequestFromCLI(args []string) integrations.IntegrationDriftRequest {
+	expected := map[string]string{}
+	for _, id := range integrations.IntegrationDriftHashIDs() {
+		if value := firstNonEmptyCLI(cliValue(args, "--"+id), cliValue(args, "--"+strings.ReplaceAll(id, "_", "-"))); value != "" {
+			expected[id] = value
+		}
+	}
+	for _, raw := range cliValues(args, "--hash") {
+		key, value, ok := strings.Cut(raw, "=")
+		if ok && strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
+			expected[key] = value
+		}
+	}
+	for _, raw := range cliValues(args, "--expected") {
+		key, value, ok := strings.Cut(raw, "=")
+		if ok && strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
+			expected[key] = value
+		}
+	}
+	return integrations.NormalizeIntegrationDriftRequest(integrations.IntegrationDriftRequest{
+		Strict:   cliBool(args, "--strict"),
+		Expected: expected,
 	})
 }
 
@@ -2205,6 +2237,21 @@ func cliValue(args []string, key string) string {
 		}
 	}
 	return ""
+}
+
+func cliValues(args []string, key string) []string {
+	values := []string{}
+	for i := 0; i < len(args); i++ {
+		if args[i] == key && i+1 < len(args) {
+			values = append(values, args[i+1])
+			i++
+			continue
+		}
+		if strings.HasPrefix(args[i], key+"=") {
+			values = append(values, strings.TrimPrefix(args[i], key+"="))
+		}
+	}
+	return values
 }
 
 func cliBool(args []string, key string) bool {

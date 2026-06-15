@@ -12,6 +12,7 @@ import (
 	"github.com/zhenzhis/agent-ledger/internal/config"
 	"github.com/zhenzhis/agent-ledger/internal/controlplane"
 	"github.com/zhenzhis/agent-ledger/internal/integrations"
+	"github.com/zhenzhis/agent-ledger/internal/server"
 	"github.com/zhenzhis/agent-ledger/internal/storage"
 	"github.com/zhenzhis/agent-ledger/internal/ui"
 )
@@ -95,8 +96,10 @@ func TestCLIReadOnlyGateMatchesAdmission(t *testing.T) {
 		{"signals"},
 		{"integrations", "readiness"},
 		{"integrations", "smoke"},
+		{"integrations", "drift"},
 		{"integration-readiness"},
 		{"integration-smoke"},
+		{"integration-drift"},
 		{"adapter", "matrix"},
 		{"provider", "convert", "--file", "provider.json"},
 		{"provider", "ingest", "--file", "provider.json"},
@@ -431,6 +434,36 @@ func TestIntegrationSmokeCLIOutputsReadOnlyReport(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
 			t.Fatalf("integration smoke leaked %q: %s", forbidden, out)
+		}
+	}
+}
+
+func TestIntegrationDriftCLIOutputsReadOnlyReport(t *testing.T) {
+	db := openTestDB(t)
+	cfg := config.DefaultConfig()
+	cfg.RBAC.ReadOnly = true
+	current := integrations.IntegrationDriftCurrentHashes(integrations.OptionsFromConfig(cfg), server.RuntimeStatusFromConfig(cfg))
+
+	out, err := captureStdout(t, func() error {
+		return runCLI([]string{"integrations", "drift", "--strict", "--adapter-spec-hash", current["adapter_spec_hash"], "--expected", "future_hash=sha256:future"}, cfg, db)
+	})
+	if err != nil {
+		t.Fatalf("runCLI integrations drift: %v", err)
+	}
+	var report integrations.IntegrationDriftReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode integration drift output: %v\n%s", err, out)
+	}
+	if report.Contract != "agent-ledger.integration-drift" || !report.ReadOnlySafe || report.WritesLocalState ||
+		report.Summary.Matched == 0 || report.Summary.UnknownExpected != 1 || report.Summary.Status != "drift" {
+		t.Fatalf("unexpected integration drift report: %+v", report)
+	}
+	if !strings.Contains(out, "agent-ledger integrations drift --strict") || !strings.Contains(out, "future_hash") {
+		t.Fatalf("integration drift missing CI guidance: %s", out)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "sk_test_", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Fatalf("integration drift leaked %q: %s", forbidden, out)
 		}
 	}
 }

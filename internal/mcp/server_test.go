@@ -111,6 +111,9 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	if !hasTool(tools, "ledger.integration_evidence_kit") {
 		t.Fatalf("expected integration evidence kit tool, got %#v", tools)
 	}
+	if !hasTool(tools, "ledger.integration_drift") {
+		t.Fatalf("expected integration drift tool, got %#v", tools)
+	}
 	budgetMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.current_budget"))
 	if budgetMeta["write_mode"] != "none" || budgetMeta["writes_local_state"] != false || budgetMeta["available_in_read_only"] != true {
 		t.Fatalf("budget tool metadata wrong: %#v", budgetMeta)
@@ -202,6 +205,10 @@ func TestMCPToolsListAndBudget(t *testing.T) {
 	integrationEvidenceMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_evidence_kit"))
 	if integrationEvidenceMeta["write_mode"] != "none" || integrationEvidenceMeta["writes_local_state"] != false || integrationEvidenceMeta["available_in_read_only"] != true {
 		t.Fatalf("integration evidence kit tool metadata wrong: %#v", integrationEvidenceMeta)
+	}
+	integrationDriftMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.integration_drift"))
+	if integrationDriftMeta["write_mode"] != "none" || integrationDriftMeta["writes_local_state"] != false || integrationDriftMeta["available_in_read_only"] != true {
+		t.Fatalf("integration drift tool metadata wrong: %#v", integrationDriftMeta)
 	}
 	conformanceMatrixMeta := agentLedgerToolMeta(t, toolByName(t, tools, "ledger.conformance_matrix"))
 	if conformanceMatrixMeta["write_mode"] != "none" || conformanceMatrixMeta["writes_local_state"] != false || conformanceMatrixMeta["available_in_read_only"] != true {
@@ -297,6 +304,9 @@ func TestMCPResourcesAndPrompts(t *testing.T) {
 	}
 	if !hasResource(resources, "agent-ledger://integrations/smoke") {
 		t.Fatalf("expected integration smoke resource, got %#v", resources)
+	}
+	if !hasResource(resources, "agent-ledger://integrations/drift") {
+		t.Fatalf("expected integration drift resource, got %#v", resources)
 	}
 	resourceText := resourceTextPayload(t, out[2])
 	if !strings.Contains(resourceText, "workload.started") || !strings.Contains(resourceText, "rejected_payload_keys") {
@@ -589,6 +599,44 @@ func TestMCPIntegrationSmokeToolAndResource(t *testing.T) {
 	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
 		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
 			t.Fatalf("integration smoke resource leaked %q: %s", forbidden, resourceText)
+		}
+	}
+}
+
+func TestMCPIntegrationDriftToolAndResource(t *testing.T) {
+	db := openTestDB(t)
+	srv := New(db, config.DefaultConfig())
+	current := integrations.IntegrationDriftCurrentHashes(integrations.OptionsFromConfig(config.DefaultConfig()), srv.runtimeStatus())
+
+	out := serveLines(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ledger.integration_drift","arguments":{"strict":true,"adapter_spec_hash":"`+current["adapter_spec_hash"]+`","expected":{"canonical_schema_hash":"`+current["canonical_schema_hash"]+`","future_hash":"sha256:future"}}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"agent-ledger://integrations/drift?strict=true&adapter_spec_hash=`+current["adapter_spec_hash"]+`&hash=future_hash=sha256:future"}}`,
+	)
+	toolPayload := toolTextPayload(t, out[0])
+	if toolPayload["contract"] != "agent-ledger.integration-drift" ||
+		toolPayload["read_only_safe"] != true || toolPayload["writes_local_state"] != false {
+		t.Fatalf("unexpected integration drift tool payload: %#v", toolPayload)
+	}
+	summary := toolPayload["summary"].(map[string]interface{})
+	if summary["matched"] == float64(0) || summary["unknown_expected"] != float64(1) || summary["status"] != "drift" {
+		t.Fatalf("unexpected integration drift summary: %#v", summary)
+	}
+	rawTool, _ := json.Marshal(toolPayload)
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(string(rawTool)), strings.ToLower(forbidden)) {
+			t.Fatalf("integration drift tool leaked %q: %s", forbidden, rawTool)
+		}
+	}
+
+	resourceText := resourceTextPayload(t, out[1])
+	if !strings.Contains(resourceText, `"contract": "agent-ledger.integration-drift"`) ||
+		!strings.Contains(resourceText, `"future_hash"`) ||
+		!strings.Contains(resourceText, `"agent-ledger integrations drift --strict"`) {
+		t.Fatalf("unexpected integration drift resource: %s", resourceText)
+	}
+	for _, forbidden := range []string{"api_key", "sk-proj-", "sk_live_", "bearer ", "C:/Users", "session_id", "prompt text", "response text"} {
+		if strings.Contains(strings.ToLower(resourceText), strings.ToLower(forbidden)) {
+			t.Fatalf("integration drift resource leaked %q: %s", forbidden, resourceText)
 		}
 	}
 }
